@@ -6,6 +6,7 @@ export default function useWebSocket() {
   const wsRef = useRef(null);
   const [connected, setConnected] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     const ws = new WebSocket(WS_URL);
@@ -17,6 +18,12 @@ export default function useWebSocket() {
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
+
+      if (data.type === 'status') {
+        setGenerating(data.content === 'generating');
+        return;
+      }
+
       setMessages((prev) => [...prev, data]);
     };
 
@@ -29,5 +36,5 @@ export default function useWebSocket() {
     }
   }, []);
 
-  return { connected, messages, send };
+  return { connected, messages, generating, send };
 }

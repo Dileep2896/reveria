@@ -2,19 +2,20 @@
 
 **An interactive multimodal story engine powered by Google Gemini & ADK**
 
-StoryForge lets users describe a scenario via voice or text — a mystery, a bedtime story, a historical event — and builds it live. It generates character portraits, scene illustrations, narrated voiceover, and an interactive storyboard, all streaming as interleaved output. Users can interrupt and steer the narrative in real-time, and the story dynamically reshapes.
+StoryForge lets users describe a scenario via voice or text, like a mystery, a bedtime story, or a historical event, and builds it live. It generates character portraits, scene illustrations, narrated voiceover, and an interactive storyboard, all streaming as interleaved output. Users can interrupt and steer the narrative in real-time, and the story dynamically reshapes.
 
-Built for the [Gemini Live Agent Challenge](https://devpost.com/) — Creative Storyteller Track.
+Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Storyteller Track).
 
 ---
 
 ## Features
 
-- **Multimodal Storytelling** — Text, images, and audio narration stream together in real-time
-- **Voice Steering** — Redirect the story mid-flow with voice commands ("make the villain scarier", "add a plot twist")
-- **Director Mode** — A live panel revealing the agent's creative reasoning: why it chose certain imagery, narrative structure decisions, tension arcs
-- **Genre & Style Selection** — Mystery, Fantasy, Sci-Fi, Children's, Historical, Horror + visual styles (Watercolor, Noir, Anime, Photorealistic, Storybook)
-- **Interleaved Output** — Not sequential (text → image → audio) but woven together as a living storyboard
+- **Multimodal Storytelling** - Text, images, and audio narration stream together in real-time
+- **Voice Steering** - Redirect the story mid-flow with voice commands ("make the villain scarier", "add a plot twist")
+- **Director Mode** - A live panel revealing the agent's creative reasoning: why it chose certain imagery, narrative structure decisions, tension arcs
+- **Genre & Style Selection** - Mystery, Fantasy, Sci-Fi, Children's, Historical, Horror + visual styles (Watercolor, Noir, Anime, Photorealistic, Storybook)
+- **Interleaved Output** - Not sequential (text > image > audio) but woven together as a living storyboard
+- **Glassmorphism UI** - Frosted glass panels with dark/light theme support
 
 ---
 
@@ -40,7 +41,7 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) — Creative S
 │   │  [ Voice Input ]  [ Text Input ]  [ Pause ]  [ Redo ]      │   │
 │   └─────────────────────────────────────────────────────────────┘   │
 │                                                                     │
-│   Voice: Web Audio API → MediaRecorder                              │
+│   Voice: Web Audio API > MediaRecorder                              │
 │   Comms: WebSocket (wss://) for real-time streaming                 │
 └──────────────────────────┬──────────────────────────────────────────┘
                            │
@@ -79,11 +80,6 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) — Creative S
 │   │    Interleaved           illustrations)     voiceover)      │   │
 │   │    output)                                                   │   │
 │   └──────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-│   ┌─────────────────────────────────────────────────────────────┐   │
-│   │  SESSION STORE — Cloud Firestore                            │   │
-│   │  Story state, scene history, character profiles              │   │
-│   └─────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -136,18 +132,18 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) — Creative S
 
 ## Interleaved Output Example
 
-This is the key differentiator — modalities are *woven together*, not appended sequentially:
+Modalities are *woven together*, not appended sequentially:
 
 ```
 [TEXT]      "The detective pushed open the creaking door..."
-[IMAGE]     → dimly lit doorway, noir style
-[AUDIO]     → narration with gravelly voice
-[DIRECTOR]  → "Opening with sensory detail (sound) to build tension."
+[IMAGE]     > dimly lit doorway, noir style
+[AUDIO]     > narration with gravelly voice
+[DIRECTOR]  > "Opening with sensory detail (sound) to build tension."
 
-[TEXT]      "Inside, the room was chaos — papers scattered..."
-[IMAGE]     → ransacked office interior
-[AUDIO]     → narration, tone shifts to urgency
-[DIRECTOR]  → "Escalating disorder signals rising stakes."
+[TEXT]      "Inside, the room was chaos, papers scattered..."
+[IMAGE]     > ransacked office interior
+[AUDIO]     > narration, tone shifts to urgency
+[DIRECTOR]  > "Escalating disorder signals rising stakes."
 ```
 
 ---
@@ -164,7 +160,6 @@ This is the key differentiator — modalities are *woven together*, not appended
 | LLM | Gemini 2.0 Flash (Live API) | Story generation, interleaved output |
 | Image Gen | Imagen 3 (via Vertex AI) | Scene illustrations, character portraits |
 | Voice Output | Google Cloud Text-to-Speech | Story narration with distinct voices |
-| Database | Cloud Firestore | Session state, story persistence |
 | Hosting | Google Cloud Run + Firebase Hosting | Backend + frontend deployment |
 | Container | Docker | Reproducible builds |
 
@@ -176,42 +171,33 @@ This is the key differentiator — modalities are *woven together*, not appended
 storyforge/
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx                    # Main app — split-panel layout
+│   │   ├── App.jsx                    # Main app with split-panel layout
 │   │   ├── components/
+│   │   │   ├── Logo.jsx + Logo.css    # Animated StoryForge logo
 │   │   │   ├── StoryCanvas.jsx        # Story display area
 │   │   │   ├── SceneCard.jsx          # Scene: image + text + audio
 │   │   │   ├── DirectorPanel.jsx      # Agent reasoning sidebar
-│   │   │   ├── ControlBar.jsx         # Input controls
-│   │   │   ├── TensionArc.jsx         # Narrative tension graph
-│   │   │   ├── VoiceInput.jsx         # Hold-to-talk + waveform
-│   │   │   ├── GenrePicker.jsx        # Story setup screen
-│   │   │   └── StyleSelector.jsx      # Visual style selection
-│   │   └── hooks/
-│   │       ├── useWebSocket.js        # WebSocket connection hook
-│   │       └── useVoiceCapture.js     # Web Audio API hook
+│   │   │   └── ControlBar.jsx         # Input controls
+│   │   ├── contexts/
+│   │   │   └── ThemeContext.jsx        # Dark/light mode
+│   │   ├── hooks/
+│   │   │   └── useWebSocket.js        # WebSocket connection hook
+│   │   ├── theme.css                  # Centralized glassmorphism theme
+│   │   └── index.css                  # Global styles
 │   ├── Dockerfile
 │   └── package.json
 ├── backend/
 │   ├── main.py                        # FastAPI + WebSocket endpoint
 │   ├── agents/
-│   │   ├── orchestrator.py            # ADK root agent
-│   │   ├── narrator.py                # Story text generation
-│   │   ├── illustrator.py             # Image generation
-│   │   └── director.py                # Creative reasoning
+│   │   └── narrator.py                # Story text generation with Gemini
 │   ├── services/
-│   │   ├── gemini_client.py           # Gemini API wrapper
-│   │   ├── imagen_client.py           # Imagen 3 via Vertex AI
-│   │   ├── tts_client.py              # Cloud Text-to-Speech
-│   │   └── firestore_client.py        # Session state
+│   │   └── gemini_client.py           # Gemini API wrapper (Vertex AI)
 │   ├── models/
 │   │   └── story_state.py             # Pydantic models
 │   ├── requirements.txt
 │   └── Dockerfile
-├── infra/
-│   ├── main.tf                        # Terraform for Cloud Run + Firestore
-│   ├── variables.tf
-│   └── outputs.tf
 ├── docker-compose.yml                 # Local dev environment
+├── HISTORY.md                         # Development progress log
 └── README.md
 ```
 
@@ -224,12 +210,12 @@ storyforge/
 - Node.js 20+
 - Python 3.12+
 - Docker (optional, for containerized dev)
-- Google Cloud account with APIs enabled
+- Google Cloud account with Vertex AI API enabled
 
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/storyforge.git
+git clone https://github.com/Dileep2896/storyforge.git
 cd storyforge
 ```
 
@@ -256,16 +242,16 @@ npm install
 ### 4. Run Locally
 
 ```bash
-# Terminal 1 — Backend
+# Terminal 1 (Backend)
 cd backend && source .venv/bin/activate
 uvicorn main:app --reload --port 8000
 
-# Terminal 2 — Frontend
+# Terminal 2 (Frontend)
 cd frontend
 npm run dev
 ```
 
-Open **http://localhost:5173** — type a story prompt and see the echo response.
+Open **http://localhost:5173**, type a story prompt, and watch it generate live.
 
 ### 5. Run with Docker
 

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="forgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b35"/>
+      <stop offset="50%" style="stop-color:#ff4500"/>
+      <stop offset="100%" style="stop-color:#8a4fff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="70%" r="40%">
+      <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:0.4"/>
+      <stop offset="100%" style="stop-color:#8a4fff;stop-opacity:0"/>
+    </radialGradient>
+  </defs>
+  <!-- Glow -->
+  <ellipse cx="32" cy="42" rx="18" ry="10" fill="url(#glow)"/>
+  <!-- Book left page -->
+  <path d="M14 24 L30 24 L30 52 L14 52 Z" fill="#e8dcc8" transform="rotate(3, 30, 38)" rx="1"/>
+  <!-- Book right page -->
+  <path d="M34 24 L50 24 L50 52 L34 52 Z" fill="#f0e6d2" transform="rotate(-3, 34, 38)" rx="1"/>
+  <!-- Book spine -->
+  <rect x="30" y="23" width="4" height="30" fill="#a08050" rx="1"/>
+  <!-- Spark orange -->
+  <circle cx="22" cy="16" r="4" fill="#ff6b35" opacity="0.9">
+    <animate attributeName="cy" values="16;12;16" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.9;1;0.9" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Spark purple -->
+  <circle cx="32" cy="10" r="5" fill="#8a4fff" opacity="0.9">
+    <animate attributeName="cy" values="10;6;10" dur="2.4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.9;1;0.9" dur="2.4s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Spark cyan -->
+  <circle cx="42" cy="14" r="3.5" fill="#00c2ff" opacity="0.9">
+    <animate attributeName="cy" values="14;10;14" dur="2.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.9;1;0.9" dur="2.2s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Small sparks -->
+  <circle cx="26" cy="20" r="2" fill="#ffb347" opacity="0.6">
+    <animate attributeName="cy" values="20;17;20" dur="1.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="38" cy="18" r="1.5" fill="#c79fff" opacity="0.5">
+    <animate attributeName="cy" values="18;15;18" dur="2s" repeatCount="indefinite"/>
+  </circle>
+</svg>
