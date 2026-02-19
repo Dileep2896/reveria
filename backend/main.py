@@ -156,6 +156,7 @@ async def _run_manual_pipeline(
 
     # Extract character sheet from full story BEFORE generating images
     full_story = "\n\n".join(s["text"] for s in scenes)
+    illustrator.accumulate_story(full_story)
     await illustrator.extract_characters(full_story)
 
     # Image generation per scene
@@ -357,13 +358,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             # Parse user options
             art_style = message.get("art_style", "cinematic")
-            scene_count = message.get("scene_count", 2)
-            try:
-                scene_count = int(scene_count)
-                if scene_count not in (2, 4):
-                    scene_count = 2
-            except (ValueError, TypeError):
-                scene_count = 2
+            scene_count = 2
 
             # Signal that generation is starting
             if not await _safe_send(websocket, {

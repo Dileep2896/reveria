@@ -38,6 +38,14 @@ class Illustrator:
     def __init__(self):
         self._character_sheet: str = ""
         self._art_style: str = "cinematic"
+        self._accumulated_story: str = ""
+
+    def accumulate_story(self, batch_text: str) -> None:
+        """Append a new batch of story text to the accumulated cross-batch story."""
+        if self._accumulated_story:
+            self._accumulated_story += "\n\n---\n\n" + batch_text
+        else:
+            self._accumulated_story = batch_text
 
     @property
     def art_style(self) -> str:
@@ -54,30 +62,52 @@ class Illustrator:
     async def extract_characters(self, full_story_text: str) -> None:
         """Extract character visual descriptions from the complete story.
 
-        Must be called BEFORE generating any images to ensure consistency.
+        Must be called AFTER accumulate_story() and BEFORE generating any
+        images to ensure cross-batch visual consistency.
         """
         client = get_client()
         model = get_model()
+
+        # Use the accumulated cross-batch story instead of just this batch
+        story_text = self._accumulated_story or full_story_text
+
+        # Build the user prompt — if we already have a sheet, ask for a merge
+        if self._character_sheet:
+            user_text = (
+                f"EXISTING CHARACTER REFERENCE SHEET:\n{self._character_sheet}\n\n"
+                f"FULL STORY (including new continuation):\n{story_text}"
+            )
+        else:
+            user_text = story_text
+
+        system_instruction = (
+            "You are a character designer. Read this story and create a "
+            "CHARACTER REFERENCE SHEET listing every named character.\n\n"
+            "For each character, output exactly one line:\n"
+            "NAME: gender, approximate age, body build, skin tone, "
+            "hair color/style, facial features, clothing/outfit\n\n"
+            "Be VERY specific about gender (man/woman/boy/girl). "
+            "Be specific about visual details. "
+            "If the story implies details, fill them in consistently.\n"
+        )
+        if self._character_sheet:
+            system_instruction += (
+                "\nIMPORTANT: An existing character reference sheet is provided. "
+                "PRESERVE all existing character descriptions exactly as they are. "
+                "Only ADD new characters that appear in the continuation. "
+                "Do NOT change descriptions of existing characters.\n"
+            )
+        system_instruction += "If no named characters exist, output: NONE"
 
         try:
             response = await client.aio.models.generate_content(
                 model=model,
                 contents=types.Content(
                     role="user",
-                    parts=[types.Part(text=full_story_text)],
+                    parts=[types.Part(text=user_text)],
                 ),
                 config=types.GenerateContentConfig(
-                    system_instruction=(
-                        "You are a character designer. Read this story and create a "
-                        "CHARACTER REFERENCE SHEET listing every named character.\n\n"
-                        "For each character, output exactly one line:\n"
-                        "NAME: gender, approximate age, body build, skin tone, "
-                        "hair color/style, facial features, clothing/outfit\n\n"
-                        "Be VERY specific about gender (man/woman/boy/girl). "
-                        "Be specific about visual details. "
-                        "If the story implies details, fill them in consistently.\n"
-                        "If no named characters exist, output: NONE"
-                    ),
+                    system_instruction=system_instruction,
                     temperature=0.1,
                     max_output_tokens=400,
                 ),
@@ -85,11 +115,10 @@ class Illustrator:
             if response.text and "NONE" not in response.text.upper():
                 self._character_sheet = response.text.strip()
                 logger.info("Character sheet extracted:\n%s", self._character_sheet)
-            else:
-                self._character_sheet = ""
+            # On NONE or empty: keep existing sheet (previous characters still exist)
         except Exception as e:
             logger.error("Character extraction failed: %s", e)
-            self._character_sheet = ""
+            # Keep existing sheet on error rather than clearing it
 
     async def generate_for_scene(self, scene_text: str) -> str | None:
         """Generate an illustration for a scene.

@@ -10,9 +10,11 @@ const ART_STYLES = [
   { key: 'pencil', label: 'Pencil Sketch' },
 ];
 
+
 export default function ControlBar({ onSend, onSendAudio, connected, generating, inputValue, setInputValue }) {
   const [focused, setFocused] = useState(false);
   const [artStyle, setArtStyle] = useState('cinematic');
+
 
   const { recording, startRecording, stopRecording } = useVoiceCapture({
     onAudioCaptured: (base64, mimeType) => {
@@ -64,6 +66,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
             {label}
           </button>
         ))}
+
       </div>
 
       <form

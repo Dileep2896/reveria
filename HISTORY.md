@@ -41,7 +41,7 @@
 - Implemented cover page with genre quick-start buttons (Mystery, Fantasy, Sci-Fi, Horror, Children's)
 - Added `GeneratingContent` state with three-step animated progress indicators
 - 6 art style options: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, Pencil Sketch
-- Scene count support (2 or 4 scenes per generation, validated server-side)
+- Fixed scene count at 2 scenes per generation
 - Auto-advance flipbook to new spread on story continuation
 - Keyboard navigation (ArrowLeft/ArrowRight, blocked when input focused)
 - Page scale CSS variable for proportional font/element sizing
@@ -170,7 +170,6 @@
 ### What Needs to Be Built
 - **Firestore Persistence** — Cloud Firestore for session state, story history, character profiles
 - **Timeline Slider** — Scene timeline navigation in story canvas
-- **Scene Count UI** — Expose the scene count selector (backend already supports 2 or 4)
 - **Firebase Hosting** — Deploy frontend SPA
 - **Cloud Run Deployment** — Deploy backend container
 - **Terraform IaC** — Automated cloud deployment scripts

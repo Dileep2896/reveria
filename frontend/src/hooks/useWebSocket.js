@@ -175,7 +175,6 @@ export default function useWebSocket() {
       wsRef.current.send(JSON.stringify({
         content,
         art_style: options.artStyle || 'cinematic',
-        scene_count: options.sceneCount || 2,
       }));
     }
   }, []);

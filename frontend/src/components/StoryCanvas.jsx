@@ -149,18 +149,18 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
   const onFlip = useCallback((e) => {
     const page = e.data;
     setCurrentPage(page);
-    // If user swiped/dragged past content, bounce back
+    // If user swiped/dragged past content, bounce back (instant, no animation)
     if (page > maxPage && bookRef.current) {
       const target = spreadLeftPage(maxPage);
       setTimeout(() => {
-        try { bookRef.current.pageFlip().flip(target); } catch {}
-      }, 50);
+        try { bookRef.current.pageFlip().turnToPage(target); } catch {}
+      }, 0);
     }
     // If user navigated back to cover but there are scenes, bounce to first spread
     if (page === 0 && scenes.length > 0 && bookRef.current) {
       setTimeout(() => {
-        try { bookRef.current.pageFlip().flip(1); } catch {}
-      }, 50);
+        try { bookRef.current.pageFlip().turnToPage(1); } catch {}
+      }, 0);
     }
   }, [maxPage, scenes.length]);
 

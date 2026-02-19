@@ -115,6 +115,7 @@ class IllustratorADKAgent(BaseAgent):
             yield Event(author=self.name)
             return
 
+        self.illustrator.accumulate_story(s.full_story)
         await self.illustrator.extract_characters(s.full_story)
 
         async def generate_for_scene(scene_num: int, text: str) -> None:
