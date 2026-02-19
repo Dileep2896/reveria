@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import useVoiceCapture from '../hooks/useVoiceCapture';
 
 const ART_STYLES = [
   { key: 'cinematic', label: 'Cinematic' },
@@ -9,9 +10,15 @@ const ART_STYLES = [
   { key: 'pencil', label: 'Pencil Sketch' },
 ];
 
-export default function ControlBar({ onSend, connected, generating, inputValue, setInputValue }) {
+export default function ControlBar({ onSend, onSendAudio, connected, generating, inputValue, setInputValue }) {
   const [focused, setFocused] = useState(false);
   const [artStyle, setArtStyle] = useState('cinematic');
+
+  const { recording, startRecording, stopRecording } = useVoiceCapture({
+    onAudioCaptured: (base64, mimeType) => {
+      if (onSendAudio) onSendAudio(base64, mimeType);
+    },
+  });
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -19,6 +26,8 @@ export default function ControlBar({ onSend, connected, generating, inputValue, 
     onSend(inputValue.trim(), { artStyle });
     setInputValue('');
   };
+
+  const micDisabled = !connected || generating;
 
   return (
     <div
@@ -72,16 +81,26 @@ export default function ControlBar({ onSend, connected, generating, inputValue, 
             WebkitBackdropFilter: 'var(--glass-blur)',
           }}
         >
-          {/* Mic button — glass circle */}
+          {/* Mic button — hold to talk */}
           <button
             type="button"
             className="flex-shrink-0 rounded-xl flex items-center justify-center transition-all control-mic-btn"
             style={{
-              background: 'var(--glass-bg)',
-              color: 'var(--text-muted)',
-              border: '1px solid var(--glass-border)',
+              background: recording ? 'var(--accent-primary)' : 'var(--glass-bg)',
+              color: recording ? 'var(--text-inverse)' : 'var(--text-muted)',
+              border: `1px solid ${recording ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
+              boxShadow: recording ? '0 0 12px var(--accent-primary)' : 'none',
+              animation: recording ? 'micPulse 1.2s ease-in-out infinite' : 'none',
+              opacity: micDisabled ? 0.3 : 1,
+              cursor: micDisabled ? 'not-allowed' : 'pointer',
             }}
-            title="Voice input (coming soon)"
+            title={recording ? 'Release to send' : 'Hold to talk'}
+            onMouseDown={!micDisabled ? startRecording : undefined}
+            onMouseUp={!micDisabled ? stopRecording : undefined}
+            onMouseLeave={recording ? stopRecording : undefined}
+            onTouchStart={!micDisabled ? (e) => { e.preventDefault(); startRecording(); } : undefined}
+            onTouchEnd={!micDisabled ? (e) => { e.preventDefault(); stopRecording(); } : undefined}
+            disabled={micDisabled}
           >
             <svg
               className="control-icon"
@@ -105,7 +124,7 @@ export default function ControlBar({ onSend, connected, generating, inputValue, 
             onChange={(e) => setInputValue(e.target.value)}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
-            placeholder={generating ? "Story is being crafted..." : "Describe a scenario like a mystery, an adventure, a bedtime story..."}
+            placeholder={recording ? 'Listening...' : generating ? "Story is being crafted..." : "Describe a scenario like a mystery, an adventure, a bedtime story..."}
             className="flex-1 bg-transparent outline-none control-input"
             style={{ color: 'var(--text-primary)' }}
           />
@@ -144,6 +163,13 @@ export default function ControlBar({ onSend, connected, generating, inputValue, 
           </div>
         </button>
       </form>
+
+      <style>{`
+        @keyframes micPulse {
+          0%, 100% { box-shadow: 0 0 8px var(--accent-primary); }
+          50% { box-shadow: 0 0 20px var(--accent-primary); }
+        }
+      `}</style>
     </div>
   );
 }

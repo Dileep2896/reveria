@@ -120,6 +120,31 @@
 
 ---
 
+### Day 2 (Feb 19, 2026)
+
+**Session 9: Director Panel — Structured Data & Collapsible Cards**
+
+- Rewrote Director backend prompt (`director.py`) to request structured JSON objects instead of plain strings:
+  - `narrative_arc`: summary, stage (exposition/rising_action/climax/falling_action/resolution), pacing (slow/moderate/fast), detail
+  - `characters`: summary, list of {name, role, trait}, detail
+  - `tension`: summary, levels array, trend (rising/falling/steady/volatile), detail
+  - `visual_style`: summary, tags (3-5 keywords), mood (peaceful/mysterious/tense/chaotic/melancholic/joyful/epic), detail
+- Bumped `max_output_tokens` from 600 → 1000 to accommodate structured fields
+- Rewrote `DirectorPanel.jsx` with visual sub-components:
+  - `NarrativeArcVisual`: mini SVG arc curve (80x28px) with stage dot, stage pill, color-coded pacing pill
+  - `CharactersVisual`: character chips as `Name · Role` pills with trait tooltips
+  - `TensionVisual`: trend pill with arrow icon (↗↘→↕) + existing TensionBars bar chart
+  - `VisualStyleVisual`: color-coded mood pill + glass-style tag chips
+- Added collapsible detail text behind a ChevronToggle (rotates 180° when expanded)
+  - Visual summaries always visible; detail text hidden by default, revealed on chevron click
+  - Fade-in animation on expand
+- Added backward-compat normalizer (`normalizeCardData`): handles old string format, old tension `{description, levels}` format, and new structured objects
+- Replaced line-based `ShimmerLines` with pill-shaped `ShimmerVisual` skeleton in analyzing state
+- Removed dead `ShimmerLines` component
+- Audit: verified frontend build clean, backend syntax valid, data flow intact through orchestrator/WebSocket/App.jsx (no changes needed to pipeline)
+
+---
+
 ## Current State (Feb 19, 2026)
 
 ### What's Working
@@ -134,14 +159,16 @@
 - Animated logo, scene reveal animations, drop-cap typography
 - Keyboard and dot-based flipbook navigation
 - Production-ready Docker setup
+- Voice input via MediaRecorder (`useVoiceCapture.js`) with Gemini transcription
+- Cloud TTS narration per scene via Google Cloud Text-to-Speech (`tts_client.py`)
+- Director Agent with structured JSON analysis (`director.py`) — narrative arc, characters, tension, visual style
+- ADK orchestration pipeline (`orchestrator.py`) — SequentialAgent → ParallelAgent (Illustrator + Director + TTS)
+- Director Panel with glanceable visual summaries (chips, arc, tags, trend indicators) and collapsible detail text
+- Tension bar chart visualization with per-scene bars and trend indicators
+- Per-batch director data tracking — director analysis follows scene pagination
 
-### What Needs to Be Built (from storyforge-plan.md)
-- **Voice Input** — Web Audio API + MediaRecorder for hands-free story steering (`VoiceInput.jsx`, `useVoiceCapture.js`)
-- **Cloud TTS** — Google Cloud Text-to-Speech for scene narration with distinct voices (`tts_client.py`, `audioPlayer.js`)
-- **Director Agent** — 3rd agent that explains creative reasoning in real-time (`director.py`, wire to `DirectorPanel.jsx`)
-- **ADK Orchestration** — Google Agent Development Kit for multi-agent coordination (`orchestrator.py`)
-- **Firestore Persistence** — Cloud Firestore for session state, story history, character profiles (`firestore_client.py`)
-- **Tension Arc Visualization** — Recharts graph in Director panel showing narrative tension across scenes (`TensionArc.jsx`)
+### What Needs to Be Built
+- **Firestore Persistence** — Cloud Firestore for session state, story history, character profiles
 - **Timeline Slider** — Scene timeline navigation in story canvas
 - **Scene Count UI** — Expose the scene count selector (backend already supports 2 or 4)
 - **Firebase Hosting** — Deploy frontend SPA
@@ -151,4 +178,3 @@
 ### Known Issues / Improvements Needed
 - **Image generation relevance for continuous stories** — When continuing a story with new scenes, the generated images need to be more contextually relevant to the ongoing narrative. Currently each image prompt is engineered per-scene, but continuations may lose visual narrative thread. Need to pass fuller story context and previous scene descriptions to the Illustrator so images maintain narrative coherence across continuation batches.
 - **react-pageflip limitations** — Mouse-based page flipping disabled due to unwanted drag behavior on page edges; 21 pre-allocated page slots allow flipping to empty pages (bounced back via `onFlip` handler but animation still shows)
-- **Director Panel** — Currently shows static placeholder cards; needs to be wired to a Director Agent backend

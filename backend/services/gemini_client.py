@@ -1,6 +1,11 @@
+import base64
+import logging
 import os
+
 from google import genai
 from google.genai import types
+
+logger = logging.getLogger("storyforge.gemini")
 
 _client: genai.Client | None = None
 
@@ -58,3 +63,38 @@ async def generate_stream(
     async for chunk in stream:
         if chunk.text:
             yield chunk.text
+
+
+async def transcribe_audio(audio_base64: str, mime_type: str) -> str | None:
+    """Transcribe audio using Gemini 2.0 Flash multimodal input.
+
+    Returns transcribed text or None on failure.
+    """
+    client = get_client()
+    model = get_model()
+
+    try:
+        audio_bytes = base64.b64decode(audio_base64)
+
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=types.Content(
+                role="user",
+                parts=[
+                    types.Part(inline_data=types.Blob(mime_type=mime_type, data=audio_bytes)),
+                    types.Part(text="Transcribe this audio exactly. Output only the transcription, nothing else."),
+                ],
+            ),
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                max_output_tokens=500,
+            ),
+        )
+
+        if response.text:
+            return response.text.strip()
+
+    except Exception as e:
+        logger.error("Audio transcription failed: %s", e)
+
+    return None

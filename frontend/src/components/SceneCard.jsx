@@ -125,6 +125,179 @@ function cleanText(text) {
     .replace(/`(.*?)`/g, '$1');
 }
 
+/* ── Custom audio player matching glassmorphism theme ── */
+function AudioPlayer({ src, scale = 1 }) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const progressBarRef = useRef(null);
+  const instanceId = useRef(Math.random().toString(36).slice(2));
+  const playingRef = useRef(false);
+
+  // Keep ref in sync with state
+  useEffect(() => { playingRef.current = playing; }, [playing]);
+
+  // Audio event listeners — stable, set up once
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+      setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0);
+    };
+    const onLoaded = () => setDuration(audio.duration || 0);
+    const onEnded = () => { setPlaying(false); setProgress(0); setCurrentTime(0); };
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('ended', onEnded);
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('ended', onEnded);
+    };
+  }, []);
+
+  /* ── Only-one-at-a-time: pause when another player starts ── */
+  useEffect(() => {
+    const onOtherPlay = (e) => {
+      if (e.detail !== instanceId.current && playingRef.current) {
+        audioRef.current?.pause();
+        setPlaying(false);
+      }
+    };
+    window.addEventListener('storyforge:audio:play', onOtherPlay);
+    return () => window.removeEventListener('storyforge:audio:play', onOtherPlay);
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+    } else {
+      window.dispatchEvent(new CustomEvent('storyforge:audio:play', { detail: instanceId.current }));
+      audio.play().catch(() => {});
+      setPlaying(true);
+    }
+  };
+
+  const seek = (e) => {
+    const audio = audioRef.current;
+    const bar = progressBarRef.current;
+    if (!audio || !bar || !audio.duration) return;
+    const rect = bar.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audio.currentTime = pct * audio.duration;
+  };
+
+  const fmt = (t) => {
+    if (!t || !isFinite(t)) return '0:00';
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div
+      style={{
+        flexShrink: 0,
+        marginTop: `${4 * scale}px`,
+        paddingTop: `${4 * scale}px`,
+        borderTop: '1px solid var(--glass-border)',
+        animation: 'fadeIn 0.4s ease',
+      }}
+    >
+      <audio ref={audioRef} src={src} preload="metadata" />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: `${6 * scale}px`,
+          padding: `${4 * scale}px ${6 * scale}px`,
+          borderRadius: `${8 * scale}px`,
+          background: 'var(--glass-bg)',
+          border: '1px solid var(--glass-border)',
+        }}
+      >
+        {/* Play/Pause button */}
+        <button
+          onClick={togglePlay}
+          style={{
+            width: `${22 * scale}px`,
+            height: `${22 * scale}px`,
+            borderRadius: '50%',
+            border: 'none',
+            background: playing ? 'var(--accent-primary)' : 'var(--accent-primary-soft)',
+            color: playing ? 'var(--text-inverse)' : 'var(--accent-primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+            boxShadow: playing ? '0 0 10px var(--accent-primary-glow)' : 'none',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {playing ? (
+            <svg width={10 * scale} height={10 * scale} viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16" rx="1" />
+              <rect x="14" y="4" width="4" height="16" rx="1" />
+            </svg>
+          ) : (
+            <svg width={10 * scale} height={10 * scale} viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
+        </button>
+
+        {/* Time */}
+        <span style={{ fontSize: `${9 * scale}px`, color: 'var(--text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums', minWidth: `${28 * scale}px` }}>
+          {fmt(currentTime)}
+        </span>
+
+        {/* Progress bar */}
+        <div
+          ref={progressBarRef}
+          onClick={seek}
+          style={{
+            flex: 1,
+            height: `${4 * scale}px`,
+            borderRadius: `${2 * scale}px`,
+            background: 'var(--glass-border)',
+            cursor: 'pointer',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              height: '100%',
+              width: `${progress}%`,
+              borderRadius: `${2 * scale}px`,
+              background: 'var(--accent-primary)',
+              boxShadow: '0 0 6px var(--accent-primary-glow)',
+              transition: 'width 0.1s linear',
+            }}
+          />
+        </div>
+
+        {/* Duration */}
+        <span style={{ fontSize: `${9 * scale}px`, color: 'var(--text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums', minWidth: `${28 * scale}px`, textAlign: 'right' }}>
+          {fmt(duration)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /* ── Revealed scene with cinematic animation ── */
 function SceneRevealed({ scene, scale = 1 }) {
   const isError = scene.image_url === 'error';
@@ -176,8 +349,20 @@ function SceneRevealed({ scene, scale = 1 }) {
         ...(skip ? {} : { animation: 'sceneReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1)' }),
       }}
     >
-      {/* Scene number badge */}
+      {/* Page number + Scene badge */}
       <div className="flex items-center gap-2" style={{ marginBottom: `${6 * scale}px`, flexShrink: 0 }}>
+        <span
+          style={{
+            fontSize: `${10 * scale}px`,
+            fontStyle: 'italic',
+            color: 'var(--text-muted)',
+            opacity: 0.5,
+            fontVariantNumeric: 'tabular-nums',
+            minWidth: `${12 * scale}px`,
+          }}
+        >
+          {scene.scene_number}
+        </span>
         <span
           className="font-bold uppercase tracking-widest rounded-full"
           style={{
@@ -348,11 +533,7 @@ function SceneRevealed({ scene, scale = 1 }) {
       </div>
 
       {scene.audio_url && (
-        <div
-          style={{ flexShrink: 0, marginTop: `${4 * scale}px`, paddingTop: `${4 * scale}px`, borderTop: '1px solid var(--glass-border)' }}
-        >
-          <audio controls className="w-full" style={{ height: `${24 * scale}px` }} src={scene.audio_url} />
-        </div>
+        <AudioPlayer src={scene.audio_url} scale={scale} />
       )}
     </div>
   );

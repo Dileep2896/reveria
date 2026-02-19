@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef, useCallback, forwardRef } from 'react';
+import { useState, useEffect, useRef, useCallback, forwardRef, memo } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 import './storybook.css';
 import SceneCard from './SceneCard';
-import BookNavigation from './BookNavigation';
 
 /* ============================================
    Page wrappers — must use forwardRef for
@@ -56,14 +55,9 @@ const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWit
   return (
     <div ref={ref} className={showAsPage ? `book-page ${pageNum % 2 === 1 ? 'book-page-left' : 'book-page-right'}` : 'book-page-slot'}>
       {scene ? (
-        <>
-          <div className="book-page-inner">
-            <SceneCard scene={scene} scale={scale || 1} />
-          </div>
-          <span className={`book-page-num ${pageNum % 2 === 1 ? 'book-page-num-left' : 'book-page-num-right'}`}>
-            {scene.scene_number}
-          </span>
-        </>
+        <div className="book-page-inner">
+          <SceneCard scene={scene} scale={scale || 1} />
+        </div>
       ) : isGenerating ? (
         <GeneratingContent />
       ) : null}
@@ -88,7 +82,7 @@ const GENRE_PROMPTS = {
   "Children's": 'A whimsical bedtime story about a curious little fox exploring an enchanted forest...',
 };
 
-export default function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick }) {
+function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPageChange }) {
   const bookRef = useRef(null);
   const wrapperRef = useRef(null);
   const prevGenerating = useRef(false);
@@ -101,8 +95,8 @@ export default function StoryCanvas({ scenes, generating, userPrompt, error, onG
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       const { width: cw, height: ch } = entry.contentRect;
-      // Reserve space for prompt (~60), nav dots (~50), gaps (~20)
-      const availH = ch - 130;
+      // Reserve space for dots bar (~16) + small gap (~14)
+      const availH = ch - 30;
       // Spread = 2 pages side by side, leave some horizontal breathing room
       const availW = cw - 32;
 
@@ -209,6 +203,17 @@ export default function StoryCanvas({ scenes, generating, userPrompt, error, onG
     return () => window.removeEventListener('keydown', onKey);
   }, [goNext, goPrev]);
 
+  /* ── Notify parent of current scene ── */
+  useEffect(() => {
+    if (!onPageChange) return;
+    if (currentPage === 0) {
+      onPageChange(null);
+    } else {
+      // page N = scene number N (1-indexed)
+      onPageChange(currentPage);
+    }
+  }, [currentPage, onPageChange]);
+
   /* ── Navigation dots ── */
   const lastContentIndex = showGenerating ? scenes.length + 1 : scenes.length;
   const contentForDots = Math.max(lastContentIndex, 0);
@@ -241,12 +246,6 @@ export default function StoryCanvas({ scenes, generating, userPrompt, error, onG
 
   return (
     <div className="storybook-wrapper" ref={wrapperRef} style={{ '--page-scale': pageScale }}>
-      {userPrompt && (
-        <div className="book-user-prompt">
-          <p>{userPrompt}</p>
-        </div>
-      )}
-
       {error && (
         <div className="book-error-toast">
           <p>{error}</p>
@@ -301,8 +300,20 @@ export default function StoryCanvas({ scenes, generating, userPrompt, error, onG
           </div>
         </div>
       ) : (
-        /* ── Active: flipbook ── */
+        /* ── Active: flipbook with overlay nav ── */
         <div className="storybook-container">
+          {/* Left arrow overlay */}
+          <button
+            className="book-nav-overlay book-nav-overlay-left"
+            onClick={goPrev}
+            disabled={currentPage <= (scenes.length > 0 ? 1 : 0)}
+            aria-label="Previous page"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+
           <HTMLFlipBook
             ref={bookRef}
             width={bookSize.w}
@@ -327,19 +338,34 @@ export default function StoryCanvas({ scenes, generating, userPrompt, error, onG
             {pages}
           </HTMLFlipBook>
 
+          {/* Right arrow overlay */}
+          <button
+            className="book-nav-overlay book-nav-overlay-right"
+            onClick={goNext}
+            disabled={currentPage + 2 > maxPage}
+            aria-label="Next page"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
         </div>
       )}
 
+      {/* Dots-only bar (no arrows) */}
       {dotCount > 1 && (
-        <BookNavigation
-          currentPage={spreadIndex}
-          totalPages={dotCount}
-          minPage={scenes.length > 0 ? 1 : 0}
-          onPrev={goPrev}
-          onNext={goNext}
-          onGoTo={goTo}
-          disabled={false}
-        />
+        <div className="book-nav-dots-bar">
+          {Array.from({ length: dotCount }, (_, i) => (
+            i < (scenes.length > 0 ? 1 : 0) ? null : (
+              <button
+                key={i}
+                className={`book-nav-dot${i === spreadIndex ? ' active' : ''}`}
+                onClick={() => goTo(i)}
+                aria-label={`Go to spread ${i + 1}`}
+              />
+            )
+          ))}
+        </div>
       )}
     </div>
   );
@@ -385,3 +411,5 @@ function GeneratingContent() {
     </div>
   );
 }
+
+export default memo(StoryCanvas);

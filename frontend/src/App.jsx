@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useTheme } from './contexts/ThemeContext';
 import useWebSocket from './hooks/useWebSocket';
 import Logo from './components/Logo';
@@ -7,14 +7,36 @@ import DirectorPanel from './components/DirectorPanel';
 import ControlBar from './components/ControlBar';
 
 export default function App() {
-  const { connected, scenes, generating, userPrompt, error, send, reset } = useWebSocket();
+  const { connected, scenes, generating, userPrompt, error, directorData, generations, send, sendAudio, reset } = useWebSocket();
   const { theme, toggleTheme } = useTheme();
   const [directorOpen, setDirectorOpen] = useState(true);
   const [controlBarInput, setControlBarInput] = useState('');
+  const [currentSceneNumber, setCurrentSceneNumber] = useState(null);
 
-  const handleGenreClick = (prompt) => {
+  // Derive per-scene director data based on which batch the current scene belongs to
+  const activeDirectorData = (() => {
+    if (generating || !currentSceneNumber || !generations.length) return directorData;
+    const batch = generations.find(g => g.sceneNumbers.includes(currentSceneNumber));
+    return batch?.directorData || directorData;
+  })();
+
+  // Derive batch scene numbers for tension bar labels
+  const activeBatchSceneNumbers = (() => {
+    if (generating || !currentSceneNumber || !generations.length) return null;
+    const batch = generations.find(g => g.sceneNumbers.includes(currentSceneNumber));
+    return batch?.sceneNumbers || null;
+  })();
+
+  // Derive per-scene prompt for header display
+  const displayPrompt = (() => {
+    if (!currentSceneNumber || !scenes.length) return userPrompt;
+    const scene = scenes[currentSceneNumber - 1];
+    return scene?.prompt || userPrompt;
+  })();
+
+  const handleGenreClick = useCallback((prompt) => {
     setControlBarInput(prompt);
-  };
+  }, []);
 
   return (
     <div className="h-screen flex flex-col relative overflow-hidden">
@@ -47,6 +69,16 @@ export default function App() {
         }}
       >
         <Logo size="compact" />
+
+        {/* Prompt pill — centered in header */}
+        {displayPrompt && scenes.length > 0 && (
+          <div
+            className="header-prompt-pill"
+            title={displayPrompt}
+          >
+            <p>{displayPrompt}</p>
+          </div>
+        )}
 
         <div className="flex items-center header-actions">
           {/* Connection status pill */}
@@ -143,13 +175,13 @@ export default function App() {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden relative z-10">
-        <StoryCanvas scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} />
-        {directorOpen && <DirectorPanel />}
+        <StoryCanvas scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} />
+        {directorOpen && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} />}
       </div>
 
       {/* Control Bar */}
       <div className="relative z-10">
-        <ControlBar onSend={send} connected={connected} generating={generating} inputValue={controlBarInput} setInputValue={setControlBarInput} />
+        <ControlBar onSend={send} onSendAudio={sendAudio} connected={connected} generating={generating} inputValue={controlBarInput} setInputValue={setControlBarInput} />
       </div>
     </div>
   );

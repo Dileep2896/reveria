@@ -72,6 +72,30 @@ body {
   height: clamp(28px, 3vw, 36px);
 }
 
+.header-prompt-pill {
+  flex: 1;
+  min-width: 0;
+  max-width: 480px;
+  margin: 0 clamp(0.5rem, 2vw, 1.5rem);
+  padding: clamp(0.2rem, 0.4vw, 0.3rem) clamp(0.6rem, 1.2vw, 1rem);
+  border-radius: 999px;
+  background: var(--accent-primary-soft);
+  border: 1px solid var(--glass-border-accent);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-prompt-pill p {
+  margin: 0;
+  font-size: clamp(0.6rem, 1.1vw, 0.8rem);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- Director Panel ---- */
 .director-panel {
   width: clamp(220px, 22vw, 320px);
