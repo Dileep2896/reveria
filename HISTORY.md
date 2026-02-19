@@ -143,6 +143,22 @@
 - Removed dead `ShimmerLines` component
 - Audit: verified frontend build clean, backend syntax valid, data flow intact through orchestrator/WebSocket/App.jsx (no changes needed to pipeline)
 
+**Session 10: Image Continuity & Pageflip Fix**
+
+- Fixed image continuity breaking across story continuations:
+  - Added `_accumulated_story` to Illustrator — appends each batch's text with `---` separators so `extract_characters()` sees the full cross-batch narrative
+  - `extract_characters()` now merges with existing character sheet instead of rebuilding from scratch — sends existing sheet in the prompt with instructions to preserve entries and only add new characters
+  - On NONE result or error, existing character sheet is preserved instead of cleared (previous characters still exist in the story)
+  - Added `accumulate_story()` calls in both manual pipeline (`main.py`) and ADK pipeline (`orchestrator.py`) before `extract_characters()`
+  - Reset naturally clears accumulated state since `Illustrator()` is re-created on "New Story"
+- Fixed pageflip empty-page bounce animation:
+  - Replaced `flip()` with `turnToPage()` in `onFlip` bounce-back handler — `turnToPage` is instant (no 800ms flip animation)
+  - Reduced `setTimeout` delay from 50ms to 0ms for earliest safe execution
+  - Touch swipes past content now snap back instantly instead of showing a visible flip-back animation
+- Removed scene count of 4 — hardcoded to 2 scenes per generation:
+  - Removed `scene_count` parsing/validation from `main.py` (was allowing 2 or 4)
+  - Removed `scene_count` from WebSocket message payload (`useWebSocket.js`)
+
 ---
 
 ## Current State (Feb 19, 2026)
@@ -150,14 +166,15 @@
 ### What's Working
 - Full text + image generation pipeline: prompt → Gemini 2.0 Flash → streamed scenes → Imagen 3 illustrations → interactive flipbook
 - Conversation continuity (story steering/continuation across multiple prompts)
+- Cross-batch character visual consistency via accumulated story text and character sheet merging
 - 6 art styles with visual pills
 - Genre quick-start from cover page
-- Character consistency via character sheet extraction
 - New Story reset (frontend + backend)
 - Dark/light glassmorphism theme
 - Responsive layout across screen sizes
 - Animated logo, scene reveal animations, drop-cap typography
 - Keyboard and dot-based flipbook navigation
+- Instant snap-back on touch swipe past content pages
 - Production-ready Docker setup
 - Voice input via MediaRecorder (`useVoiceCapture.js`) with Gemini transcription
 - Cloud TTS narration per scene via Google Cloud Text-to-Speech (`tts_client.py`)
@@ -175,5 +192,4 @@
 - **Terraform IaC** — Automated cloud deployment scripts
 
 ### Known Issues / Improvements Needed
-- **Image generation relevance for continuous stories** — When continuing a story with new scenes, the generated images need to be more contextually relevant to the ongoing narrative. Currently each image prompt is engineered per-scene, but continuations may lose visual narrative thread. Need to pass fuller story context and previous scene descriptions to the Illustrator so images maintain narrative coherence across continuation batches.
-- **react-pageflip limitations** — Mouse-based page flipping disabled due to unwanted drag behavior on page edges; 21 pre-allocated page slots allow flipping to empty pages (bounced back via `onFlip` handler but animation still shows)
+- **react-pageflip limitations** — Mouse-based page flipping disabled due to unwanted drag behavior on page edges; 21 pre-allocated page slots exist to avoid React reconciliation conflicts
