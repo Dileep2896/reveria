@@ -7,9 +7,14 @@ import DirectorPanel from './components/DirectorPanel';
 import ControlBar from './components/ControlBar';
 
 export default function App() {
-  const { connected, messages, generating, send } = useWebSocket();
+  const { connected, scenes, generating, userPrompt, error, send, reset } = useWebSocket();
   const { theme, toggleTheme } = useTheme();
   const [directorOpen, setDirectorOpen] = useState(true);
+  const [controlBarInput, setControlBarInput] = useState('');
+
+  const handleGenreClick = (prompt) => {
+    setControlBarInput(prompt);
+  };
 
   return (
     <div className="h-screen flex flex-col relative overflow-hidden">
@@ -32,7 +37,7 @@ export default function App() {
 
       {/* Header — frosted glass */}
       <header
-        className="relative z-10 px-6 py-3 flex items-center justify-between"
+        className="relative z-10 flex items-center justify-between header-bar"
         style={{
           background: 'var(--glass-bg-strong)',
           backdropFilter: 'var(--glass-blur)',
@@ -43,10 +48,10 @@ export default function App() {
       >
         <Logo size="compact" />
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center header-actions">
           {/* Connection status pill */}
           <div
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+            className="flex items-center rounded-full header-pill"
             style={{
               background: 'var(--glass-bg)',
               border: '1px solid var(--glass-border)',
@@ -54,8 +59,10 @@ export default function App() {
             }}
           >
             <div
-              className="w-1.5 h-1.5 rounded-full"
+              className="rounded-full"
               style={{
+                width: '6px',
+                height: '6px',
                 background: connected ? 'var(--status-success)' : 'var(--status-error)',
                 boxShadow: connected
                   ? '0 0 8px var(--status-success)'
@@ -63,17 +70,33 @@ export default function App() {
               }}
             />
             <span
-              className="text-[11px] font-medium"
+              className="font-medium header-pill-text"
               style={{ color: 'var(--text-muted)' }}
             >
               {connected ? 'Live' : 'Offline'}
             </span>
           </div>
 
+          {/* New Story — only visible when there's content */}
+          {scenes.length > 0 && !generating && (
+            <button
+              onClick={reset}
+              className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
+              style={{
+                background: 'var(--glass-bg)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--glass-border)',
+                backdropFilter: 'var(--glass-blur)',
+              }}
+            >
+              New Story
+            </button>
+          )}
+
           {/* Director toggle — glass pill */}
           <button
             onClick={() => setDirectorOpen(!directorOpen)}
-            className="px-3.5 py-1.5 rounded-full text-[11px] font-semibold transition-all uppercase tracking-wider"
+            className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
               background: directorOpen ? 'var(--accent-secondary-soft)' : 'var(--glass-bg)',
               color: directorOpen ? 'var(--accent-secondary)' : 'var(--text-muted)',
@@ -88,7 +111,7 @@ export default function App() {
           {/* Theme toggle — glass circle */}
           <button
             onClick={toggleTheme}
-            className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+            className="rounded-full flex items-center justify-center transition-all header-theme-btn"
             style={{
               background: 'var(--glass-bg)',
               border: '1px solid var(--glass-border)',
@@ -120,13 +143,13 @@ export default function App() {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden relative z-10">
-        <StoryCanvas messages={messages} generating={generating} />
-        {directorOpen && <DirectorPanel messages={messages} />}
+        <StoryCanvas scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} />
+        {directorOpen && <DirectorPanel />}
       </div>
 
       {/* Control Bar */}
       <div className="relative z-10">
-        <ControlBar onSend={send} connected={connected} generating={generating} />
+        <ControlBar onSend={send} connected={connected} generating={generating} inputValue={controlBarInput} setInputValue={setControlBarInput} />
       </div>
     </div>
   );

@@ -2,21 +2,30 @@ import os
 from google import genai
 from google.genai import types
 
+_client: genai.Client | None = None
+
+
 def get_client() -> genai.Client:
-    """Create a Gemini client using API key or Vertex AI (ADC)."""
+    """Create or return a cached Gemini client using API key or Vertex AI (ADC)."""
+    global _client
+    if _client is not None:
+        return _client
+
     api_key = os.getenv("GEMINI_API_KEY", "")
 
     if api_key and api_key != "your-api-key":
-        return genai.Client(api_key=api_key)
+        _client = genai.Client(api_key=api_key)
+    else:
+        # Fall back to Vertex AI with application default credentials
+        project = os.getenv("GOOGLE_CLOUD_PROJECT", "storyforge-hackathon")
+        location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+        _client = genai.Client(
+            vertexai=True,
+            project=project,
+            location=location,
+        )
 
-    # Fall back to Vertex AI with application default credentials
-    project = os.getenv("GOOGLE_CLOUD_PROJECT", "storyforge-hackathon")
-    location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
-    return genai.Client(
-        vertexai=True,
-        project=project,
-        location=location,
-    )
+    return _client
 
 
 def get_model() -> str:

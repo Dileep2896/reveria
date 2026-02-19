@@ -39,3 +39,118 @@ body {
 [data-theme="light"] ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
 }
+
+/* ============================================
+   RESPONSIVE LAYOUT — Header, ControlBar, Director
+   ============================================ */
+
+/* ---- Header ---- */
+.header-bar {
+  padding: clamp(0.4rem, 1.5vw, 0.75rem) clamp(0.75rem, 3vw, 1.5rem);
+}
+
+.header-actions {
+  gap: clamp(0.4rem, 1vw, 0.75rem);
+}
+
+.header-pill {
+  gap: clamp(0.3rem, 0.6vw, 0.5rem);
+  padding: clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.5rem, 1vw, 0.75rem);
+}
+
+.header-pill-text {
+  font-size: clamp(9px, 1.1vw, 11px);
+}
+
+.header-btn {
+  padding: clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.6rem, 1.2vw, 0.875rem);
+  font-size: clamp(9px, 1.1vw, 11px);
+}
+
+.header-theme-btn {
+  width: clamp(28px, 3vw, 36px);
+  height: clamp(28px, 3vw, 36px);
+}
+
+/* ---- Director Panel ---- */
+.director-panel {
+  width: clamp(220px, 22vw, 320px);
+}
+
+.director-panel .sticky {
+  padding: clamp(0.6rem, 1.5vw, 1rem) clamp(0.75rem, 2vw, 1.25rem);
+}
+
+.director-body {
+  padding: clamp(0.75rem, 2vw, 1.25rem);
+}
+
+/* ---- Control Bar ---- */
+.control-bar {
+  padding: clamp(0.35rem, 1vw, 0.75rem) clamp(0.5rem, 1.5vw, 1rem);
+}
+
+.control-options {
+  display: flex;
+  gap: clamp(0.25rem, 0.6vw, 0.5rem);
+  align-items: center;
+  max-width: 56rem;
+  margin: 0 auto clamp(0.2rem, 0.6vw, 0.5rem);
+  flex-wrap: wrap;
+}
+
+.control-style-label {
+  font-size: clamp(8px, 1vw, 10px);
+  margin-right: 0.25rem;
+}
+
+.control-style-pill {
+  padding: clamp(0.12rem, 0.35vw, 0.25rem) clamp(0.35rem, 0.8vw, 0.625rem);
+  font-size: clamp(9px, 1.1vw, 11px);
+}
+
+.control-form {
+  display: flex;
+  gap: clamp(0.3rem, 0.8vw, 0.75rem);
+  align-items: center;
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.control-input-wrap {
+  gap: clamp(0.3rem, 0.8vw, 0.75rem);
+  padding: clamp(0.3rem, 0.7vw, 0.6rem) clamp(0.5rem, 1vw, 1rem);
+  border-radius: clamp(10px, 1.2vw, 16px);
+}
+
+.control-mic-btn {
+  width: clamp(24px, 2.5vw, 34px);
+  height: clamp(24px, 2.5vw, 34px);
+}
+
+.control-input {
+  font-size: clamp(11px, 1.2vw, 14px);
+  height: clamp(20px, 2.5vw, 30px);
+}
+
+.control-icon {
+  width: clamp(10px, 1.1vw, 14px);
+  height: clamp(10px, 1.1vw, 14px);
+}
+
+.control-send-btn {
+  padding: clamp(0.3rem, 0.7vw, 0.6rem) clamp(0.6rem, 1.5vw, 1.5rem);
+  border-radius: clamp(10px, 1.2vw, 16px);
+  font-size: clamp(11px, 1.2vw, 14px);
+}
+
+/* ---- Small screens: hide Director, compact layout ---- */
+@media (max-width: 768px) {
+  .director-panel {
+    display: none;
+  }
+
+  .control-style-label {
+    display: none;
+  }
+}

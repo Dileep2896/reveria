@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StoryForge Logo</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #0a0a0f;
+    overflow: hidden;
+    gap: 80px;
+  }
+
+  /* === AMBIENT BACKGROUND === */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: 
+      radial-gradient(ellipse at 30% 50%, rgba(255, 107, 53, 0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 50%, rgba(138, 79, 255, 0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 30%, rgba(0, 194, 255, 0.03) 0%, transparent 50%);
+    animation: ambientShift 12s ease-in-out infinite alternate;
+  }
+
+  @keyframes ambientShift {
+    0% { transform: translate(0, 0) scale(1); }
+    100% { transform: translate(-3%, 2%) scale(1.05); }
+  }
+
+  /* === LOGO CONTAINER === */
+  .logo-container {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* === THE ICON === */
+  .logo-icon {
+    width: 88px;
+    height: 88px;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  /* Book base */
+  .book {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 52px;
+    height: 40px;
+    perspective: 200px;
+  }
+
+  .book-left, .book-right {
+    position: absolute;
+    bottom: 0;
+    width: 26px;
+    height: 36px;
+    border-radius: 2px 0 0 2px;
+    transition: transform 0.4s ease;
+  }
+
+  .book-left {
+    left: 0;
+    background: linear-gradient(135deg, #e8dcc8 0%, #d4c4a8 100%);
+    transform: rotateY(12deg);
+    transform-origin: right center;
+    border-right: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .book-right {
+    right: 0;
+    background: linear-gradient(225deg, #f0e6d2 0%, #ddd0b8 100%);
+    transform: rotateY(-12deg);
+    transform-origin: left center;
+    border-radius: 0 2px 2px 0;
+    border-left: 1px solid rgba(0,0,0,0.08);
+  }
+
+  /* Book spine */
+  .book-spine {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 38px;
+    background: linear-gradient(180deg, #c4a876 0%, #a08050 100%);
+    border-radius: 1px;
+  }
+
+  /* Text lines on pages */
+  .book-left::after, .book-right::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    width: 14px;
+    height: 2px;
+    background: rgba(0,0,0,0.08);
+    box-shadow: 
+      0 5px 0 rgba(0,0,0,0.06),
+      0 10px 0 rgba(0,0,0,0.05),
+      0 15px 0 rgba(0,0,0,0.04);
+  }
+
+  .book-left::after { right: 4px; }
+  .book-right::after { left: 4px; }
+
+  /* === FORGE SPARKS === */
+  .sparks {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 55px;
+  }
+
+  .spark {
+    position: absolute;
+    border-radius: 50%;
+    animation: sparkFloat 3s ease-in-out infinite;
+  }
+
+  /* Orange spark - text/story */
+  .spark-1 {
+    width: 10px;
+    height: 10px;
+    background: radial-gradient(circle, #ff6b35 0%, #ff4500 60%, transparent 70%);
+    box-shadow: 0 0 12px 3px rgba(255, 107, 53, 0.5), 0 0 30px 6px rgba(255, 69, 0, 0.2);
+    left: 12px;
+    top: 8px;
+    animation-delay: 0s;
+  }
+
+  /* Purple spark - images */
+  .spark-2 {
+    width: 12px;
+    height: 12px;
+    background: radial-gradient(circle, #8a4fff 0%, #6b2fd9 60%, transparent 70%);
+    box-shadow: 0 0 12px 3px rgba(138, 79, 255, 0.5), 0 0 30px 6px rgba(107, 47, 217, 0.2);
+    left: 50%;
+    transform: translateX(-50%);
+    top: 0;
+    animation-delay: 0.4s;
+  }
+
+  /* Cyan spark - audio */
+  .spark-3 {
+    width: 9px;
+    height: 9px;
+    background: radial-gradient(circle, #00c2ff 0%, #0090cc 60%, transparent 70%);
+    box-shadow: 0 0 12px 3px rgba(0, 194, 255, 0.5), 0 0 30px 6px rgba(0, 144, 204, 0.2);
+    right: 10px;
+    top: 10px;
+    animation-delay: 0.8s;
+  }
+
+  /* Small accent sparks */
+  .spark-4 {
+    width: 5px;
+    height: 5px;
+    background: radial-gradient(circle, #ffb347 0%, transparent 70%);
+    box-shadow: 0 0 8px 2px rgba(255, 179, 71, 0.4);
+    left: 8px;
+    top: 24px;
+    animation-delay: 1.2s;
+    animation-duration: 2.5s;
+  }
+
+  .spark-5 {
+    width: 4px;
+    height: 4px;
+    background: radial-gradient(circle, #c79fff 0%, transparent 70%);
+    box-shadow: 0 0 6px 2px rgba(199, 159, 255, 0.4);
+    right: 8px;
+    top: 26px;
+    animation-delay: 0.6s;
+    animation-duration: 2.8s;
+  }
+
+  .spark-6 {
+    width: 3px;
+    height: 3px;
+    background: radial-gradient(circle, #66d9ff 0%, transparent 70%);
+    box-shadow: 0 0 6px 2px rgba(102, 217, 255, 0.3);
+    left: 28px;
+    top: 18px;
+    animation-delay: 1.5s;
+    animation-duration: 2.2s;
+  }
+
+  @keyframes sparkFloat {
+    0%, 100% { 
+      transform: translateY(0) scale(1); 
+      opacity: 0.9; 
+    }
+    25% { 
+      transform: translateY(-6px) scale(1.15); 
+      opacity: 1; 
+    }
+    50% { 
+      transform: translateY(-2px) scale(0.95); 
+      opacity: 0.7; 
+    }
+    75% { 
+      transform: translateY(-8px) scale(1.1); 
+      opacity: 1; 
+    }
+  }
+
+  /* Forge glow from the book */
+  .forge-glow {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 50px;
+    height: 30px;
+    background: radial-gradient(ellipse, rgba(255, 107, 53, 0.25) 0%, rgba(138, 79, 255, 0.1) 40%, transparent 70%);
+    filter: blur(6px);
+    animation: glowPulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes glowPulse {
+    0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+    50% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+  }
+
+  /* === WORDMARK === */
+  .logo-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .wordmark {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 900;
+    font-size: 48px;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    display: flex;
+  }
+
+  .word-story {
+    color: #f0e6d2;
+  }
+
+  .word-forge {
+    background: linear-gradient(135deg, #ff6b35 0%, #ff4500 40%, #8a4fff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .tagline {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 400;
+    font-size: 13px;
+    letter-spacing: 3.5px;
+    text-transform: uppercase;
+    color: rgba(240, 230, 210, 0.4);
+    padding-left: 3px;
+  }
+
+  /* === VARIANTS SECTION === */
+  .variants {
+    display: flex;
+    gap: 60px;
+    z-index: 1;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .variant {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .variant-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(240, 230, 210, 0.25);
+  }
+
+  /* === ICON ONLY VARIANT === */
+  .icon-only {
+    width: 72px;
+    height: 72px;
+    position: relative;
+  }
+
+  .icon-only .book { bottom: 6px; width: 44px; height: 34px; }
+  .icon-only .book-left, .icon-only .book-right { width: 22px; height: 30px; }
+  .icon-only .book-spine { height: 32px; }
+  .icon-only .sparks { width: 50px; height: 45px; }
+  .icon-only .spark-1 { width: 8px; height: 8px; left: 8px; top: 8px; }
+  .icon-only .spark-2 { width: 10px; height: 10px; top: 0; }
+  .icon-only .spark-3 { width: 7px; height: 7px; right: 8px; top: 10px; }
+  .icon-only .spark-4 { left: 6px; top: 20px; }
+  .icon-only .spark-5 { right: 6px; top: 22px; }
+  .icon-only .spark-6 { left: 22px; top: 15px; }
+  .icon-only .forge-glow { bottom: 16px; width: 40px; height: 24px; }
+
+  /* === COMPACT VARIANT === */
+  .compact-container {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .compact-icon {
+    width: 40px;
+    height: 40px;
+    position: relative;
+  }
+
+  .compact-icon .book { bottom: 2px; width: 26px; height: 20px; }
+  .compact-icon .book-left, .compact-icon .book-right { width: 13px; height: 18px; }
+  .compact-icon .book-spine { height: 19px; width: 3px; }
+  .compact-icon .book-left::after, .compact-icon .book-right::after { display: none; }
+  .compact-icon .sparks { width: 30px; height: 24px; }
+  .compact-icon .spark-1 { width: 5px; height: 5px; left: 4px; top: 5px; box-shadow: 0 0 6px 2px rgba(255, 107, 53, 0.4); }
+  .compact-icon .spark-2 { width: 6px; height: 6px; top: 0; box-shadow: 0 0 6px 2px rgba(138, 79, 255, 0.4); }
+  .compact-icon .spark-3 { width: 5px; height: 5px; right: 4px; top: 6px; box-shadow: 0 0 6px 2px rgba(0, 194, 255, 0.4); }
+  .compact-icon .spark-4, .compact-icon .spark-5, .compact-icon .spark-6 { display: none; }
+  .compact-icon .forge-glow { bottom: 8px; width: 24px; height: 14px; }
+
+  .compact-text {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 700;
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .compact-text .word-story { color: #f0e6d2; }
+  .compact-text .word-forge {
+    background: linear-gradient(135deg, #ff6b35 0%, #ff4500 40%, #8a4fff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* === LIGHT VARIANT === */
+  .light-variant {
+    background: #f8f5f0;
+    border-radius: 16px;
+    padding: 32px 40px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .light-icon {
+    width: 52px;
+    height: 52px;
+    position: relative;
+  }
+
+  .light-icon .book { bottom: 4px; width: 34px; height: 26px; }
+  .light-icon .book-left, .light-icon .book-right { width: 17px; height: 24px; }
+  .light-icon .book-left { background: linear-gradient(135deg, #3a3632 0%, #2a2622 100%); }
+  .light-icon .book-right { background: linear-gradient(225deg, #4a4642 0%, #3a3632 100%); }
+  .light-icon .book-spine { height: 25px; width: 3px; background: linear-gradient(180deg, #2a2622 0%, #1a1612 100%); }
+  .light-icon .book-left::after, .light-icon .book-right::after { display: none; }
+  .light-icon .sparks { width: 40px; height: 32px; }
+  .light-icon .spark-1 { width: 7px; height: 7px; left: 6px; top: 5px; }
+  .light-icon .spark-2 { width: 8px; height: 8px; top: 0; }
+  .light-icon .spark-3 { width: 6px; height: 6px; right: 6px; top: 6px; }
+  .light-icon .spark-4, .light-icon .spark-5, .light-icon .spark-6 { display: none; }
+  .light-icon .forge-glow { bottom: 12px; width: 32px; height: 18px; }
+
+  .light-text {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 900;
+    font-size: 32px;
+    line-height: 1;
+    display: flex;
+  }
+
+  .light-text .word-story { color: #1a1612; }
+  .light-text .word-forge {
+    background: linear-gradient(135deg, #ff6b35 0%, #e03e00 40%, #7a3fd9 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* === ANIMATION ON LOAD === */
+  .logo-container, .variant {
+    animation: fadeUp 0.8s ease-out backwards;
+  }
+
+  .variants .variant:nth-child(1) { animation-delay: 0.3s; }
+  .variants .variant:nth-child(2) { animation-delay: 0.5s; }
+  .variants .variant:nth-child(3) { animation-delay: 0.7s; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+  <!-- PRIMARY LOGO -->
+  <div class="logo-container">
+    <div class="logo-icon">
+      <div class="forge-glow"></div>
+      <div class="book">
+        <div class="book-left"></div>
+        <div class="book-spine"></div>
+        <div class="book-right"></div>
+      </div>
+      <div class="sparks">
+        <div class="spark spark-1"></div>
+        <div class="spark spark-2"></div>
+        <div class="spark spark-3"></div>
+        <div class="spark spark-4"></div>
+        <div class="spark spark-5"></div>
+        <div class="spark spark-6"></div>
+      </div>
+    </div>
+    <div class="logo-text">
+      <div class="wordmark">
+        <span class="word-story">Story</span><span class="word-forge">Forge</span>
+      </div>
+      <div class="tagline">Where stories come alive</div>
+    </div>
+  </div>
+
+  <!-- LOGO VARIANTS -->
+  <div class="variants">
+    <!-- Icon Only -->
+    <div class="variant">
+      <div class="variant-label">Icon Only</div>
+      <div class="icon-only">
+        <div class="forge-glow"></div>
+        <div class="book">
+          <div class="book-left"></div>
+          <div class="book-spine"></div>
+          <div class="book-right"></div>
+        </div>
+        <div class="sparks">
+          <div class="spark spark-1"></div>
+          <div class="spark spark-2"></div>
+          <div class="spark spark-3"></div>
+          <div class="spark spark-4"></div>
+          <div class="spark spark-5"></div>
+          <div class="spark spark-6"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compact -->
+    <div class="variant">
+      <div class="variant-label">Compact</div>
+      <div class="compact-container">
+        <div class="compact-icon">
+          <div class="forge-glow"></div>
+          <div class="book">
+            <div class="book-left"></div>
+            <div class="book-spine"></div>
+            <div class="book-right"></div>
+          </div>
+          <div class="sparks">
+            <div class="spark spark-1"></div>
+            <div class="spark spark-2"></div>
+            <div class="spark spark-3"></div>
+            <div class="spark spark-4"></div>
+            <div class="spark spark-5"></div>
+            <div class="spark spark-6"></div>
+          </div>
+        </div>
+        <div class="compact-text">
+          <span class="word-story">Story</span><span class="word-forge">Forge</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Light Background -->
+    <div class="variant">
+      <div class="variant-label">Light Mode</div>
+      <div class="light-variant">
+        <div class="light-icon">
+          <div class="forge-glow"></div>
+          <div class="book">
+            <div class="book-left"></div>
+            <div class="book-spine"></div>
+            <div class="book-right"></div>
+          </div>
+          <div class="sparks">
+            <div class="spark spark-1"></div>
+            <div class="spark spark-2"></div>
+            <div class="spark spark-3"></div>
+            <div class="spark spark-4"></div>
+            <div class="spark spark-5"></div>
+            <div class="spark spark-6"></div>
+          </div>
+        </div>
+        <div class="light-text">
+          <span class="word-story">Story</span><span class="word-forge">Forge</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

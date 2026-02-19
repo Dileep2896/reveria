@@ -26,16 +26,6 @@
   --glass-blur: blur(20px);
   --glass-blur-strong: blur(40px);
 
-  /* Semantic surface aliases */
-  --bg-surface: var(--glass-bg);
-  --bg-surface-hover: var(--glass-bg-hover);
-  --bg-elevated: var(--glass-bg-strong);
-  --bg-secondary: rgba(255, 255, 255, 0.02);
-
-  --border-primary: var(--glass-border-secondary);
-  --border-subtle: var(--glass-border);
-  --border-accent: var(--glass-border-accent);
-
   /* Text */
   --text-primary: rgba(255, 255, 255, 0.92);
   --text-secondary: rgba(255, 255, 255, 0.6);
@@ -44,28 +34,38 @@
 
   /* Accent — Amber/Gold (story warmth) */
   --accent-primary: #f59e0b;
-  --accent-primary-hover: #fbbf24;
   --accent-primary-soft: rgba(245, 158, 11, 0.1);
   --accent-primary-glow: rgba(245, 158, 11, 0.25);
 
   /* Accent — Violet (director / AI) */
   --accent-secondary: #a78bfa;
-  --accent-secondary-hover: #c4b5fd;
   --accent-secondary-soft: rgba(167, 139, 250, 0.1);
   --accent-secondary-glow: rgba(167, 139, 250, 0.2);
 
   /* Status */
   --status-success: #34d399;
   --status-error: #f87171;
-  --status-warning: #fbbf24;
-
   /* Shadows & Effects */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
   --shadow-glow-primary: 0 0 30px rgba(245, 158, 11, 0.12), 0 0 60px rgba(245, 158, 11, 0.06);
   --shadow-glow-secondary: 0 0 30px rgba(167, 139, 250, 0.12), 0 0 60px rgba(167, 139, 250, 0.06);
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  /* Book */
+  --book-page-bg: linear-gradient(145deg, #1a1520 0%, #14101c 50%, #1a1520 100%);
+  --book-page-text: rgba(255, 255, 255, 0.88);
+  --book-spine: linear-gradient(90deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 40%, transparent 100%);
+  --book-spine-lines: rgba(255, 255, 255, 0.04);
+  --book-edge: rgba(255, 255, 255, 0.06);
+  --book-edge-shadow: rgba(0, 0, 0, 0.4);
+  --book-shadow: 0 25px 60px rgba(0, 0, 0, 0.5), 0 10px 20px rgba(0, 0, 0, 0.3);
+  --book-page-border: rgba(255, 255, 255, 0.06);
+  --book-noise-opacity: 0.03;
+  --book-cover-bg: linear-gradient(145deg, #2d1e3e 0%, #1f1430 50%, #2a1b3a 100%);
+  --book-cover-accent: rgba(245, 158, 11, 0.18);
+  --book-cover-frame: rgba(245, 158, 11, 0.08);
+  --book-cover-text: rgba(255, 255, 255, 0.95);
 
   /* Radius */
   --radius-sm: 10px;
@@ -77,6 +77,47 @@
   --transition-fast: 150ms ease;
   --transition-base: 250ms ease;
   --transition-slow: 400ms ease;
+}
+
+/* ---- Animations ---- */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes imageFadeIn {
+  from { opacity: 0; transform: scale(1.02); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes sceneReveal {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes textRevealLine {
+  from { opacity: 0; filter: blur(4px); transform: translateY(6px); }
+  to { opacity: 1; filter: blur(0); transform: translateY(0); }
+}
+
+@keyframes dropCapReveal {
+  from { opacity: 0; transform: scale(0.5) rotate(-10deg); }
+  to { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes dividerGrow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes skeletonTextPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
 }
 
 /* ---- Light Mode ---- */
@@ -97,38 +138,41 @@
   --glass-border-accent: rgba(217, 119, 6, 0.3);
   --glass-border-secondary: rgba(124, 58, 237, 0.25);
 
-  --bg-surface: var(--glass-bg);
-  --bg-surface-hover: var(--glass-bg-hover);
-  --bg-elevated: var(--glass-bg-strong);
-  --bg-secondary: rgba(255, 255, 255, 0.35);
-
-  --border-primary: var(--glass-border-secondary);
-  --border-subtle: var(--glass-border);
-  --border-accent: var(--glass-border-accent);
-
   --text-primary: rgba(15, 10, 30, 0.9);
   --text-secondary: rgba(15, 10, 30, 0.6);
   --text-muted: rgba(15, 10, 30, 0.35);
   --text-inverse: #ffffff;
 
   --accent-primary: #d97706;
-  --accent-primary-hover: #b45309;
   --accent-primary-soft: rgba(217, 119, 6, 0.12);
   --accent-primary-glow: rgba(217, 119, 6, 0.2);
 
   --accent-secondary: #7c3aed;
-  --accent-secondary-hover: #6d28d9;
   --accent-secondary-soft: rgba(124, 58, 237, 0.1);
   --accent-secondary-glow: rgba(124, 58, 237, 0.15);
 
   --status-success: #059669;
   --status-error: #dc2626;
-  --status-warning: #d97706;
-
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.1);
   --shadow-glow-primary: 0 0 30px rgba(217, 119, 6, 0.1), 0 0 60px rgba(217, 119, 6, 0.05);
   --shadow-glow-secondary: 0 0 30px rgba(124, 58, 237, 0.1), 0 0 60px rgba(124, 58, 237, 0.05);
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+
+  /* Book */
+  --book-page-bg: linear-gradient(145deg, #faf6ee 0%, #f5eedf 50%, #faf6ee 100%);
+  --book-page-text: rgba(40, 30, 15, 0.88);
+  --book-spine: linear-gradient(90deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.05) 40%, transparent 100%);
+  --book-spine-lines: rgba(0, 0, 0, 0.06);
+  --book-edge: rgba(0, 0, 0, 0.08);
+  --book-edge-shadow: rgba(0, 0, 0, 0.12);
+  --book-shadow: 0 25px 60px rgba(0, 0, 0, 0.15), 0 10px 20px rgba(0, 0, 0, 0.08);
+  --book-page-border: rgba(0, 0, 0, 0.06);
+  --book-noise-opacity: 0.04;
+  --book-cover-bg: linear-gradient(145deg, #3b1f4a 0%, #2a1538 50%, #3d2050 100%);
+  --book-cover-accent: rgba(245, 158, 11, 0.18);
+  --book-cover-frame: rgba(245, 158, 11, 0.1);
+  --book-cover-text: rgba(255, 255, 255, 0.95);
+  --skeleton-shimmer: rgba(0, 0, 0, 0.06);
+  --skeleton-shimmer-peak: rgba(0, 0, 0, 0.1);
 }

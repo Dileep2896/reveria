@@ -1,19 +1,28 @@
 import { useState } from 'react';
 
-export default function ControlBar({ onSend, connected, generating }) {
-  const [input, setInput] = useState('');
+const ART_STYLES = [
+  { key: 'cinematic', label: 'Cinematic' },
+  { key: 'watercolor', label: 'Watercolor' },
+  { key: 'comic', label: 'Comic Book' },
+  { key: 'anime', label: 'Anime' },
+  { key: 'oil', label: 'Oil Painting' },
+  { key: 'pencil', label: 'Pencil Sketch' },
+];
+
+export default function ControlBar({ onSend, connected, generating, inputValue, setInputValue }) {
   const [focused, setFocused] = useState(false);
+  const [artStyle, setArtStyle] = useState('cinematic');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
-    onSend(input.trim());
-    setInput('');
+    if (!inputValue.trim() || !connected || generating) return;
+    onSend(inputValue.trim(), { artStyle });
+    setInputValue('');
   };
 
   return (
     <div
-      className="p-4"
+      className="control-bar"
       style={{
         background: 'var(--glass-bg-strong)',
         backdropFilter: 'var(--glass-blur)',
@@ -21,13 +30,40 @@ export default function ControlBar({ onSend, connected, generating }) {
         borderTop: '1px solid var(--glass-border)',
       }}
     >
+      {/* Options row */}
+      <div className="control-options">
+        {/* Art style pills */}
+        <span
+          className="font-semibold uppercase tracking-wider control-style-label"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          Style
+        </span>
+        {ART_STYLES.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setArtStyle(key)}
+            className="rounded-full font-medium transition-all control-style-pill"
+            style={{
+              background: artStyle === key ? 'var(--accent-primary)' : 'var(--glass-bg)',
+              color: artStyle === key ? 'var(--text-inverse)' : 'var(--text-secondary)',
+              border: `1px solid ${artStyle === key ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
+              boxShadow: artStyle === key ? 'var(--shadow-glow-primary)' : 'none',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <form
         onSubmit={handleSubmit}
-        className="flex gap-3 items-center max-w-4xl mx-auto"
+        className="control-form"
       >
         {/* Input container — glass */}
         <div
-          className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl transition-all"
+          className="flex-1 flex items-center control-input-wrap"
           style={{
             background: 'var(--glass-bg-input)',
             border: `1px solid ${focused ? 'var(--glass-border-accent)' : 'var(--glass-border)'}`,
@@ -39,7 +75,7 @@ export default function ControlBar({ onSend, connected, generating }) {
           {/* Mic button — glass circle */}
           <button
             type="button"
-            className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+            className="flex-shrink-0 rounded-xl flex items-center justify-center transition-all control-mic-btn"
             style={{
               background: 'var(--glass-bg)',
               color: 'var(--text-muted)',
@@ -48,8 +84,7 @@ export default function ControlBar({ onSend, connected, generating }) {
             title="Voice input (coming soon)"
           >
             <svg
-              width="14"
-              height="14"
+              className="control-icon"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -66,12 +101,12 @@ export default function ControlBar({ onSend, connected, generating }) {
 
           <input
             type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={generating ? "Story is being crafted..." : "Describe a scenario like a mystery, an adventure, a bedtime story..."}
-            className="flex-1 bg-transparent outline-none text-sm"
+            className="flex-1 bg-transparent outline-none control-input"
             style={{ color: 'var(--text-primary)' }}
           />
         </div>
@@ -79,24 +114,23 @@ export default function ControlBar({ onSend, connected, generating }) {
         {/* Send button — glass with accent */}
         <button
           type="submit"
-          disabled={!connected || !input.trim() || generating}
-          className="flex-shrink-0 px-6 py-3 rounded-2xl text-sm font-semibold transition-all disabled:opacity-30"
+          disabled={!connected || !inputValue.trim() || generating}
+          className="flex-shrink-0 font-semibold transition-all disabled:opacity-30 control-send-btn"
           style={{
-            background: input.trim()
+            background: inputValue.trim()
               ? 'var(--accent-primary)'
               : 'var(--glass-bg)',
-            color: input.trim()
+            color: inputValue.trim()
               ? 'var(--text-inverse)'
               : 'var(--text-muted)',
-            border: `1px solid ${input.trim() ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
-            boxShadow: input.trim() ? 'var(--shadow-glow-primary)' : 'none',
+            border: `1px solid ${inputValue.trim() ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
+            boxShadow: inputValue.trim() ? 'var(--shadow-glow-primary)' : 'none',
           }}
         >
           <div className="flex items-center gap-2">
             Create
             <svg
-              width="14"
-              height="14"
+              className="control-icon"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
