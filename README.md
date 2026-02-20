@@ -35,74 +35,136 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 ---
 
-## Architecture
+## System Architecture
 
+```mermaid
+flowchart TB
+    subgraph Frontend["Frontend — React + Vite"]
+        direction TB
+        Auth["Firebase Auth<br/>(Google Sign-In)"]
+        subgraph Views["Application Views"]
+            direction LR
+            Canvas["Story Canvas<br/>Interactive Flipbook"]
+            Director["Director Panel<br/>AI Reasoning Sidebar"]
+            Library["Library Page<br/>3D Book Cards"]
+            Explore["Explore Page<br/>Public Stories"]
+        end
+        subgraph Controls["User Input"]
+            direction LR
+            TextInput["Text Input"]
+            VoiceInput["Voice Capture<br/>(Web Audio API)"]
+            ArtStyle["Art Style Picker<br/>6 styles"]
+        end
+        FSClient["Firestore Client SDK<br/>(Library / Explore queries)"]
+    end
+
+    subgraph Backend["Backend — Python FastAPI"]
+        WS["WebSocket Handler<br/>Session Management"]
+        AuthMW["Auth Middleware<br/>(Firebase Admin SDK)"]
+
+        subgraph Orchestrator["Story Orchestrator (ADK)"]
+            direction TB
+            Narrator["Narrator Agent<br/>Story text + dialogue"]
+
+            subgraph Parallel["Parallel Execution"]
+                direction LR
+                Illustrator["Illustrator Agent<br/>Scene images"]
+                DirectorAgent["Director Agent<br/>Creative analysis"]
+                TTS["TTS Agent<br/>Voice narration"]
+            end
+
+            Narrator -->|scene text| Parallel
+        end
+
+        Persist["Firestore Client<br/>(persist stories)"]
+        Storage["GCS Storage Client<br/>(store images)"]
+    end
+
+    subgraph Google["Google AI Services"]
+        direction LR
+        Gemini["Gemini 2.0 Flash<br/>(Vertex AI)"]
+        Imagen["Imagen 3<br/>(Vertex AI)"]
+        CloudTTS["Cloud TTS"]
+    end
+
+    subgraph Data["Data Layer"]
+        direction LR
+        Firestore[("Cloud Firestore<br/>Stories, Scenes,<br/>Generations, Likes")]
+        GCS[("Cloud Storage<br/>Scene Images,<br/>Cover Images")]
+    end
+
+    Auth -.->|ID Token| AuthMW
+    Controls -->|prompt + audio| WS
+    WS -->|text, image, audio,<br/>director analysis| Canvas
+    WS -->|director data| Director
+    FSClient <-->|read/write| Firestore
+    Library & Explore --- FSClient
+
+    WS --> Orchestrator
+    Narrator -->|Gemini API| Gemini
+    Illustrator -->|Gemini → Imagen| Gemini & Imagen
+    DirectorAgent -->|Gemini API| Gemini
+    TTS -->|synthesize| CloudTTS
+
+    Persist -->|save| Firestore
+    Storage -->|upload| GCS
+
+    style Frontend fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
+    style Backend fill:#1a1a2e,stroke:#f59e0b,color:#e2e8f0
+    style Google fill:#0f172a,stroke:#3b82f6,color:#e2e8f0
+    style Data fill:#0f172a,stroke:#10b981,color:#e2e8f0
+    style Orchestrator fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
+    style Parallel fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        FRONTEND                                  │
-│                   React + Tailwind CSS + Vite                    │
-│                                                                  │
-│  ┌──────────────────────┐  ┌──────────────────────────┐         │
-│  │   STORY CANVAS       │  │   DIRECTOR MODE          │         │
-│  │                      │  │                          │         │
-│  │  - Interactive       │  │  - Agent reasoning log   │         │
-│  │    flipbook          │  │  - Narrative structure    │         │
-│  │  - Scene images      │  │  - Why this image?       │         │
-│  │  - Audio narration   │  │  - Tension arc graph     │         │
-│  │  - Timeline slider   │  │  - Character profiles    │         │
-│  │  - Drop-cap text     │  │                          │         │
-│  └──────────────────────┘  └──────────────────────────┘         │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────┐       │
-│  │  CONTROL BAR                                         │       │
-│  │  [🎤 Voice Input] [✏️ Text Input] [Art Style] [Create]│       │
-│  └──────────────────────────────────────────────────────┘       │
-│                                                                  │
-│  Voice Capture: Web Audio API → MediaRecorder                   │
-│  WebSocket connection for real-time streaming                    │
-└────────────────────┬────────────────────────────────────────────┘
-                     │ WebSocket (wss://)
-                     │
-┌────────────────────▼────────────────────────────────────────────┐
-│                     BACKEND (FastAPI)                             │
-│                  Google Cloud Run                                 │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────┐        │
-│  │  WebSocket Handler                                   │        │
-│  │  - Receives voice/text input                         │        │
-│  │  - Manages session state                             │        │
-│  │  - Streams interleaved output back                   │        │
-│  └──────────┬──────────────────────────────────────────┘        │
-│             │                                                    │
-│  ┌──────────▼──────────────────────────────────────────┐        │
-│  │  STORY ORCHESTRATOR (Core Agent via ADK)             │        │
-│  │                                                      │        │
-│  │  ┌────────────┐  ┌────────────┐  ┌──────────────┐   │        │
-│  │  │  Narrator   │  │ Illustrator│  │  Director    │   │        │
-│  │  │  Agent      │  │  Agent     │  │  Agent       │   │        │
-│  │  │             │  │            │  │              │   │        │
-│  │  │  Writes     │  │  Generates │  │  Explains    │   │        │
-│  │  │  story text │  │  scene     │  │  creative    │   │        │
-│  │  │  + dialog   │  │  images    │  │  reasoning   │   │        │
-│  │  └──────┬──────┘  └──────┬─────┘  └──────┬───────┘   │        │
-│  │         │                │               │           │        │
-│  └─────────┼────────────────┼───────────────┼───────────┘        │
-│            │                │               │                    │
-│  ┌─────────▼────────────────▼───────────────▼───────────┐       │
-│  │  GOOGLE AI SERVICES                                    │       │
-│  │                                                        │       │
-│  │  Gemini 2.0 Flash     Imagen 3        Cloud TTS        │       │
-│  │  (Live API /          (Scene          (Narration        │       │
-│  │   Interleaved         illustrations)  voiceover)        │       │
-│  │   output)                                               │       │
-│  └────────────────────────────────────────────────────────┘       │
-│                                                                    │
-│  ┌────────────────────────────────────────────────────────┐       │
-│  │  SESSION STORE                                         │       │
-│  │  Cloud Firestore — story state, scene history,         │       │
-│  │  character profiles, user steering commands             │       │
-│  └────────────────────────────────────────────────────────┘       │
-└────────────────────────────────────────────────────────────────────┘
+
+---
+
+## Cloud Infrastructure
+
+```mermaid
+flowchart TB
+    subgraph User["User"]
+        Browser["Browser Client<br/>(React SPA)"]
+    end
+
+    subgraph Firebase["Firebase Project — storyforge-hackathon-1beac"]
+        direction TB
+        FBAuth["Firebase Authentication<br/>Google Sign-In Provider"]
+        FBHosting["Firebase Hosting<br/>Static SPA (frontend build)"]
+        FBFirestore[("Cloud Firestore<br/>──────────────────<br/>stories/{storyId}<br/>  ├─ scenes/{sceneNum}<br/>  ├─ generations/{genId}<br/>  ├─ liked_by[ ]<br/>  └─ is_favorite, status,<br/>     title, cover_image_url")]
+    end
+
+    subgraph GCP["GCP Project — storyforge-hackathon"]
+        direction TB
+        CloudRun["Cloud Run<br/>Backend Container<br/>(FastAPI + Uvicorn)"]
+
+        subgraph AI["AI & ML Services"]
+            direction LR
+            VertexGemini["Vertex AI<br/>Gemini 2.0 Flash<br/>(text generation)"]
+            VertexImagen["Vertex AI<br/>Imagen 3<br/>(image generation)"]
+            GTTS["Cloud Text-to-Speech<br/>(scene narration)"]
+        end
+
+        GCSBucket[("Cloud Storage<br/>storyforge-hackathon-media<br/>──────────────────<br/>scene images (WebP)<br/>cover images (WebP)")]
+    end
+
+    Browser -->|"HTTPS"| FBHosting
+    Browser -->|"WSS://"| CloudRun
+    Browser -->|"Auth SDK"| FBAuth
+    Browser -->|"Firestore SDK<br/>(library, explore,<br/>favorites, likes)"| FBFirestore
+
+    FBAuth -->|"verify ID token"| CloudRun
+    CloudRun -->|"Gemini API"| VertexGemini
+    CloudRun -->|"Imagen API"| VertexImagen
+    CloudRun -->|"TTS API"| GTTS
+    CloudRun -->|"persist stories<br/>+ scenes"| FBFirestore
+    CloudRun -->|"upload images"| GCSBucket
+    GCSBucket -->|"public URLs"| Browser
+
+    style User fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Firebase fill:#1a1a2e,stroke:#f59e0b,color:#e2e8f0
+    style GCP fill:#1a1a2e,stroke:#3b82f6,color:#e2e8f0
+    style AI fill:#0f172a,stroke:#818cf8,color:#c7d2fe
 ```
 
 ---
@@ -114,44 +176,45 @@ StoryForge uses Google's ADK to orchestrate three specialized agents:
 ### 1. Narrator Agent
 - **Role:** Story writer — generates narrative text, dialogue, scene descriptions
 - **Input:** User prompt + story state + steering commands
-- **Output:** Structured story beats with scene markers
-- **Model:** Gemini 2.0 Flash with interleaved output mode
+- **Output:** Structured story beats with `[SCENE]` markers
+- **Model:** Gemini 2.0 Flash via Vertex AI
 
 ### 2. Illustrator Agent
-- **Role:** Visual creator — generates scene illustrations and character portraits
-- **Input:** Scene descriptions from Narrator + style guide
-- **Output:** Generated images with metadata
-- **Model:** Imagen 3 via Vertex AI
-- **Key behavior:** Maintains visual consistency across scenes using character sheet extraction
+- **Role:** Visual creator — generates scene illustrations
+- **Pipeline:** Character sheet extraction (Gemini) → Image prompt engineering (Gemini) → Image generation (Imagen 3)
+- **Key behavior:** Maintains visual consistency across scenes by accumulating story text and merging character sheets across batches
 
 ### 3. Director Agent
 - **Role:** Meta-analyst — explains the creative process in real-time
-- **Input:** Narrator + Illustrator outputs + story structure
-- **Output:** Reasoning explanations for Director Mode panel
+- **Output:** Structured JSON with narrative arc, characters, tension levels, and visual style analysis
 - **Model:** Gemini 2.0 Flash
-- **Key behavior:** Analyzes narrative choices, explains tension arcs, describes why specific imagery was selected
+- **Key behavior:** Provides glanceable visual summaries (stage pills, tension bars, mood tags) with expandable detail text
 
 ### Orchestration Flow
 
-```
-User Input (voice/text)
-    │
-    ▼
-Story Orchestrator (ADK root agent)
-    │
-    ├──► Narrator Agent → story text + scene markers
-    │         │
-    │         ▼
-    ├──► Illustrator Agent → scene images (triggered per scene marker)
-    │         │
-    │         ▼
-    ├──► Cloud TTS → narration audio (per paragraph)
-    │         │
-    │         ▼
-    └──► Director Agent → reasoning commentary
-              │
-              ▼
-    WebSocket Stream → Frontend (interleaved: text + image + audio + reasoning)
+```mermaid
+flowchart LR
+    Input["User Input<br/>(voice / text)"] --> Narrator
+
+    subgraph Sequential["Sequential Phase"]
+        Narrator["Narrator Agent<br/>──────────────<br/>Gemini 2.0 Flash<br/>→ scene text + markers"]
+    end
+
+    subgraph Parallel["Parallel Phase"]
+        direction TB
+        Illustrator["Illustrator Agent<br/>──────────────<br/>Character sheet (Gemini)<br/>→ Image prompt (Gemini)<br/>→ Scene image (Imagen 3)"]
+        Director["Director Agent<br/>──────────────<br/>Gemini 2.0 Flash<br/>→ narrative arc, tension,<br/>characters, visual style"]
+        TTSAgent["TTS Agent<br/>──────────────<br/>Cloud TTS<br/>→ narration audio"]
+    end
+
+    Narrator -->|scene text| Illustrator
+    Narrator -->|scene text| Director
+    Narrator -->|scene text| TTSAgent
+
+    Illustrator & Director & TTSAgent -->|"interleaved stream"| WS["WebSocket<br/>→ Frontend"]
+
+    style Sequential fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
+    style Parallel fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
 ```
 
 ---
