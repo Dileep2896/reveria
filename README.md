@@ -171,24 +171,146 @@ flowchart TB
 
 ## Agent Architecture (ADK)
 
-StoryForge uses Google's ADK to orchestrate three specialized agents:
+StoryForge uses **Google's Agent Development Kit (ADK)** to orchestrate a multi-agent pipeline. Each agent is a `BaseAgent` subclass that runs autonomously, and the pipeline is composed using ADK's built-in `SequentialAgent` and `ParallelAgent` combinators.
 
-### 1. Narrator Agent
-- **Role:** Story writer — generates narrative text, dialogue, scene descriptions
-- **Input:** User prompt + story state + steering commands
-- **Output:** Structured story beats with `[SCENE]` markers
-- **Model:** Gemini 2.0 Flash via Vertex AI
+### Pipeline Structure
 
-### 2. Illustrator Agent
-- **Role:** Visual creator — generates scene illustrations
-- **Pipeline:** Character sheet extraction (Gemini) → Image prompt engineering (Gemini) → Image generation (Imagen 3)
-- **Key behavior:** Maintains visual consistency across scenes by accumulating story text and merging character sheets across batches
+```
+StoryOrchestrator (SequentialAgent)
+  ├── NarratorADKAgent          ← runs first, generates story text
+  └── PostNarrationAgent (ParallelAgent)
+        ├── IllustratorADKAgent  ← generates scene images
+        ├── DirectorADKAgent     ← analyzes creative decisions
+        └── TTSADKAgent          ← synthesizes narration audio
+```
 
-### 3. Director Agent
-- **Role:** Meta-analyst — explains the creative process in real-time
-- **Output:** Structured JSON with narrative arc, characters, tension levels, and visual style analysis
-- **Model:** Gemini 2.0 Flash
-- **Key behavior:** Provides glanceable visual summaries (stage pills, tension bars, mood tags) with expandable detail text
+The Narrator must complete before the parallel phase begins, because Illustrator, Director, and TTS all depend on the generated scene text. Once narration is done, all three downstream agents run **concurrently** to minimize latency.
+
+### Shared State Pattern
+
+ADK session state returns copies (not references), so agents can't communicate through it. Instead, we use a **`SharedPipelineState`** — a mutable Python object passed by reference to every agent:
+
+```python
+class SharedPipelineState:
+    user_input: str          # The user's prompt
+    art_style: str           # Selected visual style (e.g. "watercolor")
+    scenes: list[dict]       # Populated by Narrator, consumed by Illustrator/TTS
+    full_story: str          # Concatenated scene text for Director analysis
+    ws_callback: Callable    # WebSocket send function for real-time streaming
+    story_id: str            # Firestore document ID for GCS uploads
+    director_result: dict    # Populated by Director, read by main.py for persistence
+```
+
+The caller sets input fields (`user_input`, `art_style`, `ws_callback`) before each pipeline run. Agents write their outputs back to shared state, enabling downstream consumers and the WebSocket handler to read results.
+
+### Agent Deep Dives
+
+#### 1. Narrator Agent
+
+The Narrator is the story engine. It takes user prompts and generates structured narrative text with `[SCENE]` markers.
+
+| Aspect | Detail |
+|--------|--------|
+| **Model** | Gemini 2.0 Flash (temperature 0.9 for creative variety) |
+| **Input** | User prompt + conversation history |
+| **Output** | Streamed text with `[SCENE]` delimiters |
+| **Scene length** | 80-100 words per scene (enforced via system prompt) |
+| **Memory** | Sliding window of last 10 conversation turns (~8K tokens) |
+
+**How it works:**
+1. The system prompt instructs Gemini to write in present tense, third person, with `[SCENE]` markers between scenes
+2. Text is **streamed** chunk-by-chunk — the ADK agent buffers chunks and splits on `[SCENE]` markers as they arrive
+3. Each completed scene is immediately sent to the frontend via WebSocket (the user sees text appear in real-time)
+4. Conversation history is maintained across prompts, enabling **story steering** — users can say "make it scarier" or "add a plot twist" and the Narrator seamlessly weaves it into the next scene
+5. History is trimmed to a sliding window of 10 turns (20 entries) to stay within context limits
+
+#### 2. Illustrator Agent
+
+The Illustrator generates visually consistent scene illustrations through a **three-hop pipeline** that chains two Gemini calls with one Imagen call.
+
+```
+Step 1: Character Sheet Extraction (Gemini, temp 0.1)
+  └─ Reads accumulated story text → outputs structured character descriptions
+       "Elena: woman, mid-30s, athletic build, olive skin, dark curly hair..."
+
+Step 2: Image Prompt Engineering (Gemini, temp 0.3)
+  └─ Takes scene text + character sheet → crafts an optimized Imagen prompt
+       "A woman with olive skin and dark curly hair stands at the edge of a cliff,
+        wind catching her leather jacket, golden hour lighting, watercolor illustration..."
+
+Step 3: Image Generation (Imagen 3)
+  └─ Generates the final illustration at 16:9 aspect ratio
+```
+
+**Character consistency** is the key challenge. The Illustrator maintains a persistent character sheet that accumulates across story continuations:
+- On the first batch, it extracts character descriptions from scratch
+- On subsequent batches, it **merges** new characters into the existing sheet while preserving existing descriptions unchanged
+- The accumulated story text (all batches separated by `---`) is used for extraction, not just the current batch
+
+**Art styles** are appended as suffixes to the image prompt. Six styles are available: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, and Pencil Sketch.
+
+#### 3. Director Agent
+
+The Director provides **meta-commentary** on the creative process — the "why" behind story decisions. This powers the Director Mode sidebar visible to users (and judges).
+
+| Aspect | Detail |
+|--------|--------|
+| **Model** | Gemini 2.0 Flash (temperature 0.4, JSON response mode) |
+| **Input** | Full story text + user prompt + art style + scene count |
+| **Output** | Structured JSON with 4 analysis categories |
+
+**Output structure:**
+
+```json
+{
+  "narrative_arc": {
+    "summary": "Building tension through environmental storytelling",
+    "stage": "rising_action",
+    "pacing": "moderate",
+    "detail": "The narrative opens with sensory immersion..."
+  },
+  "characters": {
+    "summary": "Two protagonists with opposing motivations",
+    "list": [{"name": "Elena", "role": "detective", "trait": "determined"}],
+    "detail": "Elena's stubbornness creates natural conflict..."
+  },
+  "tension": {
+    "summary": "Steady escalation with a false resolution",
+    "levels": [4, 7],
+    "trend": "rising",
+    "detail": "Tension rises as the discovery unfolds..."
+  },
+  "visual_style": {
+    "summary": "Noir atmosphere with muted warmth",
+    "tags": ["low-key lighting", "urban decay", "rain-slicked"],
+    "mood": "mysterious",
+    "detail": "The watercolor style softens the noir edges..."
+  }
+}
+```
+
+The frontend renders this as **glanceable visual summaries** (stage pills, trend arrows, mood tags, tension bar charts) with expandable detail text.
+
+#### 4. TTS Agent
+
+The TTS Agent generates narration audio for each scene using **Google Cloud Text-to-Speech** (Studio-quality voices at 0.95x speaking rate). Audio is generated concurrently for all scenes via `asyncio.gather`.
+
+### Service Layer
+
+The agents are backed by three service modules:
+
+| Service | Role | Key Details |
+|---------|------|-------------|
+| `gemini_client.py` | Gemini API wrapper | Singleton client, streaming generation, audio transcription for voice input |
+| `imagen_client.py` | Imagen 3 wrapper | **Circuit breaker pattern** — after 3 failed retries (429 rate limits with exponential backoff at 10s/20s/40s), trips a 60-second cooldown that skips all calls. Resets on next success. |
+| `tts_client.py` | Cloud TTS wrapper | MP3 output, configurable voice name, async client |
+
+### Resilience Patterns
+
+- **Circuit breaker** (Imagen): After 3 consecutive 429 errors, the circuit breaker trips for 60 seconds. During this window, all image generation calls return immediately with `quota_exhausted` instead of making API calls. The breaker resets on the first successful generation.
+- **Graceful image fallback**: When image generation fails (quota, safety filter, timeout), the frontend shows the scene text immediately instead of waiting. Error-specific messages tell users what happened.
+- **Connection-aware abort**: The WebSocket handler tracks `connection_alive` — if the client disconnects mid-generation, the pipeline aborts early to save API budget.
+- **Character sheet preservation**: On extraction failure or NONE result, the existing character sheet is preserved (not cleared), because previous characters still exist in the story.
 
 ### Orchestration Flow
 
