@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: center;
   flex: 1;
-  padding: clamp(0.5rem, 1.5vw, 1.5rem) clamp(0.5rem, 1vw, 1rem);
+  padding: clamp(0.5rem, 1.5vw, 1.5rem) clamp(0.5rem, 1vw, 1rem) clamp(3.5rem, 5vw, 4.5rem);
   overflow: hidden;
 }
 
@@ -60,7 +60,7 @@
 .storybook-container {
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   position: relative;
 }
 
@@ -121,7 +121,31 @@
   margin-top: 6px;
 }
 
-/* Prompt pill moved to header — see index.css .header-prompt-pill */
+/* Prompt pill above the book */
+.book-prompt-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 520px;
+  margin: 0 auto 8px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.book-prompt-pill p {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Book depth shadow */
 .storybook-container .stf__wrapper {

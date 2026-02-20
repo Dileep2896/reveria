@@ -302,10 +302,16 @@ function AudioPlayer({ src, scale = 1 }) {
 function SceneRevealed({ scene, scale = 1 }) {
   const isError = scene.image_url === 'error';
   const cached = isError || isImageCached(scene.image_url);
+  // Hydrated / library-opened scenes skip all reveal animations
+  const preloaded = scene._preloaded || false;
+  const skipInitial = cached || preloaded;
 
   const [imageLoaded, setImageLoaded] = useState(cached);
-  const [showText, setShowText] = useState(cached);
-  const hasAnimated = useRef(cached);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [showText, setShowText] = useState(skipInitial);
+  const hasAnimated = useRef(skipInitial);
+
+  const showError = isError || imageFailed;
 
   useEffect(() => {
     if (showText && !hasAnimated.current) {
@@ -313,8 +319,11 @@ function SceneRevealed({ scene, scale = 1 }) {
     }
   }, [showText]);
 
+  // Show text when: image loaded, image errored, or no image URL to wait for
+  const noImage = !scene.image_url && !isError;
+
   useEffect(() => {
-    if (imageLoaded || isError) {
+    if (imageLoaded || showError || noImage) {
       if (hasAnimated.current) {
         setShowText(true);
         return;
@@ -322,15 +331,16 @@ function SceneRevealed({ scene, scale = 1 }) {
       const timer = setTimeout(() => setShowText(true), 300);
       return () => clearTimeout(timer);
     }
-  }, [imageLoaded, isError]);
+  }, [imageLoaded, showError, noImage]);
 
   useEffect(() => {
-    if (scene.image_url && !isError && !imageLoaded) {
+    if (scene.image_url && !isError && !imageLoaded && !imageFailed) {
       const img = new Image();
       img.onload = () => setImageLoaded(true);
+      img.onerror = () => setImageFailed(true);
       img.src = scene.image_url;
     }
-  }, [scene.image_url, isError, imageLoaded]);
+  }, [scene.image_url, isError, imageLoaded, imageFailed]);
 
   const clean = cleanText(scene.text);
   const sentences = clean.match(/[^.!?]+[.!?]+[\s]*/g) || [clean];
@@ -385,9 +395,10 @@ function SceneRevealed({ scene, scale = 1 }) {
           flexShrink: 0,
           marginBottom: `${6 * scale}px`,
           background: 'var(--book-page-bg)',
+          position: 'relative',
         }}
       >
-        {isError ? (
+        {showError || (preloaded && !scene.image_url) ? (
           <div
             className="w-full h-full flex items-center justify-center"
             style={{
@@ -404,24 +415,62 @@ function SceneRevealed({ scene, scale = 1 }) {
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
               </svg>
-              <span style={{ fontSize: `${9 * scale}px`, color: 'var(--text-muted)' }}>
-                Illustration unavailable
+              <span style={{ fontSize: `${9 * scale}px`, color: 'var(--text-muted)', textAlign: 'center', maxWidth: '80%' }}>
+                {scene.image_error_reason === 'quota_exhausted'
+                  ? 'Image quota reached — try again later'
+                  : scene.image_error_reason === 'safety_filter'
+                  ? 'Image blocked by safety filter'
+                  : scene.image_error_reason === 'timeout'
+                  ? 'Image generation timed out'
+                  : 'Illustration unavailable'}
               </span>
             </div>
           </div>
         ) : (
-          <img
-            src={scene.image_url}
-            alt={`Scene ${scene.scene_number}`}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: 'block',
-              transform: 'scale(1.04)',
-              animation: skip ? 'none' : 'imageFadeIn 0.8s ease-out',
-            }}
-          />
+          <>
+            {/* Shimmer placeholder while image loads */}
+            {!imageLoaded && (
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: 'var(--glass-bg)',
+                  zIndex: 1,
+                }}
+              >
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: `
+                      radial-gradient(ellipse at 30% 50%, var(--accent-primary-soft) 0%, transparent 60%),
+                      radial-gradient(ellipse at 70% 50%, var(--accent-secondary-soft) 0%, transparent 60%)
+                    `,
+                  }}
+                />
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 40%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.06) 60%, transparent 100%)',
+                    animation: 'shimmer 2s ease-in-out infinite',
+                  }}
+                />
+              </div>
+            )}
+            <img
+              src={scene.image_url}
+              alt={`Scene ${scene.scene_number}`}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: 'block',
+                transform: 'scale(1.04)',
+                opacity: imageLoaded ? 1 : 0,
+                animation: skip ? 'none' : imageLoaded ? 'imageFadeIn 0.8s ease-out' : 'none',
+                position: 'relative',
+                zIndex: 2,
+              }}
+            />
+          </>
         )}
       </div>
 
@@ -541,11 +590,10 @@ function SceneRevealed({ scene, scale = 1 }) {
 
 /* ── Main SceneCard: decides composing vs revealed ── */
 export default function SceneCard({ scene, scale = 1 }) {
-  const isReady = scene.image_url !== null;
-
-  if (!isReady) {
-    return <SceneComposing sceneNumber={scene.scene_number} scale={scale} />;
+  // Show revealed state as soon as text is available (don't wait for image)
+  if (scene.text) {
+    return <SceneRevealed scene={scene} scale={scale} />;
   }
 
-  return <SceneRevealed scene={scene} scale={scale} />;
+  return <SceneComposing sceneNumber={scene.scene_number} scale={scale} />;
 }

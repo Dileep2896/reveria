@@ -161,7 +161,83 @@
 
 ---
 
-## Current State (Feb 19, 2026)
+### Day 3 (Feb 20, 2026)
+
+**Session 11: Firebase Auth, Firestore Persistence & Save Flow**
+
+- Implemented Firebase Authentication with Google Sign-In
+- Built Firestore persistence layer for stories, scenes, and generations
+- Created save flow: `handleSave` (explicit button) and `autoSaveCurrent` (switching books / New Story)
+- First-save-only AI meta: `title_generated` flag prevents re-generation of title/cover on subsequent saves
+- `persist_story` uses `merge=True` and never touches status/title/cover/is_public
+- Story statuses: draft → saved → completed
+- Cover generation via Imagen with safety filter fallback to first scene image
+- Firestore composite indexes for Library and Explore queries
+
+**Session 12: Library & Explore Pages**
+
+- Built Library page with 3D CSS book cards (perspective, preserve-3d, spine/page edges)
+- Skeleton loading states with shimmer animation
+- Book status badges (Draft/Saved/Completed/Published) with color coding
+- Action buttons: publish/unpublish (globe icon), delete (trash icon)
+- Empty state with stacked book visual and "Create a Story" CTA
+- Built Explore page for browsing publicly published stories
+- Read-only viewing for other users' stories (no ControlBar, no Save)
+
+**Session 13: Routing & Story Resume**
+
+- URL-based routing: `/` (new), `/story/:storyId?page=N` (active), `/library`, `/explore`
+- `useActiveStory` hook loads from URL storyId on boot (or falls back to most recent)
+- Page parameter sync via `history.replaceState` (no React re-renders on page flip)
+- WebSocket resume protocol for reconnecting to in-progress stories
+
+**Session 14: Image Error Handling**
+
+- `imagen_client.generate_image()` returns `(data_url, error_reason)` tuple
+- Error reasons: quota_exhausted, safety_filter, timeout, generation_failed, prompt_failed
+- Backend sends `reason` field in `image_error` WebSocket messages
+- Frontend stores `image_error_reason` on scene object with specific messages in SceneCard
+- SceneCard shows text immediately when image is null (doesn't wait for image)
+
+**Session 15: Library Favorites & Status Filters**
+
+- Added favorite toggle (heart button) on each Library book card
+  - Standalone `.book-3d-fav` positioned outside action buttons, always visible when favorited
+  - Optimistic Firestore update (`is_favorite` field) — no loading skeleton on toggle
+  - `translateZ(2px)` fix for click events inside `preserve-3d` containers
+- Added filter pills toolbar: All | Favorites | Saved | Completed
+- Replaced redundant "Status" sort option with explicit filter pills
+- Sort pills reduced to: Recent | Title
+- Filter + search work together (e.g. search "dragon" within Favorites)
+- Filter empty states with contextual messages ("No favorite stories yet", etc.)
+- Loading skeleton now shows toolbar above skeleton grid (no layout shift)
+- Darkened status badge backgrounds from `rgba(0,0,0,0.55)` to `0.75`
+
+**Session 16: Explore Page Enhancements**
+
+- Added search bar (searches by title or author name)
+- Added sort pills: Recent | Title | Author
+- Added like system using Firestore `arrayUnion`/`arrayRemove` on `liked_by` array
+  - Heart button with like count on each card (pill-shaped, hover-reveal, always-visible when liked)
+  - Optimistic updates with revert on failure
+  - Only shown to logged-in users
+- Added liked filter toggle (heart circle button in toolbar)
+- Filter empty state: "No liked stories yet"
+- Responsive layout for mobile (toolbar stacks vertically, 2-column grid)
+
+**Session 17: Completed Book Protection**
+
+- Completed books are now read-only regardless of how they're opened:
+  - From Explore (own book): skips WS resume, sets `storyStatus='completed'`
+  - From Library: `handleOpenBook` skips WS resume for completed books
+  - ControlBar hidden (`storyStatus !== 'completed'`)
+  - Save button hidden (same guard)
+- Fixed ExplorePage not passing `status`/`is_public` in `onOpenBook` payload
+  - Was causing own completed books opened from Explore to default to 'draft' status
+
+---
+
+## Current State (Feb 20, 2026)
 
 ### What's Working
 - Full text + image generation pipeline: prompt → Gemini 2.0 Flash → streamed scenes → Imagen 3 illustrations → interactive flipbook
@@ -183,9 +259,15 @@
 - Director Panel with glanceable visual summaries (chips, arc, tags, trend indicators) and collapsible detail text
 - Tension bar chart visualization with per-scene bars and trend indicators
 - Per-batch director data tracking — director analysis follows scene pagination
+- Firebase Auth (Google Sign-In) and Firestore persistence (stories, scenes, generations)
+- Save flow with AI-generated titles and cover images (first-save-only)
+- Library page with 3D book cards, favorites, status filters (All/Favorites/Saved/Completed), search, sort
+- Explore page with public story browsing, like system, liked filter, search, sort (Recent/Title/Author)
+- Completed book protection — read-only regardless of entry point
+- URL-based routing with story resume on page reload
+- Image error handling with per-reason user messages
 
 ### What Needs to Be Built
-- **Firestore Persistence** — Cloud Firestore for session state, story history, character profiles
 - **Timeline Slider** — Scene timeline navigation in story canvas
 - **Firebase Hosting** — Deploy frontend SPA
 - **Cloud Run Deployment** — Deploy backend container

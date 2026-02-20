@@ -25,6 +25,7 @@
   --glass-border-secondary: rgba(139, 92, 246, 0.2);
   --glass-blur: blur(20px);
   --glass-blur-strong: blur(40px);
+  --dropdown-bg: rgba(15, 12, 30, 0.92);
 
   /* Text */
   --text-primary: rgba(255, 255, 255, 0.92);
@@ -66,6 +67,17 @@
   --book-cover-accent: rgba(245, 158, 11, 0.18);
   --book-cover-frame: rgba(245, 158, 11, 0.08);
   --book-cover-text: rgba(255, 255, 255, 0.95);
+
+  /* 3D Book (Library) */
+  --book-3d-back: #1a1520;
+  --book-3d-pages: linear-gradient(90deg, #e8e4dc 0%, #f0ece4 25%, #e8e4dc 85%, #ddd8d0 100%);
+  --book-3d-pages-line: rgba(0, 0, 0, 0.04);
+  --book-3d-spine-highlight: rgba(200, 170, 130, 0.25);
+  --book-3d-shadow-drop: rgba(0, 0, 0, 0.35);
+  --book-3d-shadow-drop-hover: rgba(0, 0, 0, 0.45);
+  --book-3d-shadow-back: -6px 6px 20px 4px rgba(0, 0, 0, 0.5);
+  --book-3d-shadow-cover: 6px 6px 18px -2px rgba(0, 0, 0, 0.5);
+  --book-3d-cover-inset: inset 4px 0 6px rgba(0, 0, 0, 0.15);
 
   /* Radius */
   --radius-sm: 10px;
@@ -137,6 +149,7 @@
   --glass-border-hover: rgba(255, 255, 255, 0.8);
   --glass-border-accent: rgba(217, 119, 6, 0.3);
   --glass-border-secondary: rgba(124, 58, 237, 0.25);
+  --dropdown-bg: rgba(245, 242, 250, 0.95);
 
   --text-primary: rgba(15, 10, 30, 0.9);
   --text-secondary: rgba(15, 10, 30, 0.6);
@@ -173,6 +186,18 @@
   --book-cover-accent: rgba(245, 158, 11, 0.18);
   --book-cover-frame: rgba(245, 158, 11, 0.1);
   --book-cover-text: rgba(255, 255, 255, 0.95);
+
+  /* 3D Book (Library) */
+  --book-3d-back: #c8c3d0;
+  --book-3d-pages: linear-gradient(90deg, #f5f2ed 0%, #faf7f2 25%, #f0ede6 85%, #e8e4dc 100%);
+  --book-3d-pages-line: rgba(0, 0, 0, 0.06);
+  --book-3d-spine-highlight: rgba(180, 150, 110, 0.3);
+  --book-3d-shadow-drop: rgba(0, 0, 0, 0.12);
+  --book-3d-shadow-drop-hover: rgba(0, 0, 0, 0.2);
+  --book-3d-shadow-back: -4px 4px 16px 2px rgba(0, 0, 0, 0.15);
+  --book-3d-shadow-cover: 4px 4px 14px -2px rgba(0, 0, 0, 0.2);
+  --book-3d-cover-inset: inset 4px 0 6px rgba(0, 0, 0, 0.08);
+
   --skeleton-shimmer: rgba(0, 0, 0, 0.06);
   --skeleton-shimmer-peak: rgba(0, 0, 0, 0.1);
 }

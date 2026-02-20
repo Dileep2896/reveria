@@ -28,6 +28,7 @@ from agents.narrator import Narrator
 from agents.illustrator import Illustrator
 from agents.director import Director
 from services.tts_client import synthesize_speech
+from services.storage_client import upload_media
 
 logger = logging.getLogger("storyforge.orchestrator")
 
@@ -46,6 +47,8 @@ class SharedPipelineState:
         self.scenes: list[dict[str, Any]] = []
         self.full_story: str = ""
         self.ws_callback: WsCallback | None = None
+        self.story_id: str = ""
+        self.director_result: dict[str, Any] | None = None
 
 
 class NarratorADKAgent(BaseAgent):
@@ -118,20 +121,35 @@ class IllustratorADKAgent(BaseAgent):
         self.illustrator.accumulate_story(s.full_story)
         await self.illustrator.extract_characters(s.full_story)
 
-        async def generate_for_scene(scene_num: int, text: str) -> None:
+        async def generate_for_scene(scene: dict) -> None:
+            scene_num = scene["scene_number"]
+            text = scene["text"]
             try:
-                image_url = await self.illustrator.generate_for_scene(text)
+                image_data, error_reason = await self.illustrator.generate_for_scene(text)
                 if s.ws_callback:
-                    if image_url:
-                        await s.ws_callback({
-                            "type": "image",
-                            "content": image_url,
-                            "scene_number": scene_num,
-                        })
+                    if image_data:
+                        # Upload to GCS
+                        try:
+                            gcs_url = await upload_media(s.story_id, scene_num, "image", image_data)
+                            scene["image_url"] = gcs_url
+                            await s.ws_callback({
+                                "type": "image",
+                                "content": gcs_url,
+                                "scene_number": scene_num,
+                            })
+                        except Exception as e:
+                            logger.error("GCS image upload error for scene %d: %s", scene_num, e)
+                            scene["image_url"] = image_data
+                            await s.ws_callback({
+                                "type": "image",
+                                "content": image_data,
+                                "scene_number": scene_num,
+                            })
                     else:
                         await s.ws_callback({
                             "type": "image_error",
                             "scene_number": scene_num,
+                            "reason": error_reason or "generation_failed",
                         })
             except Exception as e:
                 logger.error("Image generation error for scene %d: %s", scene_num, e)
@@ -139,12 +157,12 @@ class IllustratorADKAgent(BaseAgent):
                     await s.ws_callback({
                         "type": "image_error",
                         "scene_number": scene_num,
+                        "reason": "generation_failed",
                     })
 
-        await asyncio.gather(
-            *(generate_for_scene(sc["scene_number"], sc["text"]) for sc in s.scenes),
-            return_exceptions=True,
-        )
+        # Run images sequentially to respect Imagen rate limits
+        for sc in s.scenes:
+            await generate_for_scene(sc)
 
         yield Event(author=self.name)
 
@@ -167,11 +185,13 @@ class DirectorADKAgent(BaseAgent):
             result = await self.director.analyze(
                 s.full_story, s.user_input, s.art_style, len(s.scenes)
             )
-            if result and s.ws_callback:
-                await s.ws_callback({
-                    "type": "director",
-                    "content": result,
-                })
+            if result:
+                s.director_result = result
+                if s.ws_callback:
+                    await s.ws_callback({
+                        "type": "director",
+                        "content": result,
+                    })
         except Exception as e:
             logger.error("Director error: %s", e)
 
@@ -191,20 +211,34 @@ class TTSADKAgent(BaseAgent):
             yield Event(author=self.name)
             return
 
-        async def generate_audio(scene_num: int, text: str) -> None:
+        async def generate_audio(scene: dict) -> None:
+            scene_num = scene["scene_number"]
+            text = scene["text"]
             try:
-                audio_url = await synthesize_speech(text)
-                if audio_url and s.ws_callback:
-                    await s.ws_callback({
-                        "type": "audio",
-                        "content": audio_url,
-                        "scene_number": scene_num,
-                    })
+                audio_data = await synthesize_speech(text)
+                if audio_data and s.ws_callback:
+                    # Upload to GCS
+                    try:
+                        gcs_url = await upload_media(s.story_id, scene_num, "audio", audio_data)
+                        scene["audio_url"] = gcs_url
+                        await s.ws_callback({
+                            "type": "audio",
+                            "content": gcs_url,
+                            "scene_number": scene_num,
+                        })
+                    except Exception as e:
+                        logger.error("GCS audio upload error for scene %d: %s", scene_num, e)
+                        scene["audio_url"] = audio_data
+                        await s.ws_callback({
+                            "type": "audio",
+                            "content": audio_data,
+                            "scene_number": scene_num,
+                        })
             except Exception as e:
                 logger.error("TTS error for scene %d: %s", scene_num, e)
 
         await asyncio.gather(
-            *(generate_audio(sc["scene_number"], sc["text"]) for sc in s.scenes),
+            *(generate_audio(sc) for sc in s.scenes),
             return_exceptions=True,
         )
 

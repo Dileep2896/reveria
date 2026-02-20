@@ -21,9 +21,15 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Director Mode** — A sidebar panel revealing the agent's creative reasoning: narrative structure, tension arcs, character development, and visual decisions
 - **Tension Arc Visualization** — Live graph showing narrative tension across scenes
 - **Interactive Flipbook** — Pages flip with realistic animation, keyboard navigation (arrow keys), and dot-based page navigation
-- **Timeline Slider** — Navigate through scenes in the story canvas
 - **Character Consistency** — Illustrator extracts a character sheet from the full story to maintain visual consistency across scenes
-- **Story Persistence** — Cloud Firestore stores session state, scene history, and character profiles
+- **Firebase Auth** — Google Sign-In for user accounts
+- **Story Persistence** — Cloud Firestore saves stories, scenes, and generations with AI-generated titles and cover images
+- **Library** — Personal bookshelf with 3D CSS book cards, favorites (heart toggle), status filters (All/Favorites/Saved/Completed), search, and sort (Recent/Title)
+- **Explore** — Browse publicly published stories with likes, liked filter, search, and sort (Recent/Title/Author)
+- **Save & Complete Flow** — Save stories to Library, mark as Complete (locks editing), publish to Explore for others to read
+- **Completed Book Protection** — Completed books are read-only regardless of entry point (Library or Explore)
+- **URL Routing** — Deep-linkable story URLs (`/story/:id?page=N`) with auto-resume on page reload
+- **Image Error Handling** — Graceful fallbacks with specific user messages for quota, safety filter, timeout errors
 - **Glassmorphism UI** — Frosted glass panels with dark/light theme support
 - **New Story** — Start fresh at any time with the New Story button — resets both frontend and backend state
 
@@ -172,7 +178,8 @@ The output *weaves* modalities together, not just appends them sequentially:
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| Frontend | React + Tailwind CSS + Vite | Story canvas, director mode, controls |
+| Frontend | React + Tailwind CSS + Vite | Story canvas, director mode, library, explore |
+| Auth | Firebase Authentication | Google Sign-In for user accounts |
 | Voice Input | Web Audio API + MediaRecorder | Capture user voice for steering |
 | Real-time Comms | WebSocket (native) | Stream interleaved output to client |
 | Backend | Python 3.12 + FastAPI + Uvicorn | WebSocket handler, orchestration |
@@ -180,7 +187,7 @@ The output *weaves* modalities together, not just appends them sequentially:
 | LLM | Gemini 2.0 Flash (Live API) | Story generation, interleaved output |
 | Image Gen | Imagen 3 (via Vertex AI) | Scene illustrations, character portraits |
 | Voice Output | Google Cloud Text-to-Speech | Story narration with distinct voices |
-| Database | Cloud Firestore | Session state, story persistence |
+| Database | Cloud Firestore | Story persistence, user libraries, likes |
 | Hosting | Google Cloud Run | Containerized backend deployment |
 | Static Hosting | Firebase Hosting | Frontend SPA |
 | Container | Docker | Reproducible builds |
@@ -193,22 +200,24 @@ The output *weaves* modalities together, not just appends them sequentially:
 storyforge/
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx                    # Main app with split-panel layout
+│   │   ├── App.jsx                    # Main app — routing, header, save/complete/publish flows
+│   │   ├── firebase.js                # Firebase config and Firestore exports
 │   │   ├── components/
 │   │   │   ├── Logo.jsx + Logo.css    # Animated StoryForge logo
 │   │   │   ├── StoryCanvas.jsx        # Flipbook with page-turn animation
 │   │   │   ├── SceneCard.jsx          # Scene: image + text + audio with drop cap
 │   │   │   ├── BookNavigation.jsx     # Dot navigation + arrow controls
 │   │   │   ├── DirectorPanel.jsx      # Director reasoning sidebar
-│   │   │   ├── TensionArc.jsx         # Recharts tension graph
-│   │   │   ├── VoiceInput.jsx         # Hold-to-talk with waveform
 │   │   │   ├── ControlBar.jsx         # Input + art style pills + voice
+│   │   │   ├── LibraryPage.jsx        # User's book library with 3D cards
+│   │   │   ├── ExplorePage.jsx        # Public story browser with likes
 │   │   │   └── storybook.css          # Flipbook & page styles
 │   │   ├── contexts/
 │   │   │   └── ThemeContext.jsx        # Dark/light mode
 │   │   ├── hooks/
-│   │   │   ├── useWebSocket.js        # WebSocket connection hook
-│   │   │   └── useVoiceCapture.js     # Web Audio API hook
+│   │   │   ├── useWebSocket.js        # WebSocket connection + story load/resume
+│   │   │   ├── useVoiceCapture.js     # Web Audio API hook
+│   │   │   └── useAuth.js             # Firebase Auth hook (Google Sign-In)
 │   │   ├── utils/
 │   │   │   └── audioPlayer.js         # Queue and play TTS audio chunks
 │   │   ├── theme.css                  # Centralized glassmorphism theme
@@ -225,13 +234,11 @@ storyforge/
 │   ├── services/
 │   │   ├── gemini_client.py           # Gemini API wrapper (GenAI SDK)
 │   │   ├── imagen_client.py           # Imagen 3 via Vertex AI
-│   │   ├── tts_client.py              # Cloud Text-to-Speech
-│   │   └── firestore_client.py        # Session state management
-│   ├── models/
-│   │   └── story_state.py             # Pydantic models for story/scene/character
+│   │   └── tts_client.py              # Cloud Text-to-Speech
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── docker-compose.yml                 # Local dev environment
+├── HISTORY.md                         # Detailed development history
 └── README.md
 ```
 

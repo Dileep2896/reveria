@@ -67,34 +67,47 @@ body {
   font-size: clamp(9px, 1.1vw, 11px);
 }
 
+.header-nav-group {
+  display: flex;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+}
+
+.header-nav-seg {
+  padding: clamp(0.25rem, 0.5vw, 0.375rem) clamp(0.6rem, 1.2vw, 0.875rem);
+  font-size: clamp(9px, 1.1vw, 11px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.header-nav-seg:not(:last-child) {
+  border-right: 1px solid var(--glass-border);
+}
+
+.header-nav-seg:hover {
+  color: var(--text-secondary);
+  background: var(--glass-bg-hover);
+}
+
+.header-nav-seg--active {
+  color: var(--accent-primary);
+  background: var(--accent-primary-soft);
+}
+
 .header-theme-btn {
   width: clamp(28px, 3vw, 36px);
   height: clamp(28px, 3vw, 36px);
 }
 
-.header-prompt-pill {
-  flex: 1;
-  min-width: 0;
-  max-width: 480px;
-  margin: 0 clamp(0.5rem, 2vw, 1.5rem);
-  padding: clamp(0.2rem, 0.4vw, 0.3rem) clamp(0.6rem, 1.2vw, 1rem);
-  border-radius: 999px;
-  background: var(--accent-primary-soft);
-  border: 1px solid var(--glass-border-accent);
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.header-prompt-pill p {
-  margin: 0;
-  font-size: clamp(0.6rem, 1.1vw, 0.8rem);
-  line-height: 1.5;
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 /* ---- Director Panel ---- */
 .director-panel {
@@ -111,26 +124,45 @@ body {
 
 /* ---- Control Bar ---- */
 .control-bar {
-  padding: clamp(0.35rem, 1vw, 0.75rem) clamp(0.5rem, 1.5vw, 1rem);
-}
-
-.control-options {
-  display: flex;
-  gap: clamp(0.25rem, 0.6vw, 0.5rem);
-  align-items: center;
+  position: absolute;
+  bottom: clamp(1rem, 2.5vw, 1.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - clamp(1.5rem, 4vw, 3rem));
   max-width: 56rem;
-  margin: 0 auto clamp(0.2rem, 0.6vw, 0.5rem);
-  flex-wrap: wrap;
+  padding: clamp(0.35rem, 1vw, 0.75rem) clamp(0.5rem, 1.5vw, 1rem);
+  z-index: 20;
+  pointer-events: auto;
 }
 
-.control-style-label {
-  font-size: clamp(8px, 1vw, 10px);
-  margin-right: 0.25rem;
+.control-style-select {
+  appearance: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(10px, 1.1vw, 12px);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.15rem 1rem 0.15rem 0.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+  flex-shrink: 0;
 }
 
-.control-style-pill {
-  padding: clamp(0.12rem, 0.35vw, 0.25rem) clamp(0.35rem, 0.8vw, 0.625rem);
-  font-size: clamp(9px, 1.1vw, 11px);
+.control-style-select option {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.control-input-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--glass-border);
+  flex-shrink: 0;
+  opacity: 0.6;
 }
 
 .control-form {
@@ -147,25 +179,25 @@ body {
   border-radius: clamp(10px, 1.2vw, 16px);
 }
 
-.control-mic-btn {
-  width: clamp(24px, 2.5vw, 34px);
-  height: clamp(24px, 2.5vw, 34px);
+.control-action-btn {
+  width: clamp(28px, 2.8vw, 36px);
+  height: clamp(28px, 2.8vw, 36px);
+  flex-shrink: 0;
 }
 
 .control-input {
   font-size: clamp(11px, 1.2vw, 14px);
-  height: clamp(20px, 2.5vw, 30px);
+  min-height: clamp(20px, 2.5vw, 30px);
+  max-height: 80px;
+  line-height: clamp(20px, 2.5vw, 30px);
+  overflow-y: auto;
+  font-family: 'Inter', sans-serif;
+  padding: 0;
 }
 
 .control-icon {
-  width: clamp(10px, 1.1vw, 14px);
-  height: clamp(10px, 1.1vw, 14px);
-}
-
-.control-send-btn {
-  padding: clamp(0.3rem, 0.7vw, 0.6rem) clamp(0.6rem, 1.5vw, 1.5rem);
-  border-radius: clamp(10px, 1.2vw, 16px);
-  font-size: clamp(11px, 1.2vw, 14px);
+  width: clamp(12px, 1.2vw, 16px);
+  height: clamp(12px, 1.2vw, 16px);
 }
 
 /* ---- Small screens: hide Director, compact layout ---- */
@@ -174,7 +206,4 @@ body {
     display: none;
   }
 
-  .control-style-label {
-    display: none;
-  }
 }

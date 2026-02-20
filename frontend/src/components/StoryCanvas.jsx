@@ -82,12 +82,18 @@ const GENRE_PROMPTS = {
   "Children's": 'A whimsical bedtime story about a curious little fox exploring an enchanted forest...',
 };
 
-function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPageChange }) {
+function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPageChange, storyId, displayPrompt }) {
   const bookRef = useRef(null);
   const wrapperRef = useRef(null);
   const prevGenerating = useRef(false);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [bookSize, setBookSize] = useState({ w: 360, h: 480 });
+  // Read ?page from URL once on mount for instant restore (no flash)
+  const initialPageRef = useRef(() => {
+    const p = new URLSearchParams(window.location.search).get('page');
+    return p ? Math.max(1, parseInt(p, 10)) : 1;
+  });
+  if (typeof initialPageRef.current === 'function') initialPageRef.current = initialPageRef.current();
+  const [currentPage, setCurrentPage] = useState(initialPageRef.current);
+  const [bookSize, setBookSize] = useState(null);
 
   /* ── Responsive: measure actual wrapper space ── */
   useEffect(() => {
@@ -203,6 +209,14 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
     return () => window.removeEventListener('keydown', onKey);
   }, [goNext, goPrev]);
 
+  /* ── Sync current page to URL ?page=N ── */
+  useEffect(() => {
+    if (!storyId || currentPage <= 0) return;
+    const url = new URL(window.location);
+    url.searchParams.set('page', String(currentPage));
+    window.history.replaceState(null, '', url);
+  }, [currentPage, storyId]);
+
   /* ── Notify parent of current scene ── */
   useEffect(() => {
     if (!onPageChange) return;
@@ -222,7 +236,7 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
   const dotCount = Math.max(1, 1 + Math.ceil(paddedContent / 2));
 
   /* ── Scale factor for responsive text (1.0 at max 640px height) ── */
-  const pageScale = bookSize.h / 640;
+  const pageScale = bookSize ? bookSize.h / 640 : 1;
 
   /* ── Build fixed page array ── */
   const pages = [
@@ -243,6 +257,10 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
   ];
 
   const hasContent = scenes.length > 0 || generating;
+
+  if (!bookSize) {
+    return <div className="storybook-wrapper" ref={wrapperRef} />;
+  }
 
   return (
     <div className="storybook-wrapper" ref={wrapperRef} style={{ '--page-scale': pageScale }}>
@@ -301,6 +319,15 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
         </div>
       ) : (
         /* ── Active: flipbook with overlay nav ── */
+        <>
+        {displayPrompt && (
+          <div className="book-prompt-pill" title={displayPrompt}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.5 }}>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <p>{displayPrompt}</p>
+          </div>
+        )}
         <div className="storybook-container">
           {/* Left arrow overlay */}
           <button
@@ -320,7 +347,7 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
             height={bookSize.h}
             size="fixed"
             showCover={true}
-            startPage={1}
+            startPage={initialPageRef.current}
             drawShadow={true}
             maxShadowOpacity={0.5}
             flippingTime={800}
@@ -350,6 +377,7 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
             </svg>
           </button>
         </div>
+        </>
       )}
 
       {/* Dots-only bar (no arrows) */}

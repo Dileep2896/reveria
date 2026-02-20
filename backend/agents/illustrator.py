@@ -40,6 +40,20 @@ class Illustrator:
         self._art_style: str = "cinematic"
         self._accumulated_story: str = ""
 
+    def serialize_state(self) -> dict[str, str]:
+        """Return illustrator state as a plain dict for persistence."""
+        return {
+            "character_sheet": self._character_sheet,
+            "accumulated_story": self._accumulated_story,
+            "art_style": self._art_style,
+        }
+
+    def restore_state(self, state: dict[str, str]) -> None:
+        """Restore illustrator state from a persisted dict."""
+        self._character_sheet = state.get("character_sheet", "")
+        self._accumulated_story = state.get("accumulated_story", "")
+        self.art_style = state.get("art_style", "cinematic")
+
     def accumulate_story(self, batch_text: str) -> None:
         """Append a new batch of story text to the accumulated cross-batch story."""
         if self._accumulated_story:
@@ -120,15 +134,15 @@ class Illustrator:
             logger.error("Character extraction failed: %s", e)
             # Keep existing sheet on error rather than clearing it
 
-    async def generate_for_scene(self, scene_text: str) -> str | None:
+    async def generate_for_scene(self, scene_text: str) -> tuple[str | None, str | None]:
         """Generate an illustration for a scene.
 
         Uses Gemini to craft an optimal image prompt, then calls Imagen 3.
-        Returns a base64 data URL or None.
+        Returns (data_url, error_reason).
         """
         image_prompt = await self._create_image_prompt(scene_text)
         if not image_prompt:
-            return None
+            return None, "prompt_failed"
 
         logger.info("Image prompt: %s...", image_prompt[:150])
         return await generate_image(image_prompt)
