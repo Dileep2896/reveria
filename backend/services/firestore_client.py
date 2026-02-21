@@ -68,6 +68,7 @@ async def persist_story(
             {
                 "scene_number": scene["scene_number"],
                 "text": scene.get("text", ""),
+                "scene_title": scene.get("scene_title"),
                 "image_url": scene.get("image_url"),
                 "audio_url": scene.get("audio_url"),
                 "prompt": scene.get("prompt", ""),

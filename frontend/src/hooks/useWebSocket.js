@@ -4,7 +4,7 @@ const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws';
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 
-export default function useWebSocket(idToken, initialState) {
+export default function useWebSocket(idToken, initialState, addToast) {
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectDelay = useRef(RECONNECT_BASE_MS);
@@ -20,6 +20,13 @@ export default function useWebSocket(idToken, initialState) {
   const storyIdRef = useRef(initialState?.storyId || null);
   const [quotaCooldown, setQuotaCooldown] = useState(0);
   const cooldownTimer = useRef(null);
+  const [sceneBusy, setSceneBusy] = useState(new Set());
+  const [bookMeta, setBookMeta] = useState(null);
+
+  // Toast callback ref (avoids stale closure in connect)
+  const addToastRef = useRef(addToast);
+  addToastRef.current = addToast;
+  const quotaImageToastFired = useRef(false);
 
   // Generation batch tracking: each batch = { prompt, directorData, sceneNumbers }
   const generationsRef = useRef([]);
@@ -30,6 +37,10 @@ export default function useWebSocket(idToken, initialState) {
   const initialStateRef = useRef(initialState);
   const hydratedRef = useRef(false);
 
+  // Story loading resolved: undefined = still loading, null/object = done.
+  // We gate WebSocket connection on this so onopen always has the correct storyId.
+  const storyResolved = initialState !== undefined;
+
   // Hydrate from initialState on first mount (or when initialState changes)
   useEffect(() => {
     if (initialState && !hydratedRef.current) {
@@ -38,6 +49,7 @@ export default function useWebSocket(idToken, initialState) {
 
       if (initialState.storyId) {
         setStoryId(initialState.storyId);
+        storyIdRef.current = initialState.storyId;
       }
       if (initialState.scenes?.length) {
         // Mark scenes as preloaded so SceneCard skips reveal animations
@@ -105,6 +117,12 @@ export default function useWebSocket(idToken, initialState) {
         return;
       }
 
+      if (data.type === 'book_meta') {
+        setBookMeta({ title: data.title, coverUrl: data.cover_image_url });
+        addToastRef.current?.('AI title & cover ready!', 'info');
+        return;
+      }
+
       if (data.type === 'status') {
         setGenerating(data.content === 'generating');
         if (data.content === 'generating') {
@@ -114,12 +132,24 @@ export default function useWebSocket(idToken, initialState) {
       }
 
       if (data.type === 'text') {
+        // In-place update for scene regen
+        if (data.is_regen) {
+          setScenes((prev) =>
+            prev.map((scene) =>
+              scene.scene_number === data.scene_number
+                ? { ...scene, text: data.content, image_url: null, audio_url: null }
+                : scene,
+            ),
+          );
+          return;
+        }
         const currentBatch = generationsRef.current[currentBatchIndexRef.current];
         setScenes((prev) => [
           ...prev,
           {
             scene_number: data.scene_number,
             text: data.content,
+            scene_title: data.scene_title || null,
             image_url: null,
             prompt: currentBatch?.prompt || null,
           },
@@ -161,6 +191,10 @@ export default function useWebSocket(idToken, initialState) {
               : scene,
           ),
         );
+        if (data.reason === 'quota_exhausted' && !quotaImageToastFired.current) {
+          quotaImageToastFired.current = true;
+          addToastRef.current?.('Image skipped — quota exhausted', 'warning');
+        }
         return;
       }
 
@@ -186,6 +220,7 @@ export default function useWebSocket(idToken, initialState) {
       if (data.type === 'quota_exhausted') {
         const seconds = data.retry_after || 60;
         setQuotaCooldown(seconds);
+        addToastRef.current?.(`Image quota exhausted — retry in ${seconds}s`, 'warning', 6000);
         clearInterval(cooldownTimer.current);
         cooldownTimer.current = setInterval(() => {
           setQuotaCooldown((prev) => {
@@ -199,17 +234,52 @@ export default function useWebSocket(idToken, initialState) {
         return;
       }
 
+      if (data.type === 'regen_start') {
+        setSceneBusy((prev) => new Set(prev).add(data.scene_number));
+        return;
+      }
+
+      if (data.type === 'regen_done' || data.type === 'regen_error') {
+        setSceneBusy((prev) => {
+          const next = new Set(prev);
+          next.delete(data.scene_number);
+          return next;
+        });
+        return;
+      }
+
+      if (data.type === 'scene_deleted') {
+        // Mark as deleting for animation
+        setScenes((prev) => prev.map((s) =>
+          s.scene_number === data.scene_number ? { ...s, _deleting: true } : s
+        ));
+        // Remove after animation completes
+        setTimeout(() => {
+          setScenes((prev) => prev.filter((s) => s.scene_number !== data.scene_number));
+        }, 500);
+        setSceneBusy((prev) => {
+          const next = new Set(prev);
+          next.delete(data.scene_number);
+          return next;
+        });
+        return;
+      }
+
       if (data.type === 'error') {
         setError(data.content);
+        addToastRef.current?.(data.content, 'error');
         return;
       }
     };
   }, [idToken]);
 
-  // Connect when idToken is available + cleanup
+  // Connect when idToken is available AND story state is resolved.
+  // Waiting for storyResolved ensures that by the time onopen fires,
+  // storyIdRef is set correctly and resume always works on first connect.
+  // Reconnects bypass this gate (they call connect() directly from onclose).
   useEffect(() => {
     disposed.current = false;
-    if (idToken) {
+    if (idToken && storyResolved) {
       connect();
     }
     return () => {
@@ -222,12 +292,13 @@ export default function useWebSocket(idToken, initialState) {
         wsRef.current = null;
       }
     };
-  }, [connect, idToken]);
+  }, [connect, idToken, storyResolved]);
 
   const send = useCallback((content, options = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       setUserPrompt(content);
       setError(null);
+      quotaImageToastFired.current = false;
       // Create new generation batch
       generationsRef.current.push({ prompt: content, directorData: null, sceneNumbers: [] });
       currentBatchIndexRef.current = generationsRef.current.length - 1;
@@ -235,6 +306,7 @@ export default function useWebSocket(idToken, initialState) {
       wsRef.current.send(JSON.stringify({
         content,
         art_style: options.artStyle || 'cinematic',
+        scene_count: options.sceneCount || 2,
       }));
     }
   }, []);
@@ -250,12 +322,20 @@ export default function useWebSocket(idToken, initialState) {
     }
   }, []);
 
+  const sendSceneAction = useCallback((type, payload) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type, ...payload }));
+    }
+  }, []);
+
   const reset = useCallback(() => {
     setScenes([]);
     setUserPrompt(null);
     setError(null);
     setGenerating(false);
     setDirectorData(null);
+    setBookMeta(null);
+    quotaImageToastFired.current = false;
     setStoryId(null);
     storyIdRef.current = null;
     generationsRef.current = [];
@@ -271,6 +351,7 @@ export default function useWebSocket(idToken, initialState) {
   const load = useCallback((state, { skipResume = false } = {}) => {
     hydratedRef.current = true;
     initialStateRef.current = state;
+    setBookMeta(null);
     setStoryId(state.storyId || null);
     storyIdRef.current = state.storyId || null;
     if (state.scenes?.length) setScenes(state.scenes.map(s => ({ ...s, _preloaded: true })));
@@ -285,5 +366,5 @@ export default function useWebSocket(idToken, initialState) {
     }
   }, []);
 
-  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, send, sendAudio, reset, load };
+  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, send, sendAudio, sendSceneAction, reset, load };
 }

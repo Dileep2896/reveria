@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from typing import Any
 from dotenv import load_dotenv
@@ -17,7 +18,7 @@ from services.gemini_client import get_client as get_gemini_client, get_model as
 from services.auth import verify_token
 from services.imagen_client import generate_image, is_quota_available, get_quota_cooldown_remaining
 from services.storage_client import upload_media, upload_cover
-from services.firestore_client import persist_story, load_story
+from services.firestore_client import persist_story, load_story, get_db
 
 # Try to import ADK orchestrator — falls back to manual pipeline if unavailable
 _adk_available = False
@@ -135,7 +136,15 @@ async def _gen_cover(full_text: str, art_style: str, story_id: str) -> str | Non
         if not cover_prompt:
             return None
 
-        cover_data, _err = await generate_image(cover_prompt, aspect_ratio="3:4")
+        cover_data = None
+        for attempt in range(2):
+            cover_data, err = await generate_image(cover_prompt, aspect_ratio="3:4")
+            if cover_data:
+                break
+            if err == "safety_filter":
+                return None  # terminal — re-prompting won't help
+            if attempt == 0:
+                await asyncio.sleep(2)
         if not cover_data:
             return None
 
@@ -146,12 +155,56 @@ async def _gen_cover(full_text: str, art_style: str, story_id: str) -> str | Non
         return None
 
 
+async def _rewrite_scene_text(
+    scene_text: str,
+    scene_number: int,
+    all_scenes: list[dict[str, Any]],
+) -> str | None:
+    """Rewrite a single scene using Gemini with full story context."""
+    try:
+        context_parts = []
+        for s in all_scenes:
+            num = s.get("scene_number", "?")
+            txt = s.get("text", "")
+            if txt:
+                context_parts.append(f"[Scene {num}]\n{txt}")
+        story_context = "\n\n".join(context_parts)
+
+        prompt = (
+            f"Here is a children's story so far:\n\n{story_context}\n\n"
+            f"Rewrite Scene {scene_number} with a fresh take. Keep the same characters and "
+            f"general plot point but use different descriptions and phrasing. "
+            f"Write 80-100 words, present tense, third person, plain text only (no markdown, "
+            f"no scene markers, no titles). Output only the rewritten scene text."
+        )
+
+        client = get_gemini_client()
+        model = get_gemini_model()
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=types.Content(
+                role="user",
+                parts=[types.Part(text=prompt)],
+            ),
+            config=types.GenerateContentConfig(
+                temperature=0.9,
+                max_output_tokens=300,
+            ),
+        )
+        if response.text:
+            return response.text.strip()
+    except Exception as e:
+        logger.error("Scene rewrite failed for scene %d: %s", scene_number, e)
+    return None
+
+
 async def _auto_generate_meta(
     story_id: str,
     scenes: list[dict[str, Any]],
     art_style: str,
+    websocket: WebSocket | None = None,
 ) -> None:
-    """Background task: generate title + cover after first pipeline run."""
+    """Background task: generate title + cover after pipeline run, notify frontend via WS."""
     try:
         scene_texts = [s.get("text", "") for s in scenes if s.get("text")]
         if not scene_texts:
@@ -164,13 +217,14 @@ async def _auto_generate_meta(
         )
 
         # Fall back to first scene image if cover generation failed
+        # Filter out base64 data URLs (can happen if GCS upload failed)
         if not cover_url:
             cover_url = next(
-                (s.get("image_url") for s in scenes if s.get("image_url")),
+                (s.get("image_url") for s in scenes
+                 if s.get("image_url") and not s["image_url"].startswith("data:")),
                 None,
             )
 
-        from services.firestore_client import get_db
         db = get_db()
         doc_ref = db.collection("stories").document(story_id)
         snap = await doc_ref.get()
@@ -185,6 +239,12 @@ async def _auto_generate_meta(
             update["cover_image_url"] = cover_url
         await doc_ref.update(update)
         logger.info("Auto-generated meta for %s: title=%r, cover=%s", story_id, title, bool(cover_url))
+        if websocket:
+            await _safe_send(websocket, {
+                "type": "book_meta",
+                "title": title,
+                "cover_image_url": update.get("cover_image_url"),
+            })
     except Exception as e:
         logger.error("Auto meta generation failed for %s: %s", story_id, e)
 
@@ -260,52 +320,78 @@ async def _run_manual_pipeline(
     # Stream story text from Narrator, collect scenes
     buffer = ""
     scenes: list[dict[str, Any]] = []
+    # Track the title parsed from the most recent [SCENE: ...] marker
+    pending_title: str | None = None
+
+    limit_hit = False
 
     async for chunk in narrator.generate(user_input, scene_count=scene_count):
+        if limit_hit:
+            break
         buffer += chunk
 
-        while "[SCENE]" in buffer:
-            before, _, buffer = buffer.partition("[SCENE]")
-            text = before.strip()
-            if text:
+        while "[SCENE" in buffer:
+            idx = buffer.index("[SCENE")
+            close = buffer.find("]", idx)
+            if close == -1:
+                break  # Wait for more data
+
+            before = buffer[:idx].strip()
+            marker = buffer[idx:close + 1]
+            buffer = buffer[close + 1:]
+
+            if before:
                 total_scene_count += 1
                 if not await _safe_send(websocket, {
                     "type": "text",
-                    "content": text,
+                    "content": before,
                     "scene_number": total_scene_count,
+                    "scene_title": pending_title,
                 }):
                     connection_alive = False
                     break
                 scenes.append({
                     "scene_number": total_scene_count,
-                    "text": text,
+                    "text": before,
+                    "scene_title": pending_title,
                     "image_url": None,
                     "audio_url": None,
                     "prompt": user_input,
                 })
+                if len(scenes) >= scene_count:
+                    limit_hit = True
+                    break
+
+            # Extract title from marker like [SCENE: Title Here]
+            colon_match = re.match(r"\[SCENE:\s*(.+)\]", marker)
+            pending_title = colon_match.group(1).strip() if colon_match else None
+
         if not connection_alive:
             break
 
     if not connection_alive:
         return total_scene_count, all_tasks, scenes
 
-    # Send any remaining text
-    remaining = buffer.strip()
-    if remaining:
-        total_scene_count += 1
-        if not await _safe_send(websocket, {
-            "type": "text",
-            "content": remaining,
-            "scene_number": total_scene_count,
-        }):
-            return total_scene_count, all_tasks, scenes
-        scenes.append({
-            "scene_number": total_scene_count,
-            "text": remaining,
-            "image_url": None,
-            "audio_url": None,
-            "prompt": user_input,
-        })
+    # Send any remaining text (only if we haven't hit the limit)
+    if not limit_hit:
+        remaining = buffer.strip()
+        if remaining:
+            total_scene_count += 1
+            if not await _safe_send(websocket, {
+                "type": "text",
+                "content": remaining,
+                "scene_number": total_scene_count,
+                "scene_title": pending_title,
+            }):
+                return total_scene_count, all_tasks, scenes
+            scenes.append({
+                "scene_number": total_scene_count,
+                "text": remaining,
+                "scene_title": pending_title,
+                "image_url": None,
+                "audio_url": None,
+                "prompt": user_input,
+            })
 
     if not scenes:
         await _safe_send(websocket, {
@@ -483,6 +569,7 @@ async def _run_adk_pipeline(
         scenes_with_urls.append({
             "scene_number": scene_dict["scene_number"],
             "text": scene_dict["text"],
+            "scene_title": scene_dict.get("scene_title"),
             "image_url": scene_dict.get("image_url"),
             "audio_url": scene_dict.get("audio_url"),
             "prompt": user_input,
@@ -611,6 +698,147 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 else:
                     continue
 
+            # ── Per-scene actions (regen image / regen scene / delete) ──
+            msg_type = message.get("type")
+
+            # Auto-recover session if story_id is in the message but we have no active story
+            if msg_type in ("regen_image", "regen_scene", "delete_scene") and not active_story_id:
+                req_sid = message.get("story_id")
+                if req_sid:
+                    story_data = await load_story(req_sid, uid)
+                    if story_data:
+                        history_entries = story_data.get("narrator_history", [])
+                        narrator.history = [
+                            types.Content(role=e["role"], parts=[types.Part(text=e["text"])])
+                            for e in history_entries
+                        ]
+                        ill_state = story_data.get("illustrator_state", {})
+                        illustrator.restore_state(ill_state)
+                        total_scene_count = int(story_data.get("total_scene_count", 0))
+                        active_story_id = req_sid
+                        generations_list = story_data.get("generations", [])
+                        batch_index = len(generations_list)
+                        logger.info("Auto-resumed story %s for scene action", req_sid)
+
+            if msg_type == "regen_image":
+                scene_num = int(message.get("scene_number", 0))
+                scene_text = message.get("scene_text", "")
+                logger.info("regen_image request: scene=%d, text_len=%d, story=%s", scene_num, len(scene_text), active_story_id)
+                if scene_num and scene_text and active_story_id:
+                    try:
+                        await _safe_send(websocket, {"type": "regen_start", "scene_number": scene_num})
+                        image_data, error_reason = await illustrator.generate_for_scene(scene_text)
+                        if image_data:
+                            gcs_url = await upload_media(active_story_id, scene_num, "image", image_data)
+                            # Cache-bust: append timestamp so browser fetches new image
+                            cache_bust_url = f"{gcs_url}?v={int(time.time())}"
+                            # Update Firestore scene doc
+                            db = get_db()
+                            scene_docs = db.collection("stories").document(active_story_id).collection("scenes")
+                            async for doc_snap in scene_docs.where("scene_number", "==", scene_num).stream():
+                                await doc_snap.reference.update({"image_url": cache_bust_url})
+                            await _safe_send(websocket, {"type": "image", "content": cache_bust_url, "scene_number": scene_num})
+                        else:
+                            await _safe_send(websocket, {"type": "image_error", "scene_number": scene_num, "reason": error_reason or "generation_failed"})
+                        await _safe_send(websocket, {"type": "regen_done", "scene_number": scene_num})
+                    except Exception as e:
+                        logger.error("regen_image error for scene %d: %s", scene_num, e)
+                        await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": str(e)})
+                else:
+                    logger.warning("regen_image skipped — guard failed: scene_num=%s, text=%s, story=%s", scene_num, bool(scene_text), active_story_id)
+                    await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": "Session not ready — please retry"})
+                continue
+
+            if msg_type == "regen_scene":
+                scene_num = int(message.get("scene_number", 0))
+                scene_text = message.get("scene_text", "")
+                all_scenes_data: list[dict[str, Any]] = message.get("all_scenes", [])
+                logger.info("regen_scene request: scene=%d, story=%s", scene_num, active_story_id)
+                if scene_num and scene_text and active_story_id:
+                    try:
+                        await _safe_send(websocket, {"type": "regen_start", "scene_number": scene_num})
+                        new_text = await _rewrite_scene_text(scene_text, scene_num, all_scenes_data)
+                        if not new_text:
+                            await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": "Rewrite failed"})
+                            continue
+
+                        # Send new text immediately
+                        await _safe_send(websocket, {"type": "text", "content": new_text, "scene_number": scene_num, "is_regen": True})
+
+                        # Generate image + audio in parallel
+                        img_task = asyncio.create_task(illustrator.generate_for_scene(new_text))
+                        audio_task = asyncio.create_task(synthesize_speech(new_text))
+                        image_result, audio_data = await asyncio.gather(img_task, audio_task, return_exceptions=True)
+
+                        db = get_db()
+                        scene_update: dict[str, Any] = {"text": new_text}
+
+                        # Handle image
+                        if not isinstance(image_result, Exception):
+                            img_data, img_err = image_result
+                            if img_data:
+                                gcs_url = await upload_media(active_story_id, scene_num, "image", img_data)
+                                cache_bust_url = f"{gcs_url}?v={int(time.time())}"
+                                scene_update["image_url"] = cache_bust_url
+                                await _safe_send(websocket, {"type": "image", "content": cache_bust_url, "scene_number": scene_num})
+                            else:
+                                await _safe_send(websocket, {"type": "image_error", "scene_number": scene_num, "reason": img_err or "generation_failed"})
+
+                        # Handle audio
+                        if not isinstance(audio_data, Exception) and audio_data:
+                            audio_url = await upload_media(active_story_id, scene_num, "audio", audio_data)
+                            scene_update["audio_url"] = audio_url
+                            await _safe_send(websocket, {"type": "audio", "content": audio_url, "scene_number": scene_num})
+
+                        # Update Firestore scene doc
+                        scene_docs = db.collection("stories").document(active_story_id).collection("scenes")
+                        async for doc in scene_docs.where("scene_number", "==", scene_num).stream():
+                            await doc.reference.update(scene_update)
+
+                        # Append synthetic narrator history for coherence
+                        narrator.history.append(types.Content(
+                            role="user",
+                            parts=[types.Part(text=f"[Scene {scene_num} was rewritten]")],
+                        ))
+                        narrator.history.append(types.Content(
+                            role="model",
+                            parts=[types.Part(text=new_text)],
+                        ))
+
+                        await _safe_send(websocket, {"type": "regen_done", "scene_number": scene_num})
+                    except Exception as e:
+                        logger.error("regen_scene error for scene %d: %s", scene_num, e)
+                        await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": str(e)})
+                continue
+
+            if msg_type == "delete_scene":
+                scene_num = int(message.get("scene_number", 0))
+                logger.info("delete_scene request: scene=%d, story=%s", scene_num, active_story_id)
+                if scene_num and active_story_id:
+                    try:
+                        db = get_db()
+                        scene_docs = db.collection("stories").document(active_story_id).collection("scenes")
+                        async for doc in scene_docs.where("scene_number", "==", scene_num).stream():
+                            await doc.reference.delete()
+                        # total_scene_count kept as high-water mark — no decrement
+                        # so new scenes always get unique, non-colliding numbers
+
+                        # Inform narrator about the deletion for story coherence
+                        narrator.history.append(types.Content(
+                            role="user",
+                            parts=[types.Part(text=f"[Scene {scene_num} was removed from the story by the reader]")],
+                        ))
+                        narrator.history.append(types.Content(
+                            role="model",
+                            parts=[types.Part(text=f"Understood. Scene {scene_num} has been removed. I will not reference it in future scenes and will continue the story from the remaining scenes.")],
+                        ))
+
+                        await _safe_send(websocket, {"type": "scene_deleted", "scene_number": scene_num})
+                    except Exception as e:
+                        logger.error("delete_scene error for scene %d: %s", scene_num, e)
+                        await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": str(e)})
+                continue
+
             user_input = message.get("content", "")
 
             if not user_input:
@@ -618,7 +846,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             # Parse user options
             art_style = message.get("art_style", "cinematic")
-            scene_count = 2
+            scene_count = max(1, min(2, int(message.get("scene_count", 2))))
 
             # Generate story_id on first pipeline run
             if not active_story_id:
@@ -676,11 +904,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         user_input=user_input,
                         director_data=director_result,
                     )
-                    # Auto-generate title + cover in background on first batch
-                    if batch_index == 0:
-                        asyncio.create_task(
-                            _auto_generate_meta(active_story_id, current_batch_scenes, art_style)
-                        )
+                    # Auto-generate title + cover in background (title_generated race guard inside handles dedup)
+                    asyncio.create_task(
+                        _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket)
+                    )
                 except Exception as e:
                     logger.error("Firestore persist error: %s", e)
 

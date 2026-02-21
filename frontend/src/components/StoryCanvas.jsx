@@ -48,18 +48,101 @@ const CoverPage = forwardRef(function CoverPage({ onGenreClick }, ref) {
   );
 });
 
-const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWithinSpread, pageNum, scale }, ref) {
+const EmptyPageContent = ({ scale = 1 }) => (
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100%',
+      padding: `${24 * scale}px`,
+      textAlign: 'center',
+      animation: 'fadeIn 0.6s ease-out',
+    }}
+  >
+    {/* Decorative ornament */}
+    <div
+      style={{
+        width: `${48 * scale}px`,
+        height: `${48 * scale}px`,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--accent-primary-soft)',
+        border: '1px solid var(--glass-border-accent)',
+        marginBottom: `${16 * scale}px`,
+        opacity: 0.6,
+      }}
+    >
+      <svg
+        width={20 * scale} height={20 * scale} viewBox="0 0 24 24" fill="none"
+        stroke="var(--accent-primary)" strokeWidth="1.5"
+        strokeLinecap="round" strokeLinejoin="round"
+        style={{ opacity: 0.7 }}
+      >
+        <path d="M12 5v14" />
+        <path d="M5 12h14" />
+      </svg>
+    </div>
+
+    <p
+      style={{
+        fontFamily: "'Playfair Display', serif",
+        fontSize: `${13 * scale}px`,
+        fontWeight: 600,
+        color: 'var(--text-secondary)',
+        opacity: 0.5,
+        marginBottom: `${6 * scale}px`,
+        letterSpacing: '0.02em',
+      }}
+    >
+      The story continues...
+    </p>
+
+    {/* Ornamental divider */}
+    <div
+      style={{
+        width: `${40 * scale}px`,
+        height: '1px',
+        background: 'linear-gradient(90deg, transparent, var(--accent-primary), transparent)',
+        opacity: 0.3,
+        marginBottom: `${8 * scale}px`,
+      }}
+    />
+
+    <p
+      style={{
+        fontSize: `${9 * scale}px`,
+        color: 'var(--text-muted)',
+        opacity: 0.4,
+        lineHeight: 1.6,
+        maxWidth: `${180 * scale}px`,
+      }}
+    >
+      Type a prompt to add more scenes to your story
+    </p>
+  </div>
+);
+
+const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWithinSpread, pageNum, scale, hasScenes, displayIndex }, ref) {
   // Pages within an active spread show as parchment; pages beyond are invisible
   const showAsPage = scene || isGenerating || isWithinSpread;
+  const isEmpty = showAsPage && !scene && !isGenerating && hasScenes;
 
   return (
     <div ref={ref} className={showAsPage ? `book-page ${pageNum % 2 === 1 ? 'book-page-left' : 'book-page-right'}` : 'book-page-slot'}>
       {scene ? (
         <div className="book-page-inner">
-          <SceneCard scene={scene} scale={scale || 1} />
+          <SceneCard scene={scene} scale={scale || 1} displayIndex={displayIndex} />
         </div>
       ) : isGenerating ? (
         <GeneratingContent />
+      ) : isEmpty ? (
+        <div className="book-page-inner">
+          <EmptyPageContent scale={scale || 1} />
+        </div>
       ) : null}
     </div>
   );
@@ -82,7 +165,7 @@ const GENRE_PROMPTS = {
   "Children's": 'A whimsical bedtime story about a curious little fox exploring an enchanted forest...',
 };
 
-function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPageChange, storyId, displayPrompt }) {
+function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPageChange, storyId, displayPrompt, spreadPrompts }) {
   const bookRef = useRef(null);
   const wrapperRef = useRef(null);
   const prevGenerating = useRef(false);
@@ -101,8 +184,8 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       const { width: cw, height: ch } = entry.contentRect;
-      // Reserve space for dots bar (~16) + small gap (~14)
-      const availH = ch - 30;
+      // Reserve space for prompt pill (~34) + dots bar (~22)
+      const availH = ch - 56;
       // Spread = 2 pages side by side, leave some horizontal breathing room
       const availW = cw - 32;
 
@@ -133,18 +216,76 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
     return pageIndex % 2 === 0 ? pageIndex - 1 : pageIndex;
   };
 
-  /* ── Auto-advance: flip ONCE when continuation starts ── */
-  // First story: startPage={1} handles it (no flip needed).
-  // Continuation: flip to the spread where new scenes will appear.
+  /* ── Auto-advance during generation (single unified effect) ── */
+  // Handles both: initial continuation flip + new scenes arriving on later spreads.
+  const lastFlipTarget = useRef(-1);
   useEffect(() => {
-    if (generating && !prevGenerating.current && scenes.length > 0 && bookRef.current) {
-      const targetPage = spreadLeftPage(scenes.length + 1);
+    if (!bookRef.current) return;
+
+    // When generation starts on a continuation, flip to where new scenes will land
+    if (generating && !prevGenerating.current && scenes.length > 0) {
+      const target = spreadLeftPage(scenes.length + 1);
+      lastFlipTarget.current = target;
       setTimeout(() => {
-        try { bookRef.current.pageFlip().flip(targetPage); } catch {}
+        try { bookRef.current.pageFlip().flip(target); } catch {}
       }, 200);
     }
+
+    // When a new scene arrives during generation, flip forward if needed
+    if (generating && scenes.length > 0) {
+      const currentIdx = bookRef.current.pageFlip().getCurrentPageIndex();
+      const newScenePage = scenes.length;
+      const currentSpreadEnd = currentIdx + 1;
+      if (newScenePage > currentSpreadEnd) {
+        const target = spreadLeftPage(newScenePage);
+        // Skip if we already scheduled a flip to this target
+        if (target !== lastFlipTarget.current) {
+          lastFlipTarget.current = target;
+          setTimeout(() => {
+            try { bookRef.current.pageFlip().flip(target); } catch {}
+          }, 300);
+        }
+      }
+    }
+
+    // Reset tracking when generation ends
+    if (!generating) {
+      lastFlipTarget.current = -1;
+    }
+
     prevGenerating.current = generating;
   }, [generating, scenes.length]);
+
+  /* ── Clamp to content when page exceeds available scenes ── */
+  // Covers: reload with stale URL, deletion leaving empty spread, manual URL edit
+  const clampedRef = useRef(false);
+  useEffect(() => {
+    // Need book + bookSize (book is only rendered when bookSize is set)
+    if (!bookSize) return;
+    const maxValid = scenes.length;
+    // Nothing to clamp yet (scenes still loading) — wait
+    if (maxValid === 0) {
+      clampedRef.current = false;
+      return;
+    }
+    // currentPage is within valid range — mark as clamped and done
+    if (currentPage <= maxValid) {
+      clampedRef.current = true;
+      return;
+    }
+    // currentPage > maxValid — need to clamp
+    const target = spreadLeftPage(maxValid);
+    // Use requestAnimationFrame + setTimeout to ensure react-pageflip is ready
+    const raf = requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (!bookRef.current) return;
+        try { bookRef.current.pageFlip().turnToPage(target); } catch {}
+        setCurrentPage(target);
+        clampedRef.current = true;
+      }, clampedRef.current ? 50 : 400);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [scenes.length, currentPage, bookSize]);
 
   // Last page index that has real content (cover=0, scenes=1..N, generating=N+1)
   const lastFilledPage = showGenerating ? scenes.length + 1 : scenes.length;
@@ -247,10 +388,12 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
         <ContentPage
           key={`slot-${i}`}
           scene={i < scenes.length ? scenes[i] : null}
+          displayIndex={i < scenes.length ? i + 1 : undefined}
           isGenerating={i === scenes.length && showGenerating}
           isWithinSpread={pageIndex <= maxPage}
           pageNum={pageIndex}
           scale={pageScale}
+          hasScenes={scenes.length > 0}
         />
       );
     }),
@@ -264,12 +407,6 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
 
   return (
     <div className="storybook-wrapper" ref={wrapperRef} style={{ '--page-scale': pageScale }}>
-      {error && (
-        <div className="book-error-toast">
-          <p>{error}</p>
-        </div>
-      )}
-
       {!hasContent ? (
         /* ── Idle: closed book + instructions ── */
         <div className="book-idle">
@@ -320,14 +457,30 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
       ) : (
         /* ── Active: flipbook with overlay nav ── */
         <>
-        {displayPrompt && (
-          <div className="book-prompt-pill" title={displayPrompt}>
+        {displayPrompt && (() => {
+          const leftPrompt = spreadPrompts?.left || displayPrompt;
+          const rightPrompt = spreadPrompts?.right;
+          const showTwo = rightPrompt && rightPrompt !== leftPrompt;
+          const pillIcon = (
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.5 }}>
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            <p>{displayPrompt}</p>
-          </div>
-        )}
+          );
+          return (
+            <div className={showTwo ? "book-prompt-pills" : undefined}>
+              <div className="book-prompt-pill" title={leftPrompt}>
+                {pillIcon}
+                <p>{leftPrompt}</p>
+              </div>
+              {showTwo && (
+                <div className="book-prompt-pill" title={rightPrompt}>
+                  {pillIcon}
+                  <p>{rightPrompt}</p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
         <div className="storybook-container">
           {/* Left arrow overlay */}
           <button

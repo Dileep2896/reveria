@@ -1,7 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from './contexts/ThemeContext';
 import { useAuth } from './contexts/AuthContext';
+import { useToast } from './contexts/ToastContext';
+import { SceneActionsContext } from './contexts/SceneActionsContext';
 import useWebSocket from './hooks/useWebSocket';
 import {
   db,
@@ -54,6 +56,12 @@ async function loadStoryById(storyId) {
     });
 
   return { storyId, scenes, generations, status: storyData.status || 'draft', is_public: storyData.is_public || false };
+}
+
+function findFallbackCover(scenes) {
+  return scenes.find(
+    (s) => s.image_url && s.image_url !== 'error' && !s.image_url.startsWith('data:')
+  )?.image_url || null;
 }
 
 function useActiveStory(user, urlStoryId) {
@@ -142,7 +150,8 @@ export default function App() {
   const urlStoryId = urlStoryMatch ? urlStoryMatch[1] : null;
 
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId);
-  const { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, send, sendAudio, reset, load } = useWebSocket(idToken, initialState);
+  const { addToast } = useToast();
+  const { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, send, sendAudio, sendSceneAction, reset, load } = useWebSocket(idToken, initialState, addToast);
   const { theme, toggleTheme } = useTheme();
   const [directorOpen, setDirectorOpen] = useState(true);
   const [controlBarInput, setControlBarInput] = useState('');
@@ -158,6 +167,31 @@ export default function App() {
   const isLibrary = location.pathname === '/library';
   const isExplore = location.pathname === '/explore';
   const [viewingReadOnly, setViewingReadOnly] = useState(false);
+
+  // Per-scene action callbacks
+  const handleRegenImage = useCallback((sceneNumber, sceneText) => {
+    if (!storyId || generating) return;
+    sendSceneAction('regen_image', { scene_number: sceneNumber, scene_text: sceneText, story_id: storyId });
+  }, [storyId, generating, sendSceneAction]);
+
+  const handleRegenScene = useCallback((sceneNumber, sceneText) => {
+    if (!storyId || generating) return;
+    const allScenes = scenes.map((s) => ({ scene_number: s.scene_number, text: s.text }));
+    sendSceneAction('regen_scene', { scene_number: sceneNumber, scene_text: sceneText, all_scenes: allScenes, story_id: storyId });
+  }, [storyId, generating, scenes, sendSceneAction]);
+
+  const handleDeleteScene = useCallback((sceneNumber) => {
+    if (!storyId || generating) return;
+    sendSceneAction('delete_scene', { scene_number: sceneNumber, story_id: storyId });
+  }, [storyId, generating, sendSceneAction]);
+
+  const sceneActionsValue = useMemo(() => ({
+    regenImage: handleRegenImage,
+    regenScene: handleRegenScene,
+    deleteScene: handleDeleteScene,
+    sceneBusy,
+    isReadOnly: viewingReadOnly || storyStatus === 'completed',
+  }), [handleRegenImage, handleRegenScene, handleDeleteScene, sceneBusy, viewingReadOnly, storyStatus]);
 
   // Sync storyId → URL: navigate to /story/:id when storyId changes
   useEffect(() => {
@@ -219,6 +253,7 @@ export default function App() {
   }, [idToken]);
 
   // Auto-save current story as 'saved' (used when switching away from a draft)
+  // NEVER calls generateBookMeta — always fast (~200ms)
   const autoSaveCurrent = useCallback(async () => {
     if (!storyId || scenes.length === 0 || storyStatus === 'completed') return;
     try {
@@ -226,37 +261,36 @@ export default function App() {
       const snap = await getDoc(storyRef);
       const alreadyGenerated = snap.exists() && snap.data().title_generated;
 
+      // Tier 1: already has AI title + cover
       if (alreadyGenerated) {
-        // Already has AI title + cover — just update status
+        await updateDoc(storyRef, { status: 'saved', updated_at: new Date() });
+        return;
+      }
+
+      // Tier 2: bookMeta arrived from WebSocket background task
+      if (bookMeta) {
         await updateDoc(storyRef, {
           status: 'saved',
+          title: bookMeta.title || (generations[0]?.prompt || 'Untitled Story').slice(0, 60),
+          cover_image_url: bookMeta.coverUrl || findFallbackCover(scenes),
+          title_generated: true,
           updated_at: new Date(),
         });
         return;
       }
 
-      let title = (generations[0]?.prompt || 'Untitled Story').slice(0, 60);
-      let coverUrl = scenes.find((s) => s.image_url && s.image_url !== 'error')?.image_url || null;
-
-      const sceneTexts = scenes.map((s) => s.text).filter(Boolean);
-      const artStyle = scenes[0]?.art_style || 'cinematic';
-      const meta = await generateBookMeta(sceneTexts, artStyle, storyId);
-      if (meta) {
-        title = meta.title || title;
-        coverUrl = meta.cover_image_url || coverUrl;
-      }
-
+      // Tier 3: use prompt title + first scene image (no API call)
+      // title_generated stays false so background task or explicit Save can upgrade later
       await updateDoc(storyRef, {
         status: 'saved',
-        title,
-        cover_image_url: coverUrl,
-        title_generated: true,
+        title: (generations[0]?.prompt || 'Untitled Story').slice(0, 60),
+        cover_image_url: findFallbackCover(scenes),
         updated_at: new Date(),
       });
     } catch (err) {
       console.error('Failed to auto-save story:', err);
     }
-  }, [storyId, scenes, generations, generateBookMeta]);
+  }, [storyId, scenes, generations, storyStatus, bookMeta]);
 
   const handleSave = useCallback(async () => {
     if (!storyId || saving || generatingCover || storyStatus === 'completed') return;
@@ -266,21 +300,37 @@ export default function App() {
       const snap = await getDoc(storyRef);
       const alreadyGenerated = snap.exists() && snap.data().title_generated;
 
+      // Tier 1: already has AI title + cover — just update status (instant)
       if (alreadyGenerated) {
-        // Already has AI title + cover — just update status
         setSaving(true);
-        await updateDoc(storyRef, {
-          status: 'saved',
-          updated_at: new Date(),
-        });
+        await updateDoc(storyRef, { status: 'saved', updated_at: new Date() });
         setStoryStatus('saved');
         setSaved(true);
+        addToast('Story saved!', 'success');
         setTimeout(() => setSaved(false), 3000);
         return;
       }
 
+      // Tier 2: bookMeta available from WS — write it + set flag (instant)
+      if (bookMeta) {
+        setSaving(true);
+        await updateDoc(storyRef, {
+          status: 'saved',
+          title: bookMeta.title || (generations[0]?.prompt || 'Untitled Story').slice(0, 60),
+          cover_image_url: bookMeta.coverUrl || findFallbackCover(scenes),
+          title_generated: true,
+          updated_at: new Date(),
+        });
+        setStoryStatus('saved');
+        setSaved(true);
+        addToast('Story saved!', 'success');
+        setTimeout(() => setSaved(false), 3000);
+        return;
+      }
+
+      // Tier 3: call API with spinner → write result + set flag
       let title = (generations[0]?.prompt || 'Untitled Story').slice(0, 60);
-      let coverUrl = scenes.find((s) => s.image_url && s.image_url !== 'error')?.image_url || null;
+      let coverUrl = findFallbackCover(scenes);
 
       setGeneratingCover(true);
       const sceneTexts = scenes.map((s) => s.text).filter(Boolean);
@@ -290,6 +340,9 @@ export default function App() {
       if (meta) {
         title = meta.title || title;
         coverUrl = meta.cover_image_url || coverUrl;
+        if (!meta.cover_image_url && meta.title) {
+          addToast('Cover generation blocked — using scene image', 'warning');
+        }
       }
 
       setSaving(true);
@@ -302,14 +355,16 @@ export default function App() {
       });
       setStoryStatus('saved');
       setSaved(true);
+      addToast('Story saved!', 'success');
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       console.error('Failed to save story:', err);
+      addToast('Failed to save story', 'error');
       setGeneratingCover(false);
     } finally {
       setSaving(false);
     }
-  }, [storyId, saving, generatingCover, generations, scenes, generateBookMeta]);
+  }, [storyId, saving, generatingCover, storyStatus, generations, scenes, bookMeta, generateBookMeta, addToast]);
 
   const handleOpenBook = useCallback(async (bookData) => {
     if (bookData.storyId !== storyId) {
@@ -367,31 +422,59 @@ export default function App() {
       const snap = await getDoc(storyRef);
       const alreadyGenerated = snap.exists() && snap.data().title_generated;
 
-      if (!alreadyGenerated) {
-        const sceneTexts = scenes.map((s) => s.text).filter(Boolean);
-        const artStyle = scenes[0]?.art_style || 'cinematic';
-        const meta = await generateBookMeta(sceneTexts, artStyle, storyId);
-        if (meta) {
-          await updateDoc(storyRef, {
-            title: meta.title || (generations[0]?.prompt || 'Untitled Story').slice(0, 60),
-            cover_image_url: meta.cover_image_url || scenes.find((s) => s.image_url && s.image_url !== 'error')?.image_url || null,
-            title_generated: true,
-          });
-        }
+      // Tier 1: already has AI title + cover — just complete
+      if (alreadyGenerated) {
+        await updateDoc(storyRef, { status: 'completed', updated_at: new Date() });
+        setStoryStatus('completed');
+        setShowCompleteDialog(false);
+        addToast('Book completed!', 'success');
+        return;
+      }
+
+      // Tier 2: bookMeta available from WS — write it + complete
+      if (bookMeta) {
+        await updateDoc(storyRef, {
+          title: bookMeta.title || (generations[0]?.prompt || 'Untitled Story').slice(0, 60),
+          cover_image_url: bookMeta.coverUrl || findFallbackCover(scenes),
+          title_generated: true,
+          status: 'completed',
+          updated_at: new Date(),
+        });
+        setStoryStatus('completed');
+        setShowCompleteDialog(false);
+        addToast('Book completed!', 'success');
+        return;
+      }
+
+      // Tier 3: call API → write result + complete
+      let title = (generations[0]?.prompt || 'Untitled Story').slice(0, 60);
+      let coverUrl = findFallbackCover(scenes);
+
+      const sceneTexts = scenes.map((s) => s.text).filter(Boolean);
+      const artStyle = scenes[0]?.art_style || 'cinematic';
+      const meta = await generateBookMeta(sceneTexts, artStyle, storyId);
+      if (meta) {
+        title = meta.title || title;
+        coverUrl = meta.cover_image_url || coverUrl;
       }
 
       await updateDoc(storyRef, {
+        title,
+        cover_image_url: coverUrl,
+        title_generated: true,
         status: 'completed',
         updated_at: new Date(),
       });
       setStoryStatus('completed');
       setShowCompleteDialog(false);
+      addToast('Book completed!', 'success');
     } catch (err) {
       console.error('Failed to complete book:', err);
+      addToast('Failed to complete book', 'error');
     } finally {
       setCompleting(false);
     }
-  }, [storyId, completing, scenes, generations, generateBookMeta]);
+  }, [storyId, completing, scenes, generations, bookMeta, generateBookMeta, addToast]);
 
   const handlePublishToggle = useCallback(async () => {
     if (!storyId) return;
@@ -585,12 +668,17 @@ export default function App() {
     return batch?.sceneNumbers || null;
   })();
 
-  // Derive per-scene prompt for header display
-  const displayPrompt = (() => {
-    if (!currentSceneNumber || !scenes.length) return userPrompt;
-    const scene = scenes[currentSceneNumber - 1];
-    return scene?.prompt || userPrompt;
+  // Derive per-scene prompts for both pages of the current spread
+  const spreadPrompts = (() => {
+    if (!currentSceneNumber || !scenes.length) return { left: userPrompt, right: null };
+    const leftScene = scenes[currentSceneNumber - 1];
+    const rightScene = scenes[currentSceneNumber];
+    return {
+      left: leftScene?.prompt || userPrompt,
+      right: rightScene?.prompt || null,
+    };
   })();
+  const displayPrompt = spreadPrompts.left;
 
   return (
     <div className="h-screen flex flex-col relative overflow-hidden">
@@ -823,7 +911,7 @@ export default function App() {
           path="/library"
           element={
             <div className="flex flex-1 overflow-hidden relative z-10">
-              <LibraryPage user={user} onOpenBook={handleOpenBook} />
+              <LibraryPage user={user} onOpenBook={handleOpenBook} onNewStory={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); navigate('/'); }} />
             </div>
           }
         />
@@ -840,17 +928,17 @@ export default function App() {
             key={path}
             path={path}
             element={
-              <>
+              <SceneActionsContext.Provider value={sceneActionsValue}>
                 <div className="flex flex-1 overflow-hidden relative z-10">
                   <div className="flex-1 relative flex flex-col">
-                    <StoryCanvas scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={displayPrompt} />
+                    <StoryCanvas scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={displayPrompt} spreadPrompts={spreadPrompts} />
                     {!viewingReadOnly && storyStatus !== 'completed' && (
                       <ControlBar onSend={send} onSendAudio={sendAudio} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} />
                     )}
                   </div>
                   {directorOpen && !viewingReadOnly && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} />}
                 </div>
-              </>
+              </SceneActionsContext.Provider>
             }
           />
         ))}

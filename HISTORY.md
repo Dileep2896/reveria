@@ -235,6 +235,86 @@
 - Fixed ExplorePage not passing `status`/`is_public` in `onOpenBook` payload
   - Was causing own completed books opened from Explore to default to 'draft' status
 
+**Session 18: Per-Scene Actions — Regen Image, Regen Scene, Delete**
+
+- Implemented three new scene-level editing operations via WebSocket:
+  - **Regen Image**: regenerates only the illustration for a scene (keeps text)
+  - **Regen Scene**: rewrites scene text via Gemini + regenerates image + audio in parallel
+  - **Delete Scene**: removes scene from Firestore with narrator history tracking
+- New backend helper `_rewrite_scene_text()` — uses Gemini with full story context for coherent rewrites
+- New WS message types: `regen_start`, `regen_done`, `regen_error`, `scene_deleted`
+- Auto-session recovery: scene actions auto-load story from Firestore if WS session was lost
+- Narrator history updated on regen/delete to maintain continuity (`[Scene X was rewritten/removed]`)
+- `total_scene_count` kept as high-water mark — deleted scene numbers never reused
+- Frontend `SceneActionsContext` provides `regenImage`, `regenScene`, `deleteScene` to SceneCard
+- `sceneBusy` Set tracks which scenes are actively processing
+- SceneCard hover reveals action buttons; busy state shows shimmer overlay with "Regenerating..." label
+- Deletion uses `sceneDeleteOut` animation (scale/rotate/blur exit, 500ms)
+
+**Session 19: Scene Titles & Narrator Improvements**
+
+- Changed Narrator scene marker format from `[SCENE]` to `[SCENE: <short evocative title>]`
+- Both manual and ADK pipelines parse and include `scene_title` (2–5 words) in scene data
+- SceneCard displays title in italic serif (`Playfair Display`) below scene badge
+- Scene count now configurable (1 or 2) via new ControlBar toggle buttons
+
+**Session 20: Custom Art Style Dropdown & Compact Audio**
+
+- Replaced standard `<select>` with custom glassmorphism dropdown for art style selection
+  - Portal-based floating menu positioned near trigger, `styleMenuIn` animation
+  - Checkmark on active option, hover highlights
+- Extracted compact audio player (`useCompactAudio` hook) with only-one-playing enforcement
+  - Small 20x20px button beside scene badge with inline progress bar
+  - Replaced full `AudioPlayer` component in SceneCard
+
+**Session 21: Save Optimization & Background Book Meta**
+
+- 3-tier save flow for both `handleSave` and `handleComplete`:
+  - Tier 1: `title_generated=true` → just update status (instant, no API call)
+  - Tier 2: `bookMeta` arrived from WS background task → use it + set flag (instant)
+  - Tier 3: No metadata → call API with spinner, write result, set flag
+- Backend now sends `book_meta` WS message when background title/cover generation completes
+- Cover generation retry logic: retries once on network/timeout errors, treats `safety_filter` as terminal
+- `findFallbackCover()` filters out base64 data URLs, prefers actual GCS URLs
+
+**Session 22: Toast Notification System**
+
+- Built global toast system (`ToastContext` + `ToastProvider`) with React portal rendering
+- Toast types: success (green), error (red), warning (amber), info (violet)
+- Glassmorphism cards with type-specific left border accent, icon, message, close button
+- Auto-dismiss with configurable duration (4s default), progress bar shrinks over time
+- Hover pauses countdown; max 5 toasts stacked; slide-in/out animations
+- Wired toasts throughout App.jsx:
+  - Save success/error, complete success/error, cover generation fallback warning
+- Wired toasts in useWebSocket:
+  - `book_meta` → info, `quota_exhausted` → warning with cooldown seconds, `error` → error
+  - `image_error` with `quota_exhausted` reason → warning (first occurrence per batch only)
+- Removed inline `book-error-toast` div from StoryCanvas (errors now go through toast system)
+
+**Session 23: Header Hover Effects & UI Polish**
+
+- Header button (`.header-btn`) hover effects:
+  - Glow lift: `translateY(-1px)` + box-shadow with `accent-primary-glow`
+  - Shimmer sweep: `::after` pseudo-element with `btnShimmer` animation (0.6s)
+  - Active press: `scale(0.97)` for tactile feedback
+  - Spring curve: `cubic-bezier(0.34, 1.56, 0.64, 1)`
+- Nav segment (`.header-nav-seg`) hover: glow underline via `inset box-shadow`
+- Theme toggle (`.header-theme-btn`) hover: 30° rotation + violet glow, scale-down on active
+- Dual-page prompt pills: shows separate prompts for left & right pages when different
+- Empty page placeholder: "The story continues..." with ornamental dividers
+- Enhanced book nav dots: active dot wider (24px) with stronger glow (12px)
+- Prompt pill styling: stronger glass background, larger padding, slightly bigger font
+
+**Session 24: Bug Fixes**
+
+- Fixed Library "New Story" button — now properly auto-saves current story + resets state (was just navigating to `/`)
+  - `LibraryPage` accepts `onNewStory` prop instead of using `useNavigate`
+  - Both empty-state CTA and "+" card use `onNewStory`
+- Page clamping: prevents viewing beyond available scenes on stale URLs or after deletions
+- WebSocket connection gating: waits for story state to resolve before opening connection
+- Image regen reveal uses distinct animation (`imageRegenReveal`) vs initial load (`imageFadeIn`)
+- Text regen animations: `textRegenLine` (blur-dissolve), `textRegenDropCap` (enlarge + glow)
+
 ---
 
 ## Current State (Feb 20, 2026)
@@ -243,7 +323,7 @@
 - Full text + image generation pipeline: prompt → Gemini 2.0 Flash → streamed scenes → Imagen 3 illustrations → interactive flipbook
 - Conversation continuity (story steering/continuation across multiple prompts)
 - Cross-batch character visual consistency via accumulated story text and character sheet merging
-- 6 art styles with visual pills
+- 6 art styles with custom glassmorphism dropdown
 - Genre quick-start from cover page
 - New Story reset (frontend + backend)
 - Dark/light glassmorphism theme
@@ -253,25 +333,32 @@
 - Instant snap-back on touch swipe past content pages
 - Production-ready Docker setup
 - Voice input via MediaRecorder (`useVoiceCapture.js`) with Gemini transcription
-- Cloud TTS narration per scene via Google Cloud Text-to-Speech (`tts_client.py`)
-- Director Agent with structured JSON analysis (`director.py`) — narrative arc, characters, tension, visual style
-- ADK orchestration pipeline (`orchestrator.py`) — SequentialAgent → ParallelAgent (Illustrator + Director + TTS)
-- Director Panel with glanceable visual summaries (chips, arc, tags, trend indicators) and collapsible detail text
+- Cloud TTS narration per scene with compact inline audio player
+- Director Agent with structured JSON analysis — narrative arc, characters, tension, visual style
+- ADK orchestration pipeline — SequentialAgent → ParallelAgent (Illustrator + Director + TTS)
+- Director Panel with glanceable visual summaries and collapsible detail text
 - Tension bar chart visualization with per-scene bars and trend indicators
 - Per-batch director data tracking — director analysis follows scene pagination
 - Firebase Auth (Google Sign-In) and Firestore persistence (stories, scenes, generations)
-- Save flow with AI-generated titles and cover images (first-save-only)
-- Library page with 3D book cards, favorites, status filters (All/Favorites/Saved/Completed), search, sort
-- Explore page with public story browsing, like system, liked filter, search, sort (Recent/Title/Author)
+- Save flow with 3-tier optimization (instant when metadata available, API call only on first save)
+- Background book meta generation via WebSocket (`book_meta` message)
+- Library page with 3D book cards, favorites, status filters, search, sort
+- Explore page with public story browsing, like system, liked filter, search, sort
 - Completed book protection — read-only regardless of entry point
 - URL-based routing with story resume on page reload
 - Image error handling with per-reason user messages
+- Per-scene actions: regenerate image, regenerate scene (text+image+audio), delete scene
+- Scene titles generated by Narrator (`[SCENE: Title]` markers)
+- Configurable scene count (1 or 2 per generation)
+- Global toast notification system (success/error/warning/info) with glassmorphism styling
+- Header button hover effects (glow lift, shimmer sweep, rotation, press feedback)
+- Auto-session recovery for scene actions when WS session is lost
 
 ### What Needs to Be Built
-- **Timeline Slider** — Scene timeline navigation in story canvas
 - **Firebase Hosting** — Deploy frontend SPA
 - **Cloud Run Deployment** — Deploy backend container
 - **Terraform IaC** — Automated cloud deployment scripts
+- **Demo Video** — 4-minute walkthrough for submission
 
 ### Known Issues / Improvements Needed
 - **react-pageflip limitations** — Mouse-based page flipping disabled due to unwanted drag behavior on page edges; 21 pre-allocated page slots exist to avoid React reconciliation conflicts

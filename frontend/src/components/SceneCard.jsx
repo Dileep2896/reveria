@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSceneActions } from '../contexts/SceneActionsContext';
 
 /* ── Check if browser has cached an image ── */
 function isImageCached(url) {
@@ -9,7 +10,7 @@ function isImageCached(url) {
 }
 
 /* ── Composing placeholder shown while waiting for image ── */
-export function SceneComposing({ sceneNumber, scale = 1 }) {
+export function SceneComposing({ sceneNumber, displayIndex, scale = 1 }) {
   return (
     <div style={{ animation: 'fadeIn 0.4s ease-out', display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Scene badge */}
@@ -24,7 +25,7 @@ export function SceneComposing({ sceneNumber, scale = 1 }) {
             border: '1px solid var(--glass-border-accent)',
           }}
         >
-          Scene {sceneNumber}
+          Scene {displayIndex ?? sceneNumber}
         </span>
         <span
           className="tracking-wide"
@@ -125,43 +126,33 @@ function cleanText(text) {
     .replace(/`(.*?)`/g, '$1');
 }
 
-/* ── Custom audio player matching glassmorphism theme ── */
-function AudioPlayer({ src, scale = 1 }) {
+/* ── Custom hook for audio playback (only-one-at-a-time logic) ── */
+function useCompactAudio(src) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const progressBarRef = useRef(null);
   const instanceId = useRef(Math.random().toString(36).slice(2));
   const playingRef = useRef(false);
 
-  // Keep ref in sync with state
   useEffect(() => { playingRef.current = playing; }, [playing]);
 
-  // Audio event listeners — stable, set up once
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const onTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
       setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0);
     };
-    const onLoaded = () => setDuration(audio.duration || 0);
-    const onEnded = () => { setPlaying(false); setProgress(0); setCurrentTime(0); };
+    const onEnded = () => { setPlaying(false); setProgress(0); };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('loadedmetadata', onLoaded);
     audio.addEventListener('ended', onEnded);
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('loadedmetadata', onLoaded);
       audio.removeEventListener('ended', onEnded);
     };
   }, []);
 
-  /* ── Only-one-at-a-time: pause when another player starts ── */
   useEffect(() => {
     const onOtherPlay = (e) => {
       if (e.detail !== instanceId.current && playingRef.current) {
@@ -186,120 +177,14 @@ function AudioPlayer({ src, scale = 1 }) {
     }
   };
 
-  const seek = (e) => {
-    const audio = audioRef.current;
-    const bar = progressBarRef.current;
-    if (!audio || !bar || !audio.duration) return;
-    const rect = bar.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    audio.currentTime = pct * audio.duration;
-  };
-
-  const fmt = (t) => {
-    if (!t || !isFinite(t)) return '0:00';
-    const m = Math.floor(t / 60);
-    const s = Math.floor(t % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
-
-  return (
-    <div
-      style={{
-        flexShrink: 0,
-        marginTop: `${4 * scale}px`,
-        paddingTop: `${4 * scale}px`,
-        borderTop: '1px solid var(--glass-border)',
-        animation: 'fadeIn 0.4s ease',
-      }}
-    >
-      <audio ref={audioRef} src={src} preload="metadata" />
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: `${6 * scale}px`,
-          padding: `${4 * scale}px ${6 * scale}px`,
-          borderRadius: `${8 * scale}px`,
-          background: 'var(--glass-bg)',
-          border: '1px solid var(--glass-border)',
-        }}
-      >
-        {/* Play/Pause button */}
-        <button
-          onClick={togglePlay}
-          style={{
-            width: `${22 * scale}px`,
-            height: `${22 * scale}px`,
-            borderRadius: '50%',
-            border: 'none',
-            background: playing ? 'var(--accent-primary)' : 'var(--accent-primary-soft)',
-            color: playing ? 'var(--text-inverse)' : 'var(--accent-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            flexShrink: 0,
-            boxShadow: playing ? '0 0 10px var(--accent-primary-glow)' : 'none',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          {playing ? (
-            <svg width={10 * scale} height={10 * scale} viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="4" width="4" height="16" rx="1" />
-              <rect x="14" y="4" width="4" height="16" rx="1" />
-            </svg>
-          ) : (
-            <svg width={10 * scale} height={10 * scale} viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
-
-        {/* Time */}
-        <span style={{ fontSize: `${9 * scale}px`, color: 'var(--text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums', minWidth: `${28 * scale}px` }}>
-          {fmt(currentTime)}
-        </span>
-
-        {/* Progress bar */}
-        <div
-          ref={progressBarRef}
-          onClick={seek}
-          style={{
-            flex: 1,
-            height: `${4 * scale}px`,
-            borderRadius: `${2 * scale}px`,
-            background: 'var(--glass-border)',
-            cursor: 'pointer',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              height: '100%',
-              width: `${progress}%`,
-              borderRadius: `${2 * scale}px`,
-              background: 'var(--accent-primary)',
-              boxShadow: '0 0 6px var(--accent-primary-glow)',
-              transition: 'width 0.1s linear',
-            }}
-          />
-        </div>
-
-        {/* Duration */}
-        <span style={{ fontSize: `${9 * scale}px`, color: 'var(--text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums', minWidth: `${28 * scale}px`, textAlign: 'right' }}>
-          {fmt(duration)}
-        </span>
-      </div>
-    </div>
-  );
+  return { audioRef, playing, progress, togglePlay };
 }
 
 /* ── Revealed scene with cinematic animation ── */
-function SceneRevealed({ scene, scale = 1 }) {
+function SceneRevealed({ scene, scale = 1, displayIndex }) {
+  const { regenImage, regenScene, deleteScene, sceneBusy, isReadOnly } = useSceneActions();
+  const isBusy = sceneBusy.has(scene.scene_number);
+
   const isError = scene.image_url === 'error';
   const cached = isError || isImageCached(scene.image_url);
   // Hydrated / library-opened scenes skip all reveal animations
@@ -333,6 +218,19 @@ function SceneRevealed({ scene, scale = 1 }) {
     }
   }, [imageLoaded, showError, noImage]);
 
+  // Reset image state when URL changes (e.g. regen)
+  const prevImageUrl = useRef(scene.image_url);
+  const wasRegenerated = useRef(false);
+  useEffect(() => {
+    if (scene.image_url && scene.image_url !== prevImageUrl.current) {
+      // Only mark as regen if we had a previous image (not initial load)
+      wasRegenerated.current = !!prevImageUrl.current;
+      prevImageUrl.current = scene.image_url;
+      setImageLoaded(false);
+      setImageFailed(false);
+    }
+  }, [scene.image_url]);
+
   useEffect(() => {
     if (scene.image_url && !isError && !imageLoaded && !imageFailed) {
       const img = new Image();
@@ -342,13 +240,30 @@ function SceneRevealed({ scene, scale = 1 }) {
     }
   }, [scene.image_url, isError, imageLoaded, imageFailed]);
 
+  // Track text changes for regen animation
+  const prevText = useRef(scene.text);
+  const [textRegenKey, setTextRegenKey] = useState(0);
+  const textWasRegenerated = useRef(false);
+  useEffect(() => {
+    if (scene.text && scene.text !== prevText.current && prevText.current) {
+      textWasRegenerated.current = true;
+      setTextRegenKey((k) => k + 1);
+    }
+    prevText.current = scene.text;
+  }, [scene.text]);
+
   const clean = cleanText(scene.text);
   const sentences = clean.match(/[^.!?]+[.!?]+[\s]*/g) || [clean];
   const firstChar = clean.charAt(0);
   const restOfFirstSentence = sentences[0]?.slice(1) || '';
   const remainingSentences = sentences.slice(1);
 
-  const skip = hasAnimated.current;
+  const isRegen = textWasRegenerated.current;
+  const skip = hasAnimated.current && !isRegen;
+  const animateText = (showText && !hasAnimated.current) || isRegen;
+
+  // Audio hook — always called (Rules of Hooks), guarded by src presence in render
+  const audio = useCompactAudio(scene.audio_url);
 
   return (
     <div
@@ -359,43 +274,119 @@ function SceneRevealed({ scene, scale = 1 }) {
         ...(skip ? {} : { animation: 'sceneReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1)' }),
       }}
     >
-      {/* Page number + Scene badge */}
-      <div className="flex items-center gap-2" style={{ marginBottom: `${6 * scale}px`, flexShrink: 0 }}>
-        <span
-          style={{
-            fontSize: `${10 * scale}px`,
-            fontStyle: 'italic',
-            color: 'var(--text-muted)',
-            opacity: 0.5,
-            fontVariantNumeric: 'tabular-nums',
-            minWidth: `${12 * scale}px`,
-          }}
-        >
-          {scene.scene_number}
-        </span>
-        <span
-          className="font-bold uppercase tracking-widest rounded-full"
-          style={{
-            fontSize: `${9 * scale}px`,
-            padding: `${3 * scale}px ${8 * scale}px`,
-            background: 'var(--accent-primary-soft)',
-            color: 'var(--accent-primary)',
-            border: '1px solid var(--glass-border-accent)',
-          }}
-        >
-          Scene {scene.scene_number}
-        </span>
+      {/* Hidden audio element */}
+      {scene.audio_url && (
+        <audio ref={audio.audioRef} src={scene.audio_url} preload="metadata" style={{ display: 'none' }} />
+      )}
+
+      {/* Page number + Scene badge + audio button */}
+      <div style={{ marginBottom: `${6 * scale}px`, flexShrink: 0 }}>
+        <div className="flex items-center gap-2">
+          <span
+            style={{
+              fontSize: `${10 * scale}px`,
+              fontStyle: 'italic',
+              color: 'var(--text-muted)',
+              opacity: 0.5,
+              fontVariantNumeric: 'tabular-nums',
+              minWidth: `${12 * scale}px`,
+            }}
+          >
+            {displayIndex ?? scene.scene_number}
+          </span>
+          <span
+            className="font-bold uppercase tracking-widest rounded-full"
+            style={{
+              fontSize: `${9 * scale}px`,
+              padding: `${3 * scale}px ${8 * scale}px`,
+              background: 'var(--accent-primary-soft)',
+              color: 'var(--accent-primary)',
+              border: '1px solid var(--glass-border-accent)',
+            }}
+          >
+            Scene {displayIndex ?? scene.scene_number}
+          </span>
+          {scene.audio_url && (
+            <button
+              onClick={audio.togglePlay}
+              style={{
+                width: `${20 * scale}px`,
+                height: `${20 * scale}px`,
+                borderRadius: '50%',
+                border: 'none',
+                background: audio.playing ? 'var(--accent-primary)' : 'var(--accent-primary-soft)',
+                color: audio.playing ? 'var(--text-inverse)' : 'var(--accent-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+                boxShadow: audio.playing ? '0 0 10px var(--accent-primary-glow)' : 'none',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {audio.playing ? (
+                <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                  <rect x="14" y="4" width="4" height="16" rx="1" />
+                </svg>
+              ) : (
+                <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+          )}
+        </div>
+        {scene.scene_title && (
+          <div
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontSize: `${11 * scale}px`,
+              color: 'var(--text-secondary)',
+              fontStyle: 'italic',
+              letterSpacing: '0.02em',
+              marginTop: `${3 * scale}px`,
+              marginLeft: `${12 * scale + 8}px`,
+            }}
+          >
+            {scene.scene_title}
+          </div>
+        )}
+        {/* Audio progress bar — shown when playing */}
+        {audio.playing && (
+          <div
+            style={{
+              marginTop: `${4 * scale}px`,
+              height: `${2 * scale}px`,
+              background: 'var(--glass-border)',
+              borderRadius: `${1 * scale}px`,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${audio.progress}%`,
+                background: 'var(--accent-primary)',
+                boxShadow: '0 0 4px var(--accent-primary-glow)',
+                transition: 'width 0.1s linear',
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Image — constrained to ~35% of page */}
       <div
-        className="rounded-lg overflow-hidden"
+        className="scene-image-wrap rounded-lg overflow-hidden"
         style={{
           flex: '0 0 35%',
           flexShrink: 0,
           marginBottom: `${6 * scale}px`,
           background: 'var(--book-page-bg)',
           position: 'relative',
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08), 0 2px 8px rgba(0,0,0,0.3)',
         }}
       >
         {showError || (preloaded && !scene.image_url) ? (
@@ -457,49 +448,238 @@ function SceneRevealed({ scene, scale = 1 }) {
             )}
             <img
               src={scene.image_url}
-              alt={`Scene ${scene.scene_number}`}
+              alt={`Scene ${displayIndex ?? scene.scene_number}`}
               style={{
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
                 display: 'block',
-                transform: 'scale(1.04)',
+                transform: imageLoaded ? 'scale(1.04)' : 'scale(1.04)',
                 opacity: imageLoaded ? 1 : 0,
-                animation: skip ? 'none' : imageLoaded ? 'imageFadeIn 0.8s ease-out' : 'none',
+                animation: skip && !wasRegenerated.current
+                  ? 'none'
+                  : imageLoaded
+                    ? wasRegenerated.current
+                      ? 'imageRegenReveal 0.9s cubic-bezier(0.22, 1, 0.36, 1)'
+                      : 'imageFadeIn 0.8s ease-out'
+                    : 'none',
                 position: 'relative',
                 zIndex: 2,
               }}
+              onAnimationEnd={() => { wasRegenerated.current = false; }}
             />
           </>
+        )}
+
+        {/* Busy overlay — shimmer + icon */}
+        {isBusy && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 10,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(0, 0, 0, 0.55)',
+              backdropFilter: 'blur(2px)',
+              borderRadius: 'inherit',
+            }}
+          >
+            {/* Shimmer sweep */}
+            <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit' }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 40%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 60%, transparent 100%)',
+                  animation: 'shimmer 2s ease-in-out infinite',
+                }}
+              />
+            </div>
+            {/* Icon + label */}
+            <div
+              style={{
+                width: `${32 * scale}px`,
+                height: `${32 * scale}px`,
+                borderRadius: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                boxShadow: '0 0 20px var(--accent-primary-glow)',
+                animation: 'pulse 2s ease-in-out infinite',
+                marginBottom: `${6 * scale}px`,
+              }}
+            >
+              <svg
+                width={14 * scale} height={14 * scale} viewBox="0 0 24 24" fill="none"
+                stroke="var(--accent-primary)" strokeWidth="1.5"
+                strokeLinecap="round" strokeLinejoin="round"
+              >
+                <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                <path d="M2 2l7.586 7.586" />
+                <circle cx="11" cy="11" r="2" />
+              </svg>
+            </div>
+            <span
+              style={{
+                fontSize: `${9 * scale}px`,
+                fontWeight: 500,
+                color: 'rgba(255,255,255,0.7)',
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                position: 'relative',
+              }}
+            >
+              Regenerating...
+            </span>
+          </div>
+        )}
+
+        {/* Action buttons — hover to reveal */}
+        {!isReadOnly && !isBusy && (
+          <div
+            className="scene-action-bar"
+            style={{
+              position: 'absolute',
+              top: `${4 * scale}px`,
+              right: `${4 * scale}px`,
+              zIndex: 10,
+              display: 'flex',
+              gap: `${3 * scale}px`,
+            }}
+          >
+            {/* Regen Image */}
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); }}
+              onClick={(e) => { e.stopPropagation(); regenImage?.(scene.scene_number, scene.text); }}
+              title="Regenerate image"
+              style={{
+                width: `${22 * scale}px`,
+                height: `${22 * scale}px`,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'rgba(0,0,0,0.6)',
+                backdropFilter: 'blur(8px)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'background 0.15s ease',
+                touchAction: 'manipulation',
+                position: 'relative',
+                zIndex: 20,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.6)'}
+            >
+              <svg width={11 * scale} height={11 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </button>
+            {/* Regen Scene */}
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); }}
+              onClick={(e) => { e.stopPropagation(); regenScene?.(scene.scene_number, scene.text); }}
+              title="Regenerate scene"
+              style={{
+                width: `${22 * scale}px`,
+                height: `${22 * scale}px`,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'rgba(0,0,0,0.6)',
+                backdropFilter: 'blur(8px)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'background 0.15s ease',
+                touchAction: 'manipulation',
+                position: 'relative',
+                zIndex: 20,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.6)'}
+            >
+              <svg width={11 * scale} height={11 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+            </button>
+            {/* Delete Scene */}
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); }}
+              onClick={(e) => { e.stopPropagation(); deleteScene?.(scene.scene_number); }}
+              title="Delete scene"
+              style={{
+                width: `${22 * scale}px`,
+                height: `${22 * scale}px`,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'rgba(120,20,20,0.6)',
+                backdropFilter: 'blur(8px)',
+                color: '#ff9999',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'background 0.15s ease',
+                touchAction: 'manipulation',
+                position: 'relative',
+                zIndex: 20,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(160,30,30,0.8)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(120,20,20,0.6)'}
+            >
+              <svg width={11 * scale} height={11 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          </div>
         )}
       </div>
 
       {/* Decorative divider */}
-      <div className="flex items-center gap-2" style={{ flexShrink: 0, marginBottom: `${4 * scale}px` }}>
+      <div key={`divider-${textRegenKey}`} className="flex items-center gap-2" style={{ flexShrink: 0, marginBottom: `${4 * scale}px` }}>
         <div
           className="h-px flex-1"
           style={{
             background: 'linear-gradient(90deg, var(--accent-primary-glow), transparent)',
-            animation: showText && !skip ? 'dividerGrow 0.6s ease-out' : 'none',
+            animation: animateText ? 'dividerGrow 0.6s ease-out' : 'none',
             transformOrigin: 'left',
             transform: showText || skip ? 'scaleX(1)' : 'scaleX(0)',
           }}
         />
-        <svg
-          width="8" height="8" viewBox="0 0 12 12"
-          fill="var(--accent-primary)"
+        <div
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: `${3 * scale}px`,
             opacity: showText || skip ? 0.4 : 0,
             transition: skip ? 'none' : 'opacity 0.4s ease 0.3s',
+            color: 'var(--accent-primary)',
+            fontSize: `${8 * scale}px`,
+            lineHeight: 1,
           }}
         >
-          <path d="M6 0L7.5 4.5L12 6L7.5 7.5L6 12L4.5 7.5L0 6L4.5 4.5Z" />
-        </svg>
+          <span style={{ fontSize: `${5 * scale}px` }}>&#9679;</span>
+          <span style={{ fontSize: `${3 * scale}px` }}>&#9679;</span>
+          <span style={{ fontSize: `${5 * scale}px` }}>&#9679;</span>
+        </div>
         <div
           className="h-px flex-1"
           style={{
             background: 'linear-gradient(270deg, var(--accent-primary-glow), transparent)',
-            animation: showText && !skip ? 'dividerGrow 0.6s ease-out' : 'none',
+            animation: animateText ? 'dividerGrow 0.6s ease-out' : 'none',
             transformOrigin: 'right',
             transform: showText || skip ? 'scaleX(1)' : 'scaleX(0)',
           }}
@@ -517,12 +697,15 @@ function SceneRevealed({ scene, scale = 1 }) {
         }}
       >
         <div
+          key={textRegenKey}
+          onAnimationEnd={() => { textWasRegenerated.current = false; }}
           style={{
             fontFamily: "'Lora', Georgia, 'Times New Roman', serif",
             color: 'var(--book-page-text, var(--text-primary))',
-            lineHeight: '1.7',
+            lineHeight: '1.85',
             letterSpacing: '0.01em',
             fontSize: `${12 * scale}px`,
+            ...(isRegen ? { animation: 'textRegenContainer 0.5s ease-out' } : {}),
           }}
         >
           {/* Drop cap */}
@@ -533,11 +716,16 @@ function SceneRevealed({ scene, scale = 1 }) {
               fontWeight: 700,
               float: 'left',
               lineHeight: '0.8',
-              marginRight: '0.1em',
-              marginTop: '0.06em',
+              marginRight: '0.12em',
+              marginTop: '0.05em',
+              paddingRight: '0.02em',
               color: 'var(--accent-primary)',
               textShadow: '0 0 20px var(--accent-primary-glow)',
-              animation: showText && !skip ? 'dropCapReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
+              animation: animateText
+                ? isRegen
+                  ? 'textRegenDropCap 0.6s cubic-bezier(0.22, 1, 0.36, 1)'
+                  : 'dropCapReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1)'
+                : 'none',
             }}
           >
             {firstChar}
@@ -546,7 +734,11 @@ function SceneRevealed({ scene, scale = 1 }) {
           <span
             style={{
               opacity: 1,
-              animation: showText && !skip ? 'textRevealLine 0.6s ease-out 0.15s both' : 'none',
+              animation: animateText
+                ? isRegen
+                  ? 'textRegenLine 0.5s ease-out 0.1s both'
+                  : 'textRevealLine 0.6s ease-out 0.15s both'
+                : 'none',
             }}
           >
             {restOfFirstSentence}
@@ -557,8 +749,10 @@ function SceneRevealed({ scene, scale = 1 }) {
               key={i}
               style={{
                 opacity: 1,
-                animation: showText && !skip
-                  ? `textRevealLine 0.6s ease-out ${0.25 + i * 0.08}s both`
+                animation: animateText
+                  ? isRegen
+                    ? `textRegenLine 0.5s ease-out ${0.15 + i * 0.06}s both`
+                    : `textRevealLine 0.6s ease-out ${0.25 + i * 0.08}s both`
                   : 'none',
               }}
             >
@@ -581,19 +775,20 @@ function SceneRevealed({ scene, scale = 1 }) {
         />
       </div>
 
-      {scene.audio_url && (
-        <AudioPlayer src={scene.audio_url} scale={scale} />
-      )}
     </div>
   );
 }
 
 /* ── Main SceneCard: decides composing vs revealed ── */
-export default function SceneCard({ scene, scale = 1 }) {
-  // Show revealed state as soon as text is available (don't wait for image)
-  if (scene.text) {
-    return <SceneRevealed scene={scene} scale={scale} />;
-  }
+export default function SceneCard({ scene, scale = 1, displayIndex }) {
+  const wrapperStyle = scene._deleting
+    ? { animation: 'sceneDeleteOut 0.5s ease-in forwards', height: '100%' }
+    : { height: '100%' };
 
-  return <SceneComposing sceneNumber={scene.scene_number} scale={scale} />;
+  // Show revealed state as soon as text is available (don't wait for image)
+  const content = scene.text
+    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} />
+    : <SceneComposing sceneNumber={scene.scene_number} displayIndex={displayIndex} scale={scale} />;
+
+  return <div style={wrapperStyle}>{content}</div>;
 }

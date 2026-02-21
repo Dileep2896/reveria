@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   db,
   collection,
@@ -169,8 +168,7 @@ function BookCard({ book, onOpen, onDelete, onPublish, onUnpublish, onToggleFavo
   );
 }
 
-export default function LibraryPage({ user, onOpenBook }) {
-  const navigate = useNavigate();
+export default function LibraryPage({ user, onOpenBook, onNewStory }) {
   const { books, setBooks, loading, error, refresh } = useLibraryBooks(user);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recent');
@@ -376,7 +374,7 @@ export default function LibraryPage({ user, onOpenBook }) {
             hit Save to start building your collection.
           </p>
 
-          <button className="library-empty-cta" onClick={() => navigate('/')}>
+          <button className="library-empty-cta" onClick={onNewStory}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 20h9" />
               <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
@@ -468,7 +466,7 @@ export default function LibraryPage({ user, onOpenBook }) {
           ))}
 
           {/* Create New Story card */}
-          <div className="book-container book-new-card" onClick={() => navigate('/')}>
+          <div className="book-container book-new-card" onClick={onNewStory}>
             <div className="book-new-inner">
               <div className="book-new-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

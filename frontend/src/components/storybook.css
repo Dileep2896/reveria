@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: center;
   flex: 1;
-  padding: clamp(0.5rem, 1.5vw, 1.5rem) clamp(0.5rem, 1vw, 1rem) clamp(3.5rem, 5vw, 4.5rem);
+  padding: clamp(0.25rem, 0.5vw, 0.5rem) clamp(0.5rem, 1vw, 1rem) clamp(0.25rem, 0.5vw, 0.5rem);
   overflow: hidden;
 }
 
@@ -121,6 +121,20 @@
   margin-top: 6px;
 }
 
+/* Dual-prompt pill container (when left & right pages have different prompts) */
+.book-prompt-pills {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 auto 8px;
+  max-width: 100%;
+}
+
+.book-prompt-pills .book-prompt-pill {
+  max-width: 50%;
+  margin: 0;
+}
+
 /* Prompt pill above the book */
 .book-prompt-pill {
   display: flex;
@@ -129,9 +143,9 @@
   gap: 6px;
   max-width: 520px;
   margin: 0 auto 8px;
-  padding: 4px 14px;
+  padding: 6px 18px;
   border-radius: 999px;
-  background: var(--glass-bg);
+  background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border);
   backdrop-filter: var(--glass-blur);
   color: var(--text-secondary);
@@ -140,7 +154,7 @@
 
 .book-prompt-pill p {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   line-height: 1.5;
   white-space: nowrap;
   overflow: hidden;
@@ -203,7 +217,7 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  padding: calc(16px * var(--page-scale, 1)) calc(20px * var(--page-scale, 1));
+  padding: calc(16px * var(--page-scale, 1)) calc(24px * var(--page-scale, 1));
   padding-bottom: calc(24px * var(--page-scale, 1));
 }
 
@@ -507,10 +521,10 @@
 }
 
 .book-nav-dot.active {
-  width: 20px;
+  width: 24px;
   border-radius: 3px;
   background: var(--accent-primary);
-  box-shadow: 0 0 8px var(--accent-primary-glow);
+  box-shadow: 0 0 12px var(--accent-primary-glow);
 }
 
 /* ---- Keyframes (explicit, not relying on Tailwind) ---- */
@@ -556,4 +570,36 @@
     max-width: 60%;
     padding: 3px 10px;
   }
+}
+
+/* ============================================
+   SCENE ACTION BUTTONS (hover-to-reveal)
+   ============================================ */
+.scene-image-wrap .scene-action-bar {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.scene-image-wrap:hover .scene-action-bar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.scene-action-bar button {
+  pointer-events: auto;
+}
+
+.scene-action-bar button svg {
+  pointer-events: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes sceneDeleteOut {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.95); filter: blur(2px); }
+  100% { opacity: 0; transform: scale(0.85) rotateY(10deg); filter: blur(6px); }
 }

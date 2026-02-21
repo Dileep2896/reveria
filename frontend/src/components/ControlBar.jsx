@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import useVoiceCapture from '../hooks/useVoiceCapture';
 
 const ART_STYLES = [
@@ -13,6 +14,31 @@ const ART_STYLES = [
 export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue }) {
   const [focused, setFocused] = useState(false);
   const [artStyle, setArtStyle] = useState('cinematic');
+  const [sceneCount, setSceneCount] = useState(2);
+  const [styleOpen, setStyleOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const openMenu = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+    }
+    setStyleOpen(true);
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!styleOpen) return;
+    const onClickOutside = (e) => {
+      if (menuRef.current?.contains(e.target)) return;
+      if (triggerRef.current?.contains(e.target)) return;
+      setStyleOpen(false);
+    };
+    document.addEventListener('pointerdown', onClickOutside);
+    return () => document.removeEventListener('pointerdown', onClickOutside);
+  }, [styleOpen]);
 
   const { recording, startRecording, stopRecording } = useVoiceCapture({
     onAudioCaptured: (base64, mimeType) => {
@@ -25,7 +51,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!inputValue.trim() || isDisabled) return;
-    onSend(inputValue.trim(), { artStyle });
+    onSend(inputValue.trim(), { artStyle, sceneCount });
     setInputValue('');
   };
   const hasText = inputValue.trim().length > 0;
@@ -69,15 +95,54 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
           )}
 
           {/* Art style dropdown */}
-          <select
-            value={artStyle}
-            onChange={(e) => setArtStyle(e.target.value)}
-            className="control-style-select"
-          >
-            {ART_STYLES.map(({ key, label }) => (
-              <option key={key} value={key}>{label}</option>
+          <div className="control-style-dropdown">
+            <button
+              ref={triggerRef}
+              type="button"
+              className="control-style-trigger"
+              onClick={() => styleOpen ? setStyleOpen(false) : openMenu()}
+            >
+              <span>{ART_STYLES.find((s) => s.key === artStyle)?.label}</span>
+              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, transition: 'transform 0.2s ease', transform: styleOpen ? 'rotate(180deg)' : 'none' }}>
+                <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {styleOpen && menuPos && createPortal(
+              <div ref={menuRef} className="control-style-menu" style={{ bottom: menuPos.bottom, left: menuPos.left }}>
+                {ART_STYLES.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`control-style-option${key === artStyle ? ' active' : ''}`}
+                    onClick={() => { setArtStyle(key); setStyleOpen(false); }}
+                  >
+                    {key === artStyle && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>,
+              document.body
+            )}
+          </div>
+
+          {/* Scene count toggle (1 or 2) */}
+          <div className="control-scene-count">
+            {[1, 2].map((n) => (
+              <button
+                key={n}
+                type="button"
+                className={`control-scene-btn${sceneCount === n ? ' active' : ''}`}
+                onClick={() => setSceneCount(n)}
+                title={`Generate ${n} scene${n > 1 ? 's' : ''}`}
+              >
+                {n}
+              </button>
             ))}
-          </select>
+          </div>
 
           <div className="control-input-divider" />
 

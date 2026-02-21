@@ -18,6 +18,7 @@ instance (not via ADK session state, which returns copies).
 
 import asyncio
 import logging
+import re
 from typing import Any, Callable, Awaitable
 
 from google.adk.agents import BaseAgent, SequentialAgent, ParallelAgent
@@ -62,40 +63,69 @@ class NarratorADKAgent(BaseAgent):
         s = self.shared
         buffer = ""
         scenes: list[dict[str, Any]] = []
+        # Track the title parsed from the most recent [SCENE: ...] marker
+        pending_title: str | None = None
 
-        async for chunk in self.narrator.generate(s.user_input, scene_count=s.scene_count):
+        limit = s.scene_count
+        limit_hit = False
+
+        async for chunk in self.narrator.generate(s.user_input, scene_count=limit):
+            if limit_hit:
+                break
             buffer += chunk
 
-            while "[SCENE]" in buffer:
-                before, _, buffer = buffer.partition("[SCENE]")
-                text = before.strip()
-                if text:
+            while "[SCENE" in buffer:
+                # Find the start of a [SCENE marker
+                idx = buffer.index("[SCENE")
+                # Check if we have the closing bracket yet
+                close = buffer.find("]", idx)
+                if close == -1:
+                    break  # Wait for more data
+
+                before = buffer[:idx].strip()
+                marker = buffer[idx:close + 1]
+                buffer = buffer[close + 1:]
+
+                # Emit any text before this marker
+                if before:
                     s.total_scene_count += 1
                     if s.ws_callback:
                         await s.ws_callback({
                             "type": "text",
-                            "content": text,
+                            "content": before,
                             "scene_number": s.total_scene_count,
+                            "scene_title": pending_title,
                         })
                     scenes.append({
                         "scene_number": s.total_scene_count,
-                        "text": text,
+                        "text": before,
+                        "scene_title": pending_title,
                     })
+                    if len(scenes) >= limit:
+                        limit_hit = True
+                        break
 
-        # Handle remaining text
-        remaining = buffer.strip()
-        if remaining:
-            s.total_scene_count += 1
-            if s.ws_callback:
-                await s.ws_callback({
-                    "type": "text",
-                    "content": remaining,
+                # Extract title from marker like [SCENE: Title Here]
+                colon_match = re.match(r"\[SCENE:\s*(.+)\]", marker)
+                pending_title = colon_match.group(1).strip() if colon_match else None
+
+        # Handle remaining text (only if we haven't hit the limit)
+        if not limit_hit:
+            remaining = buffer.strip()
+            if remaining:
+                s.total_scene_count += 1
+                if s.ws_callback:
+                    await s.ws_callback({
+                        "type": "text",
+                        "content": remaining,
+                        "scene_number": s.total_scene_count,
+                        "scene_title": pending_title,
+                    })
+                scenes.append({
                     "scene_number": s.total_scene_count,
+                    "text": remaining,
+                    "scene_title": pending_title,
                 })
-            scenes.append({
-                "scene_number": s.total_scene_count,
-                "text": remaining,
-            })
 
         # Write back for downstream agents
         s.scenes = scenes

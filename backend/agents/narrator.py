@@ -9,7 +9,8 @@ immersive narratives. You write in a cinematic style with rich sensory details.
 RULES:
 - Write in present tense, third person
 - Each response should contain exactly {scene_count} scenes
-- Mark scene breaks with [SCENE] on its own line
+- Mark scene breaks with [SCENE: <short evocative title>] on its own line
+- After each [SCENE] marker, include a short evocative title (2-5 words) inside the brackets
 - Open each scene with a vivid sensory detail (sight, sound, smell, touch)
 - Build tension progressively across scenes
 - Include dialogue using quotation marks
@@ -21,15 +22,14 @@ seamlessly weave the change into the next scene
 - Write in PLAIN TEXT only. Do NOT use markdown formatting like *asterisks*, **bold**, \
 _italics_, or any other markup. Use plain words for emphasis instead.
 - For ship names or titles, just use the name directly without any formatting
+- Do NOT include scene numbers or meta-commentary. Scene titles go only inside [SCENE: ...] brackets.
 
 FORMAT:
-[SCENE]
+[SCENE: The Creaking Door]
 <scene text with dialogue and sensory details>
 
-[SCENE]
-<next scene>
-
-Do NOT include scene numbers, titles, or meta-commentary. Just write the story."""
+[SCENE: Shadows Within]
+<next scene>"""
 
 
 class Narrator:
