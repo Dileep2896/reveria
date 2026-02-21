@@ -11,9 +11,8 @@ const ART_STYLES = [
   { key: 'pencil', label: 'Pencil Sketch' },
 ];
 
-export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue }) {
+export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle }) {
   const [focused, setFocused] = useState(false);
-  const [artStyle, setArtStyle] = useState('cinematic');
   const [sceneCount, setSceneCount] = useState(2);
   const [styleOpen, setStyleOpen] = useState(false);
   const [menuPos, setMenuPos] = useState(null);

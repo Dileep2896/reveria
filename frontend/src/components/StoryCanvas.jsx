@@ -48,7 +48,7 @@ const CoverPage = forwardRef(function CoverPage({ onGenreClick }, ref) {
   );
 });
 
-const EmptyPageContent = ({ scale = 1 }) => (
+const EmptyPageContent = memo(({ scale = 1 }) => (
   <div
     style={{
       display: 'flex',
@@ -124,7 +124,7 @@ const EmptyPageContent = ({ scale = 1 }) => (
       Type a prompt to add more scenes to your story
     </p>
   </div>
-);
+));
 
 const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWithinSpread, pageNum, scale, hasScenes, displayIndex }, ref) {
   // Pages within an active spread show as parchment; pages beyond are invisible
@@ -262,6 +262,9 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
   useEffect(() => {
     // Need book + bookSize (book is only rendered when bookSize is set)
     if (!bookSize) return;
+    // Don't clamp during generation — auto-advance positions the book ahead
+    // of where new scenes will land; clamping would fight it and pull back.
+    if (generating) return;
     const maxValid = scenes.length;
     // Nothing to clamp yet (scenes still loading) — wait
     if (maxValid === 0) {
@@ -285,7 +288,7 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
       }, clampedRef.current ? 50 : 400);
     });
     return () => cancelAnimationFrame(raf);
-  }, [scenes.length, currentPage, bookSize]);
+  }, [scenes.length, currentPage, bookSize, generating]);
 
   // Last page index that has real content (cover=0, scenes=1..N, generating=N+1)
   const lastFilledPage = showGenerating ? scenes.length + 1 : scenes.length;

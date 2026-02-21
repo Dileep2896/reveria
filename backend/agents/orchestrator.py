@@ -155,7 +155,8 @@ class IllustratorADKAgent(BaseAgent):
             scene_num = scene["scene_number"]
             text = scene["text"]
             try:
-                image_data, error_reason = await self.illustrator.generate_for_scene(text)
+                image_data, error_reason, tier = await self.illustrator.generate_for_scene(text)
+                scene["image_tier"] = tier
                 if s.ws_callback:
                     if image_data:
                         # Upload to GCS
@@ -166,6 +167,7 @@ class IllustratorADKAgent(BaseAgent):
                                 "type": "image",
                                 "content": gcs_url,
                                 "scene_number": scene_num,
+                                "tier": tier,
                             })
                         except Exception as e:
                             logger.error("GCS image upload error for scene %d: %s", scene_num, e)
@@ -174,12 +176,14 @@ class IllustratorADKAgent(BaseAgent):
                                 "type": "image",
                                 "content": image_data,
                                 "scene_number": scene_num,
+                                "tier": tier,
                             })
                     else:
                         await s.ws_callback({
                             "type": "image_error",
                             "scene_number": scene_num,
                             "reason": error_reason or "generation_failed",
+                            "tier": tier,
                         })
             except Exception as e:
                 logger.error("Image generation error for scene %d: %s", scene_num, e)

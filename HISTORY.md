@@ -317,13 +317,109 @@
 
 ---
 
-## Current State (Feb 20, 2026)
+### Day 4 (Feb 21, 2026)
+
+**Session 25: Cross-Scene Image Consistency — Hybrid Prompt Architecture**
+
+- Rewrote the Illustrator's image prompt pipeline to solve character inconsistency across scenes:
+  - **Root cause**: `_create_image_prompt()` asked Gemini to synthesize a full prompt under 100 words. Gemini dropped character details (age, eye color, skin tone, clothing) to fit the limit. Imagen received "woman in dark dress" instead of the full description.
+  - **Solution**: Hybrid prompt construction — split into two stages:
+    1. `_identify_scene_characters()` — new Gemini call (temp 0.0, ~50 tokens) identifies which characters appear in each scene
+    2. `_create_image_prompt()` rewritten — Gemini writes scene composition only (setting, lighting, mood, camera angle), then character descriptions are **prepended verbatim** from the reference sheet
+  - New `SCENE_COMPOSER_INSTRUCTION` replaces `PROMPT_ENGINEER_INSTRUCTION` — explicitly tells Gemini "do NOT describe character appearance"
+  - New `CHARACTER_IDENTIFIER_INSTRUCTION` — identifies characters present in a scene
+  - New `_filter_character_descriptions()` — extracts relevant character blocks from the full reference sheet
+  - Final prompt: `character descriptions + scene composition + art style suffix` — 100% of character visual details reach Imagen
+- Enhanced `extract_characters()` prompt with distinguishing features and color palettes
+- Bumped `max_output_tokens` from 400 → 600 for character extraction
+
+**Session 26: Page Auto-Advance Fix**
+
+- Fixed bug where book doesn't turn to next page on story continuation when current pages are full
+- **Root cause**: Clamp effect (`maxValid = scenes.length`) was fighting the auto-advance effect — when auto-advance flipped to page 3, clamp saw `currentPage(3) > scenes.length(2)` and yanked it back
+- **Fix**: Added `if (generating) return;` to clamp effect to skip during generation, plus `generating` in dependency array
+
+**Session 27: Image Loading Shimmer Placeholder**
+
+- Enhanced bare shimmer in SceneCard with "Painting scene" icon and label (matching SceneComposing style)
+- Guarded `<img>` render with `scene.image_url && scene.image_url !== 'error'` — only mounts when URL exists
+- Removed stray `)}` text node that was rendering visibly when image wasn't loaded (exposed by the `<img>` guard change)
+
+**Session 28: Art Style Persistence**
+
+- Fixed art style dropdown resetting to "cinematic" after generation
+- **Root cause**: `artStyle` was local state in ControlBar (`useState('cinematic')`) — route switch from `*` to `/story/:storyId` caused remount, resetting state
+- **Fix**: Lifted `artStyle` state to App.jsx (same pattern as `controlBarInput`), passed as props to ControlBar
+- Added art style restore on story load:
+  - `art_style` stored on Firestore story document (not scene documents)
+  - `loadStoryById` returns `art_style` from `storyData`
+  - `useLibraryBooks` includes `art_style` in book data
+  - `handleOpen` in LibraryPage passes `art_style` to `onOpenBook`
+  - `handleOpenBook` and `initialState` effect both set `artStyle` from loaded data
+  - "New Story" resets artStyle to 'cinematic'
+
+**Session 29: NSFW Content Handling & Pipeline Simplification**
+
+- Added refusal detection for explicit/NSFW content:
+  - `_REFUSAL_PATTERNS` list in `main.py` matches AI refusal phrases ("i am programmed to be", "i cannot generate", etc.)
+  - `_is_refusal()` function checks text against patterns
+  - ADK pipeline's `ws_callback` intercepts refusal text before sending to frontend
+  - Frontend receives `type: 'error'` message with user-friendly toast
+  - `ContentBlockedError` in `gemini_client.py` catches Gemini safety blocks in `generate_stream`
+- Removed entire manual pipeline (`_run_manual_pipeline`, ~230 lines):
+  - Made ADK imports required (no try/except fallback)
+  - Removed `USE_ADK` flag and conditional dispatch
+  - Simplified WebSocket handler
+
+**Session 30: Delete Dialog Loading State**
+
+- Added spinner to delete confirmation button in Library:
+  - Rotating spinner SVG inside "Delete" button during deletion
+  - "Deleting..." text alongside spinner
+  - Both buttons disabled during deletion (already existed)
+  - Overlay click-to-close blocked during deletion (already existed)
+
+**Session 31: Library UX — Cover Generation State & Delete Cleanup**
+
+- Added loading state for book covers still being generated in Library:
+  - Books with `title_generated=false` show blur+grayscale+dim on cover image (`book-3d-cover--generating` class)
+  - Centered paintbrush icon in glowing circle with pulsing accent animation
+  - "Painting cover..." pill label below icon
+  - Subtle shimmer sweep across overlay
+- Auto-refresh Library when `bookMeta` arrives via WebSocket:
+  - `bookMeta` prop passed from App.jsx to LibraryPage
+  - Effect triggers `refresh()` when bookMeta changes
+- Auto-persist bookMeta to Firestore when WS message arrives:
+  - New effect in App.jsx writes title + cover_image_url + `title_generated: true` immediately
+  - Library refresh then picks up the updated data, shimmer disappears
+- Delete active story cleanup:
+  - `onActiveStoryDeleted` callback clears WS state, story status, art style, and navigates to `/`
+  - No more stale URL after deleting active book
+
+**Session 32: Cover Art Style Matching**
+
+- Improved cover generation to match the story's art style:
+  - `_gen_cover()` now imports `ART_STYLES` from illustrator and uses the full suffix (e.g., "anime illustration, Studio Ghibli style, detailed backgrounds") instead of just the key ("anime")
+  - Prompt explicitly instructs: "The image MUST match this art style" and "End the prompt with: {suffix}"
+  - Added "Do NOT include any text, titles, words, or lettering" to prevent text artifacts on covers
+
+**Session 33: Header Button Disable During Cover Generation**
+
+- Disabled "New Story", "Save", and "Complete Book" buttons during `saving` or `generatingCover`:
+  - Added `disabled` prop + opacity/cursor styling to New Story and Complete Book buttons
+  - Save button already had this behavior
+- Added "Generating AI title & cover..." info toast when Tier 3 cover generation starts (both Save and Complete flows)
+
+---
+
+## Current State (Feb 21, 2026)
 
 ### What's Working
 - Full text + image generation pipeline: prompt → Gemini 2.0 Flash → streamed scenes → Imagen 3 illustrations → interactive flipbook
 - Conversation continuity (story steering/continuation across multiple prompts)
+- **Hybrid image prompt architecture** — character descriptions reach Imagen verbatim (not summarized by Gemini)
 - Cross-batch character visual consistency via accumulated story text and character sheet merging
-- 6 art styles with custom glassmorphism dropdown
+- 6 art styles with custom glassmorphism dropdown — **persisted per story** and restored on load
 - Genre quick-start from cover page
 - New Story reset (frontend + backend)
 - Dark/light glassmorphism theme
@@ -335,29 +431,37 @@
 - Voice input via MediaRecorder (`useVoiceCapture.js`) with Gemini transcription
 - Cloud TTS narration per scene with compact inline audio player
 - Director Agent with structured JSON analysis — narrative arc, characters, tension, visual style
-- ADK orchestration pipeline — SequentialAgent → ParallelAgent (Illustrator + Director + TTS)
+- ADK orchestration pipeline (single pipeline, manual removed) — SequentialAgent → ParallelAgent (Illustrator + Director + TTS)
 - Director Panel with glanceable visual summaries and collapsible detail text
 - Tension bar chart visualization with per-scene bars and trend indicators
 - Per-batch director data tracking — director analysis follows scene pagination
 - Firebase Auth (Google Sign-In) and Firestore persistence (stories, scenes, generations)
 - Save flow with 3-tier optimization (instant when metadata available, API call only on first save)
-- Background book meta generation via WebSocket (`book_meta` message)
+- Background book meta generation via WebSocket (`book_meta` message) — auto-persisted to Firestore
+- **NSFW/safety content filtering** — refusal detection intercepts harmful content before reaching frontend
 - Library page with 3D book cards, favorites, status filters, search, sort
+  - **Cover generation state**: blur+shimmer overlay with paintbrush icon while cover generates
+  - **Auto-refresh**: Library updates when bookMeta arrives via WebSocket
+  - **Delete dialog**: spinner on confirm button with loading state
+  - **Active story delete**: clears WS state + navigates to clean URL
 - Explore page with public story browsing, like system, liked filter, search, sort
 - Completed book protection — read-only regardless of entry point
 - URL-based routing with story resume on page reload
 - Image error handling with per-reason user messages
+- **Image loading shimmer**: "Painting scene" icon + shimmer while Imagen generates
 - Per-scene actions: regenerate image, regenerate scene (text+image+audio), delete scene
 - Scene titles generated by Narrator (`[SCENE: Title]` markers)
 - Configurable scene count (1 or 2 per generation)
 - Global toast notification system (success/error/warning/info) with glassmorphism styling
 - Header button hover effects (glow lift, shimmer sweep, rotation, press feedback)
+- **Header button guards**: New Story, Save, Complete Book disabled during cover generation
 - Auto-session recovery for scene actions when WS session is lost
+- **Cover art style matching** — book covers use the same art style suffix as scene images
+- Page auto-advance fix — clamp effect generation-aware to prevent fighting auto-flip
 
 ### What Needs to Be Built
 - **Firebase Hosting** — Deploy frontend SPA
 - **Cloud Run Deployment** — Deploy backend container
-- **Terraform IaC** — Automated cloud deployment scripts
 - **Demo Video** — 4-minute walkthrough for submission
 
 ### Known Issues / Improvements Needed

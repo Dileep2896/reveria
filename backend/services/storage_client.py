@@ -116,3 +116,22 @@ async def upload_cover(story_id: str, data_url: str) -> str:
     url = await asyncio.to_thread(_upload)
     logger.info("Uploaded cover → %s", blob_path)
     return url
+
+
+async def delete_story_media(story_id: str) -> int:
+    """Delete all GCS objects under stories/{story_id}/. Returns count deleted."""
+    bucket_name = _get_bucket_name()
+
+    def _delete() -> int:
+        client = _get_client()
+        bucket = client.bucket(bucket_name)
+        prefix = f"stories/{story_id}/"
+        blobs = list(bucket.list_blobs(prefix=prefix))
+        if not blobs:
+            return 0
+        bucket.delete_blobs(blobs)
+        return len(blobs)
+
+    count = await asyncio.to_thread(_delete)
+    logger.info("Deleted %d GCS objects for story %s", count, story_id)
+    return count

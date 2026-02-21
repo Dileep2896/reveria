@@ -1,5 +1,6 @@
 """Firebase Auth token verification."""
 
+import asyncio
 import logging
 import os
 
@@ -30,7 +31,7 @@ async def verify_token(id_token: str) -> str | None:
     """Verify a Firebase ID token and return the UID, or None if invalid."""
     _ensure_init()
     try:
-        decoded = auth.verify_id_token(id_token)
+        decoded = await asyncio.to_thread(auth.verify_id_token, id_token)
         return decoded["uid"]
     except Exception as e:
         logger.warning("Token verification failed: %s", e)

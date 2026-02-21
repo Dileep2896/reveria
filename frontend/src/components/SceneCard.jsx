@@ -377,7 +377,40 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
         )}
       </div>
 
-      {/* Image — constrained to ~35% of page */}
+      {/* Image — constrained to ~35% of page, or collapsed when unavailable */}
+      {showError || (preloaded && !scene.image_url) ? (
+        /* Collapsed: subtle inline indicator instead of big empty box */
+        <div
+          className="flex items-center gap-1.5 rounded-md"
+          style={{
+            flexShrink: 0,
+            marginBottom: `${6 * scale}px`,
+            padding: `${4 * scale}px ${8 * scale}px`,
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border)',
+          }}
+        >
+          <svg
+            width={12 * scale} height={12 * scale} viewBox="0 0 24 24" fill="none"
+            stroke="var(--text-muted)" strokeWidth="1.5"
+            strokeLinecap="round" strokeLinejoin="round"
+            style={{ flexShrink: 0, opacity: 0.5 }}
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+          </svg>
+          <span style={{ fontSize: `${8 * scale}px`, color: 'var(--text-muted)', opacity: 0.6 }}>
+            {scene.image_error_reason === 'quota_exhausted'
+              ? 'Image quota reached'
+              : scene.image_error_reason === 'safety_filter'
+              ? 'Image blocked by safety filter'
+              : scene.image_error_reason === 'timeout'
+              ? 'Image timed out'
+              : 'Illustration unavailable'}
+          </span>
+        </div>
+      ) : (
       <div
         className="scene-image-wrap rounded-lg overflow-hidden"
         style={{
@@ -389,37 +422,8 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
           boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08), 0 2px 8px rgba(0,0,0,0.3)',
         }}
       >
-        {showError || (preloaded && !scene.image_url) ? (
-          <div
-            className="w-full h-full flex items-center justify-center"
-            style={{
-              background: 'var(--glass-bg)',
-            }}
-          >
-            <div className="flex flex-col items-center gap-1">
-              <svg
-                width="18" height="18" viewBox="0 0 24 24" fill="none"
-                stroke="var(--text-muted)" strokeWidth="1.5"
-                strokeLinecap="round" strokeLinejoin="round"
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              <span style={{ fontSize: `${9 * scale}px`, color: 'var(--text-muted)', textAlign: 'center', maxWidth: '80%' }}>
-                {scene.image_error_reason === 'quota_exhausted'
-                  ? 'Image quota reached — try again later'
-                  : scene.image_error_reason === 'safety_filter'
-                  ? 'Image blocked by safety filter'
-                  : scene.image_error_reason === 'timeout'
-                  ? 'Image generation timed out'
-                  : 'Illustration unavailable'}
-              </span>
-            </div>
-          </div>
-        ) : (
           <>
-            {/* Shimmer placeholder while image loads */}
+            {/* Shimmer placeholder while image loads / generates */}
             {!imageLoaded && (
               <div
                 className="absolute inset-0"
@@ -444,8 +448,41 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
                     animation: 'shimmer 2s ease-in-out infinite',
                   }}
                 />
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
+                  <div
+                    className="rounded-lg flex items-center justify-center"
+                    style={{
+                      width: `${32 * scale}px`,
+                      height: `${32 * scale}px`,
+                      background: 'var(--glass-bg-strong)',
+                      border: '1px solid var(--glass-border)',
+                      backdropFilter: 'var(--glass-blur)',
+                      boxShadow: 'var(--shadow-glow-primary)',
+                      animation: 'pulse 2.5s ease-in-out infinite',
+                      marginBottom: `${6 * scale}px`,
+                    }}
+                  >
+                    <svg
+                      width={14 * scale} height={14 * scale} viewBox="0 0 24 24" fill="none"
+                      stroke="var(--accent-primary)" strokeWidth="1.5"
+                      strokeLinecap="round" strokeLinejoin="round"
+                    >
+                      <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                      <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                      <path d="M2 2l7.586 7.586" />
+                      <circle cx="11" cy="11" r="2" />
+                    </svg>
+                  </div>
+                  <span
+                    className="font-medium tracking-wide"
+                    style={{ fontSize: `${9 * scale}px`, color: 'var(--text-secondary)' }}
+                  >
+                    Painting scene
+                  </span>
+                </div>
               </div>
             )}
+            {scene.image_url && scene.image_url !== 'error' && (
             <img
               src={scene.image_url}
               alt={`Scene ${displayIndex ?? scene.scene_number}`}
@@ -454,7 +491,7 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
                 height: '100%',
                 objectFit: 'cover',
                 display: 'block',
-                transform: imageLoaded ? 'scale(1.04)' : 'scale(1.04)',
+                transform: 'scale(1.04)',
                 opacity: imageLoaded ? 1 : 0,
                 animation: skip && !wasRegenerated.current
                   ? 'none'
@@ -468,8 +505,8 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
               }}
               onAnimationEnd={() => { wasRegenerated.current = false; }}
             />
+            )}
           </>
-        )}
 
         {/* Busy overlay — shimmer + icon */}
         {isBusy && (
@@ -647,6 +684,7 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
           </div>
         )}
       </div>
+      )}
 
       {/* Decorative divider */}
       <div key={`divider-${textRegenKey}`} className="flex items-center gap-2" style={{ flexShrink: 0, marginBottom: `${4 * scale}px` }}>

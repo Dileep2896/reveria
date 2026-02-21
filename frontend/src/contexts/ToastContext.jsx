@@ -46,6 +46,7 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)));
     clearTimeout(timersRef.current[id]);
     delete timersRef.current[id];
+    delete durationsRef.current[id];
     // Remove after animation completes
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -54,6 +55,7 @@ export function ToastProvider({ children }) {
 
   const addToast = useCallback((message, type = 'info', duration = 4000) => {
     const id = ++idCounter.current;
+    durationsRef.current[id] = duration;
 
     setToasts((prev) => {
       const next = [...prev, { id, message, type, duration, exiting: false, paused: false }];
@@ -79,15 +81,17 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, paused: true } : t)));
   }, []);
 
+  // Track durations in a ref so resumeToast can read without state updater side effects
+  const durationsRef = useRef({});
+
   const resumeToast = useCallback((id) => {
-    setToasts((prev) => {
-      const toast = prev.find((t) => t.id === id);
-      if (toast && !toast.exiting) {
-        // Restart with remaining-ish duration (simplified: use half the original)
-        timersRef.current[id] = setTimeout(() => removeToast(id), toast.duration / 2);
-      }
-      return prev.map((t) => (t.id === id ? { ...t, paused: false } : t));
-    });
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, paused: false } : t)));
+    // Schedule dismiss outside state updater to avoid double-fire in StrictMode
+    const duration = durationsRef.current[id];
+    if (duration) {
+      clearTimeout(timersRef.current[id]);
+      timersRef.current[id] = setTimeout(() => removeToast(id), duration / 2);
+    }
   }, [removeToast]);
 
   const toastContainer = toasts.length > 0

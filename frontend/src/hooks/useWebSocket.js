@@ -23,6 +23,10 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const [sceneBusy, setSceneBusy] = useState(new Set());
   const [bookMeta, setBookMeta] = useState(null);
 
+  // Ref for idToken so reconnects always use the latest token
+  const idTokenRef = useRef(idToken);
+  idTokenRef.current = idToken;
+
   // Toast callback ref (avoids stale closure in connect)
   const addToastRef = useRef(addToast);
   addToastRef.current = addToast;
@@ -64,10 +68,11 @@ export default function useWebSocket(idToken, initialState, addToast) {
   }, [initialState]);
 
   const connect = useCallback(() => {
-    if (disposed.current || !idToken) return;
+    const token = idTokenRef.current;
+    if (disposed.current || !token) return;
     clearTimeout(reconnectTimer.current);
 
-    const ws = new WebSocket(`${WS_URL}?token=${idToken}`);
+    const ws = new WebSocket(`${WS_URL}?token=${token}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -137,7 +142,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
           setScenes((prev) =>
             prev.map((scene) =>
               scene.scene_number === data.scene_number
-                ? { ...scene, text: data.content, image_url: null, audio_url: null }
+                ? { ...scene, text: data.content, image_url: null, audio_url: null, image_tier: null }
                 : scene,
             ),
           );
@@ -165,7 +170,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
         setScenes((prev) =>
           prev.map((scene) =>
             scene.scene_number === data.scene_number
-              ? { ...scene, image_url: data.content }
+              ? { ...scene, image_url: data.content, image_tier: data.tier || 1 }
               : scene,
           ),
         );
@@ -248,6 +253,21 @@ export default function useWebSocket(idToken, initialState, addToast) {
         return;
       }
 
+      if (data.type === 'scene_skipped') {
+        // Image generation completely failed — remove the scene
+        setScenes((prev) => prev.map((s) =>
+          s.scene_number === data.scene_number ? { ...s, _deleting: true } : s
+        ));
+        setTimeout(() => {
+          setScenes((prev) => prev.filter((s) => s.scene_number !== data.scene_number));
+        }, 500);
+        const reason = data.reason === 'quota_exhausted'
+          ? 'Scene skipped — image quota exhausted'
+          : 'Scene skipped — image generation failed';
+        addToastRef.current?.(reason, 'warning');
+        return;
+      }
+
       if (data.type === 'scene_deleted') {
         // Mark as deleting for animation
         setScenes((prev) => prev.map((s) =>
@@ -271,7 +291,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
         return;
       }
     };
-  }, [idToken]);
+  }, []);
 
   // Connect when idToken is available AND story state is resolved.
   // Waiting for storyResolved ensures that by the time onopen fires,
@@ -292,7 +312,8 @@ export default function useWebSocket(idToken, initialState, addToast) {
         wsRef.current = null;
       }
     };
-  }, [connect, idToken, storyResolved]);
+  // connect is stable (no deps) — only re-run when idToken or storyResolved change
+  }, [idToken, storyResolved, connect]);
 
   const send = useCallback((content, options = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -354,12 +375,11 @@ export default function useWebSocket(idToken, initialState, addToast) {
     setBookMeta(null);
     setStoryId(state.storyId || null);
     storyIdRef.current = state.storyId || null;
-    if (state.scenes?.length) setScenes(state.scenes.map(s => ({ ...s, _preloaded: true })));
-    if (state.generations?.length) {
-      generationsRef.current = state.generations;
-      currentBatchIndexRef.current = state.generations.length - 1;
-      setGenerations([...state.generations]);
-    }
+    // Always set scenes/generations (clear if empty to avoid stale data)
+    setScenes(state.scenes?.length ? state.scenes.map(s => ({ ...s, _preloaded: true })) : []);
+    generationsRef.current = state.generations?.length ? state.generations : [];
+    currentBatchIndexRef.current = state.generations?.length ? state.generations.length - 1 : -1;
+    setGenerations(state.generations?.length ? [...state.generations] : []);
     // Skip resume for read-only viewing (other users' stories)
     if (!skipResume && wsRef.current?.readyState === WebSocket.OPEN && state.storyId) {
       wsRef.current.send(JSON.stringify({ type: 'resume', story_id: state.storyId }));

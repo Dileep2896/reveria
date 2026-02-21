@@ -7,6 +7,11 @@ from google.genai import types
 
 logger = logging.getLogger("storyforge.gemini")
 
+
+class ContentBlockedError(Exception):
+    """Raised when Gemini blocks content due to safety filters."""
+    pass
+
 _client: genai.Client | None = None
 
 
@@ -42,7 +47,10 @@ async def generate_stream(
     user_prompt: str,
     history: list[types.Content] | None = None,
 ):
-    """Stream text from Gemini, yielding chunks as they arrive."""
+    """Stream text from Gemini, yielding chunks as they arrive.
+
+    Raises ContentBlockedError if the response is blocked by safety filters.
+    """
     client = get_client()
     model = get_model()
 
@@ -51,18 +59,38 @@ async def generate_stream(
         contents.extend(history)
     contents.append(types.Content(role="user", parts=[types.Part(text=user_prompt)]))
 
-    stream = await client.aio.models.generate_content_stream(
-        model=model,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            temperature=0.9,
-            max_output_tokens=2048,
-        ),
-    )
-    async for chunk in stream:
-        if chunk.text:
-            yield chunk.text
+    yielded_any = False
+    try:
+        stream = await client.aio.models.generate_content_stream(
+            model=model,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.9,
+                max_output_tokens=2048,
+            ),
+        )
+        async for chunk in stream:
+            # Check for safety block on any chunk
+            if chunk.candidates:
+                candidate = chunk.candidates[0]
+                fr = getattr(candidate, "finish_reason", None)
+                if fr and str(fr).upper() in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"):
+                    raise ContentBlockedError("Content blocked by safety filters.")
+            if chunk.text:
+                yielded_any = True
+                yield chunk.text
+    except ContentBlockedError:
+        raise
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "safety" in err_msg or "blocked" in err_msg or "prohibited" in err_msg:
+            raise ContentBlockedError("Content blocked by safety filters.") from e
+        raise
+
+    if not yielded_any:
+        logger.warning("generate_stream produced no text — possible silent safety block")
+        raise ContentBlockedError("Content blocked by safety filters.")
 
 
 async def transcribe_audio(audio_base64: str, mime_type: str) -> str | None:

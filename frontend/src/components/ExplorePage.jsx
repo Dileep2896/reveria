@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   db,
   collection,
@@ -11,6 +11,7 @@ import {
   arrayUnion,
   arrayRemove,
 } from '../firebase';
+import './LibraryPage.css';
 import './ExplorePage.css';
 
 function usePublicBooks() {
@@ -69,68 +70,71 @@ function PublicBookCard({ book, onOpen, onToggleLike, userId }) {
   const dateStr = book.published_at.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
+    year: 'numeric',
   });
   const liked = userId && book.liked_by.includes(userId);
   const likeCount = book.liked_by.length;
 
   return (
-    <div className="explore-card" onClick={() => onOpen(book)}>
-      {book.cover_image_url ? (
-        <img
-          className="explore-card-cover"
-          src={book.cover_image_url}
-          alt={book.title}
-          loading="lazy"
-        />
-      ) : (
-        <div className="explore-card-cover-placeholder">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-          </svg>
+    <div className="book-container">
+      <div className="book-3d" onClick={() => onOpen(book)}>
+        {book.cover_image_url ? (
+          <img
+            className="book-3d-cover"
+            src={book.cover_image_url}
+            alt={book.title}
+            loading="lazy"
+          />
+        ) : (
+          <div className="book-3d-cover book-3d-cover--placeholder">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+          </div>
+        )}
+
+        {/* Title overlay on front cover */}
+        <div className="book-3d-info">
+          <p className="book-3d-title" title={book.title}>{book.title}</p>
+          <div className="book-3d-meta">
+            <span><strong>{book.total_scene_count}</strong> scenes</span>
+            <span className="book-3d-meta-dot" />
+            <span>{dateStr}</span>
+          </div>
         </div>
-      )}
+      </div>
 
-      {/* Like button on cover */}
-      {userId && (
-        <button
-          className={`explore-card-like${liked ? ' explore-card-like--active' : ''}`}
-          title={liked ? 'Unlike' : 'Like'}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleLike(book.id, !liked);
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-          {likeCount > 0 && <span className="explore-card-like-count">{likeCount}</span>}
-        </button>
-      )}
-
-      <div className="explore-card-info">
-        <p className="explore-card-title" title={book.title}>{book.title}</p>
-
-        <div className="explore-card-author">
+      {/* Author + like row below book */}
+      <div className="explore-book-footer">
+        <div className="explore-book-author">
           {book.author_photo_url ? (
             <img
-              className="explore-card-avatar"
+              className="explore-book-avatar"
               src={book.author_photo_url}
               alt={book.author_name}
               referrerPolicy="no-referrer"
             />
           ) : (
-            <div className="explore-card-avatar explore-card-avatar-fallback">
+            <div className="explore-book-avatar explore-book-avatar--fallback">
               {(book.author_name || '?')[0].toUpperCase()}
             </div>
           )}
-          <span className="explore-card-author-name">{book.author_name}</span>
+          <span className="explore-book-author-name">{book.author_name}</span>
         </div>
 
-        <div className="explore-card-meta">
-          <span>{book.total_scene_count} scenes</span>
-          <span>{dateStr}</span>
-        </div>
+        {userId && (
+          <button
+            className={`explore-book-like${liked ? ' explore-book-like--active' : ''}`}
+            title={liked ? 'Unlike' : 'Like'}
+            onClick={() => onToggleLike(book.id, !liked)}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+            {likeCount > 0 && <span className="explore-book-like-count">{likeCount}</span>}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -141,6 +145,19 @@ export default function ExplorePage({ user, onOpenBook }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recent');
   const [showLiked, setShowLiked] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      // Hysteresis: enter compact at 60px, exit at 10px — prevents flicker
+      setScrolled((prev) => (prev ? el.scrollTop > 10 : el.scrollTop > 60));
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
   const handleToggleLike = useCallback(async (bookId, shouldLike) => {
     if (!user) return;
@@ -238,22 +255,64 @@ export default function ExplorePage({ user, onOpenBook }) {
     }
   }, [onOpenBook]);
 
+  const stickyHeader = (compact) => (
+    <div className={`explore-sticky-header${compact ? ' explore-sticky-header--compact' : ''}`}>
+      <div className="explore-header-row">
+        <h2 className="explore-title">Explore</h2>
+        <div className="explore-search">
+          <svg className="explore-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search by title or author..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="explore-header-spacer" />
+        {user && (
+          <button
+            className={`explore-liked-toggle${showLiked ? ' explore-liked-toggle--active' : ''}`}
+            onClick={() => setShowLiked((v) => !v)}
+            title={showLiked ? 'Show all' : 'Show liked only'}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill={showLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+            <span>Favorites</span>
+          </button>
+        )}
+      </div>
+      <div className="explore-filter-row">
+        <div className="explore-sort-pills">
+          {['recent', 'title', 'author'].map((opt) => (
+            <button
+              key={opt}
+              className={`explore-sort-pill${sortBy === opt ? ' explore-sort-pill--active' : ''}`}
+              onClick={() => setSortBy(opt)}
+            >
+              {opt === 'recent' ? 'Recent' : opt === 'title' ? 'Title' : 'Author'}
+            </button>
+          ))}
+        </div>
+        <span className="explore-count">
+          {filteredBooks.length} {filteredBooks.length === 1 ? 'story' : 'stories'}{searchQuery ? ' found' : ''}
+        </span>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="explore-container">
-        <div className="explore-header">
-          <h2>Explore</h2>
-          <div className="explore-header-divider" />
-        </div>
-        <div className="explore-grid">
+      <div className="explore-container" ref={containerRef}>
+        {stickyHeader(false)}
+        <div className="library-grid">
           {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="explore-card-skeleton" style={{ animationDelay: `${i * 0.08}s` }}>
-              <div className="explore-card-skeleton-cover">
-                <div className="explore-card-skeleton-shimmer" />
-              </div>
-              <div className="explore-card-skeleton-info">
-                <div className="explore-card-skeleton-title" />
-                <div className="explore-card-skeleton-meta" />
+            <div key={i} className="book-container" style={{ animationDelay: `${i * 0.08}s` }}>
+              <div className="book-3d book-3d--skeleton">
+                <div className="book-3d-cover book-3d-cover--placeholder book-3d-skeleton-shimmer" />
               </div>
             </div>
           ))}
@@ -264,7 +323,7 @@ export default function ExplorePage({ user, onOpenBook }) {
 
   if (error) {
     return (
-      <div className="explore-container">
+      <div className="explore-container" ref={containerRef}>
         <div className="explore-empty">
           <p style={{ color: 'var(--status-error)' }}>{error}</p>
         </div>
@@ -274,11 +333,8 @@ export default function ExplorePage({ user, onOpenBook }) {
 
   if (books.length === 0) {
     return (
-      <div className="explore-container">
-        <div className="explore-header">
-          <h2>Explore</h2>
-          <div className="explore-header-divider" />
-        </div>
+      <div className="explore-container" ref={containerRef}>
+        {stickyHeader(false)}
         <div className="explore-empty">
           <svg className="explore-empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -293,50 +349,8 @@ export default function ExplorePage({ user, onOpenBook }) {
   }
 
   return (
-    <div className="explore-container">
-      <div className="explore-header">
-        <h2>Explore</h2>
-        <div className="explore-header-divider" />
-        <p>{filteredBooks.length} {filteredBooks.length === 1 ? 'story' : 'stories'}{searchQuery ? ' found' : ''}</p>
-      </div>
-
-      {/* Toolbar — search + sort */}
-      <div className="explore-toolbar">
-        <div className="explore-search">
-          <svg className="explore-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search by title or author..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        {user && (
-          <button
-            className={`explore-liked-toggle${showLiked ? ' explore-liked-toggle--active' : ''}`}
-            onClick={() => setShowLiked((v) => !v)}
-            title={showLiked ? 'Show all' : 'Show liked only'}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill={showLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
-          </button>
-        )}
-        <div className="explore-sort-pills">
-          {['recent', 'title', 'author'].map((opt) => (
-            <button
-              key={opt}
-              className={`explore-sort-pill${sortBy === opt ? ' explore-sort-pill--active' : ''}`}
-              onClick={() => setSortBy(opt)}
-            >
-              {opt === 'recent' ? 'Recent' : opt === 'title' ? 'Title' : 'Author'}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="explore-container" ref={containerRef}>
+      {stickyHeader(scrolled)}
 
       {filteredBooks.length === 0 ? (
         <div className="explore-filter-empty">
@@ -348,7 +362,7 @@ export default function ExplorePage({ user, onOpenBook }) {
           <p>{showLiked ? 'No liked stories yet' : `No stories matching "${searchQuery}"`}</p>
         </div>
       ) : (
-        <div className="explore-grid">
+        <div className="library-grid">
           {filteredBooks.map((book) => (
             <PublicBookCard
               key={book.id}

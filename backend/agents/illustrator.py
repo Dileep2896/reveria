@@ -5,23 +5,26 @@ from google.genai import types
 
 logger = logging.getLogger("storyforge.illustrator")
 
-PROMPT_ENGINEER_INSTRUCTION = """You are an image prompt engineer for a storytelling app.
-Given a scene and a CHARACTER REFERENCE SHEET, write an image generation prompt that
-faithfully depicts the scene while keeping characters visually consistent.
+SCENE_COMPOSER_INSTRUCTION = """You are an image prompt engineer for a storytelling app.
+Write a scene composition for an illustration. Character descriptions are handled
+separately — do NOT describe any characters' appearance.
 
-CRITICAL RULES:
-- Output ONLY the image prompt, nothing else
-- Keep it under 100 words
-- You MUST use the CHARACTER REFERENCE SHEET for every character that appears
-- NEVER change a character's gender, hair, skin, age, or clothing from the reference
-- If the reference says "woman", the prompt MUST say "woman" — NEVER "man"
-- PRESERVE the specific action, setting, and environment from the scene
-- Include: lighting, mood, weather, camera angle
-- End with the ART STYLE SUFFIX provided below
+RULES:
+- Output ONLY the scene composition, nothing else
+- Keep it under 80 words
+- Describe: setting, environment, action/pose, lighting, mood, weather, camera angle
+- Reference characters by name only (e.g., "Alice stands near the window")
+- Do NOT describe character appearance (hair, clothes, age, skin, build, etc.)
 - Do NOT include text, labels, words, or watermarks
 - Do NOT describe dialogue or thoughts
 - Describe ONLY what a camera would capture in a single frame
+- End with the ART STYLE SUFFIX provided below
 """
+
+CHARACTER_IDENTIFIER_INSTRUCTION = """Given a scene and a list of character names,
+output ONLY the names of characters who physically appear in or are visually
+present in this scene, one per line. If no characters appear, output NONE.
+Do NOT add explanations or extra text."""
 
 
 ART_STYLES = {
@@ -99,9 +102,12 @@ class Illustrator:
             "CHARACTER REFERENCE SHEET listing every named character.\n\n"
             "For each character, output exactly one line:\n"
             "NAME: gender, approximate age, body build, skin tone, "
-            "hair color/style, facial features, clothing/outfit\n\n"
+            "hair color/style, facial features, clothing/outfit, "
+            "distinguishing features (scars, accessories, unique traits), "
+            "dominant color palette (e.g., 'dominant colors: black, silver, pale blue')\n\n"
             "Be VERY specific about gender (man/woman/boy/girl). "
-            "Be specific about visual details. "
+            "Be specific and exhaustive about visual details — these descriptions "
+            "will be passed VERBATIM to an image generator. "
             "If the story implies details, fill them in consistently.\n"
         )
         if self._character_sheet:
@@ -123,7 +129,7 @@ class Illustrator:
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     temperature=0.1,
-                    max_output_tokens=400,
+                    max_output_tokens=600,
                 ),
             )
             if response.text and "NONE" not in response.text.upper():
@@ -134,30 +140,90 @@ class Illustrator:
             logger.error("Character extraction failed: %s", e)
             # Keep existing sheet on error rather than clearing it
 
-    async def generate_for_scene(self, scene_text: str) -> tuple[str | None, str | None]:
+    async def generate_for_scene(self, scene_text: str) -> tuple[str | None, str | None, int]:
         """Generate an illustration for a scene.
 
         Uses Gemini to craft an optimal image prompt, then calls Imagen 3.
-        Returns (data_url, error_reason).
+        Falls back to progressively simpler prompts if safety filter blocks.
+        Returns (data_url, error_reason, tier).
+        Tier 1 = full prompt with characters, 2 = scene-only, 3 = generic atmospheric.
         """
+        # Attempt 1: full detailed prompt with character sheet
         image_prompt = await self._create_image_prompt(scene_text)
-        if not image_prompt:
-            return None, "prompt_failed"
+        if image_prompt:
+            logger.info("Image prompt: %s...", image_prompt[:150])
+            data, err = await generate_image(image_prompt)
+            if data:
+                return data, None, 1
+            if err and err != "safety_filter":
+                return None, err, 1  # quota/timeout — retrying won't help
 
-        logger.info("Image prompt: %s...", image_prompt[:150])
-        return await generate_image(image_prompt)
+        # Attempt 2: simplified scene-only prompt (no characters, just setting + mood)
+        safe_prompt = await self._create_safe_prompt(scene_text)
+        if safe_prompt:
+            logger.info("Fallback safe prompt: %s...", safe_prompt[:150])
+            data, err = await generate_image(safe_prompt)
+            if data:
+                return data, None, 2
+            if err and err != "safety_filter":
+                return None, err, 2
 
-    async def _create_image_prompt(self, scene_text: str) -> str | None:
-        """Use Gemini to convert scene text into an image generation prompt."""
+        # Attempt 3: ultra-generic atmospheric prompt (almost never blocked)
+        generic = f"A beautiful atmospheric {self.art_style_suffix} landscape illustration, soft lighting, no text, no people"
+        logger.info("Fallback generic prompt: %s", generic)
+        data, err = await generate_image(generic)
+        return data, err, 3
+
+    async def _create_safe_prompt(self, scene_text: str) -> str | None:
+        """Generate a simplified image prompt focused on setting/mood only (no characters)."""
         client = get_client()
         model = get_model()
+        try:
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=types.Content(
+                    role="user",
+                    parts=[types.Part(text=f"SCENE:\n{scene_text}")],
+                ),
+                config=types.GenerateContentConfig(
+                    system_instruction=(
+                        "You are an image prompt engineer. Read this scene and write a SAFE image prompt "
+                        "that captures the SETTING and MOOD only. Do NOT include any people, characters, "
+                        "faces, or figures. Focus on: landscape, architecture, weather, lighting, objects, "
+                        "atmosphere. Keep it under 60 words. Output only the prompt.\n"
+                        f"ART STYLE SUFFIX: {self.art_style_suffix}"
+                    ),
+                    temperature=0.3,
+                    max_output_tokens=150,
+                ),
+            )
+            return response.text.strip() if response.text else None
+        except Exception as e:
+            logger.error("Safe prompt generation failed: %s", e)
+            return None
 
-        # Build input with character sheet always included
-        parts = []
-        if self._character_sheet:
-            parts.append(f"CHARACTER REFERENCE SHEET:\n{self._character_sheet}")
-        parts.append(f"SCENE TO ILLUSTRATE:\n{scene_text}")
-        user_input = "\n\n".join(parts)
+    async def _identify_scene_characters(self, scene_text: str) -> list[str]:
+        """Identify which characters from the reference sheet appear in a scene."""
+        if not self._character_sheet:
+            return []
+
+        # Extract character names from the sheet (lines like "NAME: description")
+        char_names = []
+        for line in self._character_sheet.strip().splitlines():
+            if ":" in line:
+                name = line.split(":", 1)[0].strip()
+                if name:
+                    char_names.append(name)
+
+        if not char_names:
+            return []
+
+        client = get_client()
+        model = get_model()
+        user_input = (
+            f"CHARACTER NAMES:\n{chr(10).join(char_names)}\n\n"
+            f"SCENE:\n{scene_text}"
+        )
 
         try:
             response = await client.aio.models.generate_content(
@@ -167,15 +233,74 @@ class Illustrator:
                     parts=[types.Part(text=user_input)],
                 ),
                 config=types.GenerateContentConfig(
+                    system_instruction=CHARACTER_IDENTIFIER_INSTRUCTION,
+                    temperature=0.0,
+                    max_output_tokens=50,
+                ),
+            )
+            if not response.text or "NONE" in response.text.upper():
+                return []
+            names = [n.strip() for n in response.text.strip().splitlines() if n.strip()]
+            logger.info("Characters in scene: %s", names)
+            return names
+        except Exception as e:
+            logger.error("Character identification failed: %s", e)
+            # Fallback: return all characters so we don't lose descriptions
+            return char_names
+
+    def _filter_character_descriptions(self, names: list[str]) -> str:
+        """Extract full descriptions for the given character names from the sheet."""
+        if not self._character_sheet or not names:
+            return ""
+
+        names_lower = {n.lower() for n in names}
+        descriptions = []
+        for line in self._character_sheet.strip().splitlines():
+            if ":" in line:
+                name = line.split(":", 1)[0].strip()
+                if name.lower() in names_lower:
+                    descriptions.append(line.strip())
+
+        return "\n".join(descriptions)
+
+    async def _create_image_prompt(self, scene_text: str) -> str | None:
+        """Build a hybrid image prompt: verbatim character descriptions + Gemini scene composition."""
+        client = get_client()
+        model = get_model()
+
+        # Step 1: Identify which characters appear in this scene
+        scene_characters = await self._identify_scene_characters(scene_text)
+        char_block = self._filter_character_descriptions(scene_characters)
+
+        # Step 2: Ask Gemini for scene composition only (no character descriptions)
+        try:
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=types.Content(
+                    role="user",
+                    parts=[types.Part(text=f"SCENE TO ILLUSTRATE:\n{scene_text}")],
+                ),
+                config=types.GenerateContentConfig(
                     system_instruction=(
-                        PROMPT_ENGINEER_INSTRUCTION
+                        SCENE_COMPOSER_INSTRUCTION
                         + f"\nART STYLE SUFFIX: {self.art_style_suffix}"
                     ),
                     temperature=0.3,
                     max_output_tokens=250,
                 ),
             )
-            return response.text.strip() if response.text else None
+            scene_composition = response.text.strip() if response.text else None
         except Exception as e:
-            logger.error("Image prompt generation failed: %s", e)
+            logger.error("Scene composition generation failed: %s", e)
+            scene_composition = None
+
+        if not scene_composition:
             return None
+
+        # Step 3: Concatenate character descriptions + scene composition
+        if char_block:
+            final_prompt = f"{char_block}\n\n{scene_composition}"
+        else:
+            final_prompt = scene_composition
+
+        return final_prompt

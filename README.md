@@ -21,16 +21,22 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Director Mode** — A sidebar panel revealing the agent's creative reasoning: narrative structure, tension arcs, character development, and visual decisions
 - **Tension Arc Visualization** — Live graph showing narrative tension across scenes
 - **Interactive Flipbook** — Pages flip with realistic animation, keyboard navigation (arrow keys), and dot-based page navigation
-- **Character Consistency** — Illustrator extracts a character sheet from the full story to maintain visual consistency across scenes
+- **Hybrid Character Consistency** — Three-stage image pipeline: character sheet extraction → scene composition (Gemini) → verbatim character descriptions prepended to prompt. Character details reach Imagen without being summarized.
+- **NSFW/Safety Content Filtering** — Refusal detection intercepts AI-generated safety responses before they reach the frontend. Users see a clean error toast instead of garbled refusal text.
 - **Firebase Auth** — Google Sign-In for user accounts
 - **Story Persistence** — Cloud Firestore saves stories, scenes, and generations with AI-generated titles and cover images
+- **Art Style Memory** — Selected art style is persisted per story and restored when reopening from Library
 - **Library** — Personal bookshelf with 3D CSS book cards, favorites (heart toggle), status filters (All/Favorites/Saved/Completed), search, and sort (Recent/Title)
+  - **Cover Generation State** — Books awaiting AI covers show a blurred, desaturated placeholder with animated "Painting cover..." overlay that auto-refreshes when complete
+  - **Delete with Active Story Cleanup** — Deleting the currently active story properly clears WebSocket state and URL
 - **Explore** — Browse publicly published stories with likes, liked filter, search, and sort (Recent/Title/Author)
 - **Save & Complete Flow** — Save stories to Library, mark as Complete (locks editing), publish to Explore for others to read
 - **Completed Book Protection** — Completed books are read-only regardless of entry point (Library or Explore)
 - **URL Routing** — Deep-linkable story URLs (`/story/:id?page=N`) with auto-resume on page reload
-- **Image Error Handling** — Graceful fallbacks with specific user messages for quota, safety filter, timeout errors
+- **Image Loading States** — "Painting scene" shimmer placeholder while Imagen generates; graceful fallbacks with specific user messages for quota, safety filter, timeout errors
+- **Cover Art Style Matching** — AI-generated book covers use the same art style suffix as scene illustrations
 - **Glassmorphism UI** — Frosted glass panels with dark/light theme support
+- **Toast Notifications** — Global notification system (success/error/warning/info) with auto-dismiss, progress bars, and glassmorphism styling
 - **New Story** — Start fresh at any time with the New Story button — resets both frontend and backend state
 
 ---

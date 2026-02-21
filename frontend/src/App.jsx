@@ -55,7 +55,7 @@ async function loadStoryById(storyId) {
       return aFirst - bFirst;
     });
 
-  return { storyId, scenes, generations, status: storyData.status || 'draft', is_public: storyData.is_public || false };
+  return { storyId, scenes, generations, status: storyData.status || 'draft', is_public: storyData.is_public || false, art_style: storyData.art_style || 'cinematic' };
 }
 
 function findFallbackCover(scenes) {
@@ -155,6 +155,7 @@ export default function App() {
   const { theme, toggleTheme } = useTheme();
   const [directorOpen, setDirectorOpen] = useState(true);
   const [controlBarInput, setControlBarInput] = useState('');
+  const [artStyle, setArtStyle] = useState('cinematic');
   const [currentSceneNumber, setCurrentSceneNumber] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -212,12 +213,27 @@ export default function App() {
     if (generating) setSaved(false);
   }, [generating]);
 
+  // Persist bookMeta to Firestore as soon as it arrives from WS
+  useEffect(() => {
+    if (!bookMeta || !storyId) return;
+    const storyRef = doc(db, 'stories', storyId);
+    getDoc(storyRef).then((snap) => {
+      if (snap.exists() && snap.data().title_generated) return; // already written
+      updateDoc(storyRef, {
+        title: bookMeta.title || 'Untitled Story',
+        cover_image_url: bookMeta.coverUrl || findFallbackCover(scenes),
+        title_generated: true,
+        updated_at: new Date(),
+      }).catch((err) => console.error('Failed to persist bookMeta:', err));
+    });
+  }, [bookMeta, storyId]);
+
   // Clear read-only mode when navigating away from story view
   useEffect(() => {
     if (location.pathname !== '/' && !location.pathname.startsWith('/story/')) setViewingReadOnly(false);
   }, [location.pathname]);
 
-  // Sync storyStatus from loaded initial state
+  // Sync storyStatus + artStyle from loaded initial state
   useEffect(() => {
     if (initialState === null || initialState === undefined) {
       setStoryStatus(null);
@@ -225,6 +241,7 @@ export default function App() {
     } else if (initialState) {
       setStoryStatus(initialState.status || 'draft');
       setIsPublished(initialState.is_public || false);
+      if (initialState.art_style) setArtStyle(initialState.art_style);
     }
   }, [initialState]);
 
@@ -294,9 +311,10 @@ export default function App() {
 
   const handleSave = useCallback(async () => {
     if (!storyId || saving || generatingCover || storyStatus === 'completed') return;
+    const capturedStoryId = storyId;
 
     try {
-      const storyRef = doc(db, 'stories', storyId);
+      const storyRef = doc(db, 'stories', capturedStoryId);
       const snap = await getDoc(storyRef);
       const alreadyGenerated = snap.exists() && snap.data().title_generated;
 
@@ -333,9 +351,10 @@ export default function App() {
       let coverUrl = findFallbackCover(scenes);
 
       setGeneratingCover(true);
+      addToast('Generating AI title & cover...', 'info');
       const sceneTexts = scenes.map((s) => s.text).filter(Boolean);
       const artStyle = scenes[0]?.art_style || 'cinematic';
-      const meta = await generateBookMeta(sceneTexts, artStyle, storyId);
+      const meta = await generateBookMeta(sceneTexts, artStyle, capturedStoryId);
       setGeneratingCover(false);
       if (meta) {
         title = meta.title || title;
@@ -344,6 +363,9 @@ export default function App() {
           addToast('Cover generation blocked — using scene image', 'warning');
         }
       }
+
+      // Guard: user may have navigated away during async cover generation
+      if (storyId !== capturedStoryId) return;
 
       setSaving(true);
       await updateDoc(storyRef, {
@@ -367,6 +389,7 @@ export default function App() {
   }, [storyId, saving, generatingCover, storyStatus, generations, scenes, bookMeta, generateBookMeta, addToast]);
 
   const handleOpenBook = useCallback(async (bookData) => {
+    setViewingReadOnly(false);
     if (bookData.storyId !== storyId) {
       await autoSaveCurrent();
       reset();
@@ -384,6 +407,7 @@ export default function App() {
     const isCompleted = bookData.status === 'completed';
     setStoryStatus(bookData.status || 'draft');
     setIsPublished(bookData.is_public || false);
+    if (bookData.art_style) setArtStyle(bookData.art_style);
 
     setTimeout(() => {
       load(bookData, { skipResume: isCompleted });
@@ -416,16 +440,17 @@ export default function App() {
 
   const handleComplete = useCallback(async () => {
     if (!storyId || completing) return;
+    const capturedStoryId = storyId;
     setCompleting(true);
     try {
-      const storyRef = doc(db, 'stories', storyId);
+      const storyRef = doc(db, 'stories', capturedStoryId);
       const snap = await getDoc(storyRef);
       const alreadyGenerated = snap.exists() && snap.data().title_generated;
 
       // Tier 1: already has AI title + cover — just complete
       if (alreadyGenerated) {
         await updateDoc(storyRef, { status: 'completed', updated_at: new Date() });
-        setStoryStatus('completed');
+        if (storyId === capturedStoryId) setStoryStatus('completed');
         setShowCompleteDialog(false);
         addToast('Book completed!', 'success');
         return;
@@ -440,7 +465,7 @@ export default function App() {
           status: 'completed',
           updated_at: new Date(),
         });
-        setStoryStatus('completed');
+        if (storyId === capturedStoryId) setStoryStatus('completed');
         setShowCompleteDialog(false);
         addToast('Book completed!', 'success');
         return;
@@ -450,13 +475,17 @@ export default function App() {
       let title = (generations[0]?.prompt || 'Untitled Story').slice(0, 60);
       let coverUrl = findFallbackCover(scenes);
 
+      addToast('Generating AI title & cover...', 'info');
       const sceneTexts = scenes.map((s) => s.text).filter(Boolean);
       const artStyle = scenes[0]?.art_style || 'cinematic';
-      const meta = await generateBookMeta(sceneTexts, artStyle, storyId);
+      const meta = await generateBookMeta(sceneTexts, artStyle, capturedStoryId);
       if (meta) {
         title = meta.title || title;
         coverUrl = meta.cover_image_url || coverUrl;
       }
+
+      // Guard: user may have navigated away during async cover generation
+      if (storyId !== capturedStoryId) return;
 
       await updateDoc(storyRef, {
         title,
@@ -492,6 +521,25 @@ export default function App() {
       console.error('Failed to toggle publish:', err);
     }
   }, [storyId, isPublished, user]);
+
+  // Derive per-scene image tier info for DirectorPanel
+  const imageTiers = useMemo(() =>
+    scenes
+      .filter(s => s.image_url && s.image_url !== 'error')
+      .map(s => ({ scene: s.scene_number, tier: s.image_tier || 1 })),
+    [scenes]
+  );
+
+  // Memoize spreadPrompts so StoryCanvas memo isn't defeated by new object reference
+  const spreadPromptsMemo = useMemo(() => {
+    if (!currentSceneNumber || !scenes.length) return { left: userPrompt, right: null };
+    const leftScene = scenes[currentSceneNumber - 1];
+    const rightScene = scenes[currentSceneNumber];
+    return {
+      left: leftScene?.prompt || userPrompt,
+      right: rightScene?.prompt || null,
+    };
+  }, [currentSceneNumber, scenes, userPrompt]);
 
   // Auth loading, story loading, or hydrating — branded splash
   // initialState === undefined means useActiveStory hasn't resolved yet for this user
@@ -668,16 +716,8 @@ export default function App() {
     return batch?.sceneNumbers || null;
   })();
 
-  // Derive per-scene prompts for both pages of the current spread
-  const spreadPrompts = (() => {
-    if (!currentSceneNumber || !scenes.length) return { left: userPrompt, right: null };
-    const leftScene = scenes[currentSceneNumber - 1];
-    const rightScene = scenes[currentSceneNumber];
-    return {
-      left: leftScene?.prompt || userPrompt,
-      right: rightScene?.prompt || null,
-    };
-  })();
+  // Use memoized spreadPrompts (computed before early returns for hook order safety)
+  const spreadPrompts = spreadPromptsMemo;
   const displayPrompt = spreadPrompts.left;
 
   return (
@@ -762,13 +802,16 @@ export default function App() {
           {/* New Story — only visible when there's content in story view */}
           {!isLibrary && !isExplore && !viewingReadOnly && scenes.length > 0 && !generating && (
             <button
-              onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); navigate('/'); }}
+              onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); navigate('/'); }}
+              disabled={saving || generatingCover}
               className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
               style={{
                 background: 'var(--glass-bg)',
                 color: 'var(--text-secondary)',
                 border: '1px solid var(--glass-border)',
                 backdropFilter: 'var(--glass-blur)',
+                opacity: saving || generatingCover ? 0.5 : 1,
+                cursor: saving || generatingCover ? 'default' : 'pointer',
               }}
             >
               New Story
@@ -799,12 +842,15 @@ export default function App() {
           {!isLibrary && !isExplore && !viewingReadOnly && storyStatus === 'saved' && scenes.length >= 2 && !generating && storyId && (
             <button
               onClick={() => setShowCompleteDialog(true)}
+              disabled={saving || generatingCover}
               className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
               style={{
                 background: 'var(--glass-bg)',
                 color: 'var(--text-secondary)',
                 border: '1px solid var(--glass-border)',
                 backdropFilter: 'var(--glass-blur)',
+                opacity: saving || generatingCover ? 0.5 : 1,
+                cursor: saving || generatingCover ? 'default' : 'pointer',
               }}
             >
               Complete Book
@@ -911,7 +957,7 @@ export default function App() {
           path="/library"
           element={
             <div className="flex flex-1 overflow-hidden relative z-10">
-              <LibraryPage user={user} onOpenBook={handleOpenBook} onNewStory={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); navigate('/'); }} />
+              <LibraryPage user={user} onOpenBook={handleOpenBook} bookMeta={bookMeta} activeStoryId={storyId} onActiveStoryDeleted={() => { clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); navigate('/'); }} onNewStory={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); navigate('/'); }} />
             </div>
           }
         />
@@ -931,12 +977,12 @@ export default function App() {
               <SceneActionsContext.Provider value={sceneActionsValue}>
                 <div className="flex flex-1 overflow-hidden relative z-10">
                   <div className="flex-1 relative flex flex-col">
-                    <StoryCanvas scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={displayPrompt} spreadPrompts={spreadPrompts} />
+                    <StoryCanvas key={storyId || 'new'} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={displayPrompt} spreadPrompts={spreadPrompts} />
                     {!viewingReadOnly && storyStatus !== 'completed' && (
-                      <ControlBar onSend={send} onSendAudio={sendAudio} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} />
+                      <ControlBar onSend={send} onSendAudio={sendAudio} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} />
                     )}
                   </div>
-                  {directorOpen && !viewingReadOnly && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} />}
+                  {directorOpen && !viewingReadOnly && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} imageTiers={imageTiers} />}
                 </div>
               </SceneActionsContext.Provider>
             }

@@ -1,53 +1,82 @@
 .explore-container {
   flex: 1;
   overflow-y: auto;
-  padding: 2.5rem 2rem;
+  padding: 0 2rem 2.5rem;
   animation: fadeIn 0.5s ease;
 }
 
-/* ---- Header ---- */
-.explore-header {
-  text-align: center;
-  margin-bottom: 2.5rem;
+/* ===========================================================
+   STICKY HEADER — title + search on row 1, filters on row 2
+   =========================================================== */
+.explore-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: transparent;
+  padding: 1.8rem 0 1.5rem;
+  margin-bottom: 2rem;
+  transition: padding 0.35s ease, background 0.35s ease, box-shadow 0.35s ease, margin-bottom 0.35s ease;
 }
 
-.explore-header h2 {
-  font-family: 'Playfair Display', serif;
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 0.5rem;
-  letter-spacing: 0.02em;
+/* Gradient fade at bottom edge for smooth blending */
+.explore-sticky-header::after {
+  content: '';
+  position: absolute;
+  bottom: -32px;
+  left: 0;
+  right: 0;
+  height: 32px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg-primary) 60%, transparent), transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
 }
 
-.explore-header-divider {
-  width: 60px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
-  margin: 0.75rem auto;
-  opacity: 0.6;
+.explore-sticky-header--compact {
+  padding: 0.75rem 0 0.65rem;
+  margin-bottom: 1.5rem;
+  background: color-mix(in srgb, var(--bg-primary) 65%, transparent);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
 }
 
-.explore-header p {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin: 0;
+.explore-sticky-header--compact::after {
+  opacity: 1;
 }
 
-/* ---- Toolbar — search + sort ---- */
-.explore-toolbar {
+/* Row 1: Title (left) + Search (center/right) + Liked toggle */
+.explore-header-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  max-width: 580px;
-  margin: 0 auto 2.5rem;
+  gap: 1rem;
+  max-width: 1400px;
+  margin: 0 auto;
   padding: 0 2rem;
 }
 
-.explore-search {
+.explore-header-spacer {
   flex: 1;
+}
+
+.explore-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: font-size 0.3s ease;
+}
+
+.explore-sticky-header--compact .explore-title {
+  font-size: 1.15rem;
+}
+
+/* Search bar */
+.explore-search {
+  flex: 0 1 400px;
   position: relative;
   display: flex;
   align-items: center;
@@ -55,25 +84,30 @@
 
 .explore-search-icon {
   position: absolute;
-  left: 0.8rem;
-  color: var(--text-muted);
+  left: 0.9rem;
+  color: var(--text-secondary);
   pointer-events: none;
   z-index: 1;
 }
 
 .explore-search input {
   width: 100%;
-  padding: 0.55rem 0.8rem 0.55rem 2.3rem;
+  padding: 0.6rem 1rem 0.6rem 2.5rem;
   border-radius: 999px;
-  border: 1px solid var(--glass-border);
+  border: 1.5px solid var(--glass-border-hover);
   background: var(--glass-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, padding 0.3s ease;
+}
+
+.explore-sticky-header--compact .explore-search input {
+  padding: 0.45rem 0.8rem 0.45rem 2.3rem;
+  font-size: 0.8rem;
 }
 
 .explore-search input:focus {
@@ -83,33 +117,58 @@
 
 .explore-search input::placeholder {
   color: var(--text-muted);
+  transition: opacity 0.2s ease;
 }
 
-/* ---- Liked filter toggle ---- */
+.explore-search input:focus::placeholder {
+  opacity: 0.5;
+}
+
+/* Favorites toggle */
 .explore-liked-toggle {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
   color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   cursor: pointer;
   flex-shrink: 0;
+  white-space: nowrap;
   transition: all 0.2s ease;
 }
 
 .explore-liked-toggle:hover {
   color: #ef4444;
   border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.05);
 }
 
 .explore-liked-toggle--active {
   color: #ef4444;
   border-color: rgba(239, 68, 68, 0.4);
   background: rgba(239, 68, 68, 0.1);
+}
+
+/* Row 2: Sort pills (left) + Story count (right) */
+.explore-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 1400px;
+  margin: 0.75rem auto 0;
+  padding: 0 2rem;
+  transition: margin 0.3s ease;
+}
+
+.explore-sticky-header--compact .explore-filter-row {
+  margin-top: 0.45rem;
 }
 
 .explore-sort-pills {
@@ -137,7 +196,8 @@
 }
 
 .explore-sort-pill:hover {
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  background: var(--glass-bg-hover);
 }
 
 .explore-sort-pill--active {
@@ -145,171 +205,110 @@
   background: var(--accent-primary-soft);
 }
 
-/* ---- Grid ---- */
-.explore-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1.5rem;
-  max-width: 1000px;
-  margin: 0 auto;
+.explore-count {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
-/* ---- Explore Card ---- */
-.explore-card {
-  position: relative;
-  border-radius: var(--radius-md);
-  overflow: hidden;
+
+/* ===========================================================
+   AUTHOR + LIKE FOOTER below 3D book
+   =========================================================== */
+.explore-book-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
+  border-radius: 10px;
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  cursor: pointer;
-  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
-  animation: fadeIn 0.4s ease both;
+  transform: rotateY(-10deg);
+  transition: transform 0.5s ease;
 }
 
-.explore-card:hover {
-  transform: translateY(-6px);
-  box-shadow: var(--shadow-glow-primary);
-  border-color: var(--glass-border-hover);
+.book-container:hover .explore-book-footer {
+  transform: rotateY(-2deg);
 }
 
-.explore-card-cover {
-  width: 100%;
-  aspect-ratio: 3 / 4;
+.explore-book-author {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.explore-book-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
   object-fit: cover;
-  display: block;
-  background: var(--glass-bg-strong);
+  flex-shrink: 0;
+  border: 1.5px solid var(--glass-border-hover);
 }
 
-.explore-card-cover-placeholder {
-  width: 100%;
-  aspect-ratio: 3 / 4;
+.explore-book-avatar--fallback {
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--glass-bg-strong);
-  color: var(--text-muted);
-  position: relative;
+  border: 1.5px solid var(--glass-border);
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.explore-book-author-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
-.explore-card-cover-placeholder::before {
-  content: '';
-  position: absolute;
-  inset: 12px;
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
-  opacity: 0.5;
-}
-
-/* ---- Like button ---- */
-.explore-card-like {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+.explore-book-like {
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.3rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  color: rgba(255, 255, 255, 0.7);
+  padding: 0.2rem;
+  border: none;
+  background: none;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: opacity 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-  z-index: 2;
-  opacity: 0;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
 }
 
-.explore-card:hover .explore-card-like {
-  opacity: 1;
-}
-
-.explore-card-like--active {
-  opacity: 1;
+.explore-book-like:hover {
   color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.4);
+  transform: scale(1.15);
 }
 
-.explore-card-like:hover {
+.explore-book-like--active {
   color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.4);
-  transform: scale(1.05);
 }
 
-.explore-card-like-count {
+.explore-book-like-count {
   font-family: 'Inter', sans-serif;
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   font-weight: 600;
   line-height: 1;
 }
 
-.explore-card-info {
-  padding: 0.75rem 0.85rem;
-}
-
-.explore-card-title {
-  font-family: 'Playfair Display', serif;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 0.4rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 1.3;
-}
-
-/* ---- Author Row ---- */
-.explore-card-author {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.4rem;
-}
-
-.explore-card-avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-.explore-card-avatar-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border);
-  color: var(--text-muted);
-  font-family: 'Inter', sans-serif;
-  font-size: 0.6rem;
-  font-weight: 600;
-}
-
-.explore-card-author-name {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.explore-card-meta {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-/* ---- Filter Empty State ---- */
+/* ===========================================================
+   FILTER EMPTY STATE
+   =========================================================== */
 .explore-filter-empty {
   display: flex;
   flex-direction: column;
@@ -334,7 +333,9 @@
   line-height: 1.5;
 }
 
-/* ---- Empty State ---- */
+/* ===========================================================
+   EMPTY STATE
+   =========================================================== */
 .explore-empty {
   display: flex;
   flex-direction: column;
@@ -369,88 +370,34 @@
   margin: 0;
 }
 
-/* ---- Skeleton Loading Cards ---- */
-.explore-card-skeleton {
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  animation: fadeIn 0.4s ease both;
-}
-
-.explore-card-skeleton-cover {
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  background: var(--glass-bg-strong);
-  position: relative;
-  overflow: hidden;
-}
-
-.explore-card-skeleton-shimmer {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--accent-primary-soft) 40%,
-    var(--accent-primary-glow) 50%,
-    var(--accent-primary-soft) 60%,
-    transparent 100%
-  );
-  animation: skeletonShimmer 1.8s ease-in-out infinite;
-}
-
-.explore-card-skeleton-info {
-  padding: 0.75rem 0.85rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.explore-card-skeleton-title {
-  height: 12px;
-  width: 75%;
-  border-radius: 6px;
-  background: var(--glass-border);
-  animation: skeletonPulse 2s ease-in-out infinite;
-}
-
-.explore-card-skeleton-meta {
-  height: 8px;
-  width: 50%;
-  border-radius: 4px;
-  background: var(--glass-border);
-  animation: skeletonPulse 2s ease-in-out 0.2s infinite;
-}
-
-/* ---- Responsive ---- */
+/* ===========================================================
+   RESPONSIVE
+   =========================================================== */
 @media (max-width: 480px) {
   .explore-container {
-    padding: 1.5rem 0.75rem;
+    padding: 0 0.75rem 1.5rem;
   }
 
-  .explore-header {
-    margin-bottom: 1.5rem;
+  .explore-sticky-header {
+    padding: 1rem 0 0.75rem;
   }
 
-  .explore-header h2 {
-    font-size: 1.5rem;
-  }
-
-  .explore-toolbar {
-    flex-direction: column;
-    padding: 0 0.5rem;
-    margin-bottom: 1.5rem;
+  .explore-header-row {
+    flex-wrap: wrap;
     gap: 0.5rem;
+  }
+
+  .explore-title {
+    font-size: 1.4rem;
+    width: 100%;
+  }
+
+  .explore-search {
+    max-width: 100%;
   }
 
   .explore-sort-pills {
     width: 100%;
     justify-content: center;
-  }
-
-  .explore-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
   }
 }
