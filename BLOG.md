@@ -173,6 +173,115 @@ While a cover is being generated, the book shows the scene image with a blur+gra
 
 ---
 
+## New Features: Pushing the Boundaries
+
+### Multi-Language Story Generation
+
+StoryForge doesn't just tell stories in English. Users can generate stories in **8 languages**: English, Spanish, French, German, Japanese, Hindi, Portuguese, and Chinese.
+
+The architecture is elegant — the language selection propagates through the entire pipeline:
+
+1. **Narrator**: A language directive is injected into the system prompt — `"Write ALL narrative text in {language}."` This ensures Gemini generates text in the target language.
+2. **TTS**: A `LANGUAGE_VOICES` mapping selects the appropriate Cloud TTS voice — `es-US-Studio-B` for Spanish, `ja-JP-Standard-B` for Japanese, etc.
+3. **Persistence**: The language is stored per story in Firestore and restored when reopening from the Library.
+4. **Lock Pattern**: Once generation starts, the language is locked for that story. The Director panel shows an amber warning: "Language will be locked once you start generating."
+
+The key insight: language is a pipeline-level concern, not a per-component concern. It flows through `SharedPipelineState` just like art style.
+
+### Reading Mode: Karaoke-Style Narration
+
+Reading Mode transforms the storybook into a cinematic full-screen experience. When you click "Read" on a published or completed story, an overlay takes over:
+
+- **Word-by-word highlighting**: As the TTS audio plays, each word lights up in sync — like karaoke for books. The `timeupdate` event on the `<audio>` element drives the highlight position.
+- **Auto-advance**: When a scene's narration ends, Reading Mode waits 1.5 seconds, then smoothly fades to the next scene.
+- **Bookmarking**: Your reading position is saved — Firestore for authenticated users, sessionStorage for guests.
+- **Keyboard controls**: Space/Right arrow = next scene, Left arrow = previous, Escape = exit.
+
+The segmented progress bar at the top shows scene-by-scene progress, not just a single linear bar. You always know where you are in the story.
+
+### PDF Export: Stories You Can Keep
+
+Every saved story can be exported as a polished PDF storybook using `fpdf2`:
+
+- **Cover page**: Full-bleed cover image with title and author overlaid
+- **Scene pages**: Each scene gets a page with its illustration and formatted text
+- **Typography**: Decorative separators, consistent font sizing, proper margins
+- **Page numbering**: Centered at the bottom of each page
+- **Colophon**: Final page with generation metadata
+
+The backend endpoint `GET /api/stories/{story_id}/pdf` downloads images from GCS, composites the PDF in memory, and returns it as a streaming response. Access control ensures only the owner (or anyone for public stories) can download.
+
+### Background Ambient Music
+
+The Director Agent doesn't just analyze mood — it now **drives the soundtrack**. Seven ambient tracks map to the Director's `visual_style.mood` analysis:
+
+| Mood | Sound |
+|------|-------|
+| Peaceful | Gentle pads, soft bells |
+| Mysterious | Low drones, distant echoes |
+| Tense | Pulsing bass, staccato strings |
+| Chaotic | Dissonant layers, rapid modulations |
+| Melancholic | Minor-key piano, slow reverb |
+| Joyful | Bright arpeggios, warm harmonics |
+| Epic | Orchestral swells, deep brass |
+
+The `useAmbientAudio` hook uses the **Web Audio API** with `AudioContext` and `GainNode` for smooth crossfading. When the Director's mood changes (e.g., from "mysterious" to "tense"), the current track fades out over 1 second, the new track fades in over 2 seconds. Volume is kept subtle at 15% — background ambience, not a concert.
+
+### Character Portrait Gallery
+
+After generating a story, the Director Panel offers a "Generate Portraits" button. This triggers a pipeline:
+
+1. **Parse character sheet** from the Illustrator's accumulated reference sheet (or auto-extract from story text if the sheet is empty)
+2. **Build portrait prompts** — "Close-up face portrait of {name}: {description}, {art_style}"
+3. **Generate via Imagen 3** at 1:1 aspect ratio
+4. **Upload to GCS** and send `portrait` WebSocket messages per character
+5. **Display** as a grid of circular thumbnails with name labels
+
+The auto-extraction fallback was a critical fix. Some stories (especially ones with unnamed characters like "the detective" or "the ghost") returned NONE from the initial character extraction. The portrait system now re-extracts from the full story text as a fallback.
+
+### Gemini Live Voice: Brainstorming Mode
+
+The most ambitious feature: **real-time voice conversation** with Gemini for brainstorming story ideas.
+
+How it works:
+1. User clicks "Live" to start a session — opens a Gemini Live API connection (`gemini-2.0-flash-live-001`)
+2. User speaks into the microphone — `useLiveVoice.js` captures 16kHz PCM audio via `AudioContext` + `MediaRecorder`
+3. Audio chunks stream to the backend via WebSocket → forwarded to Gemini Live
+4. Gemini responds with text (displayed as conversation bubbles above the control bar)
+5. When Gemini detects the user is ready, it emits `[STORY_PROMPT]` — the prompt auto-fills in the input field
+6. User confirms → normal generation pipeline runs
+
+The system prompt instructs Gemini to be a "creative story collaborator" — it asks questions, suggests plot twists, helps refine ideas. When it senses the user has a clear vision, it synthesizes everything into a story prompt.
+
+### Share Links & Public Viewing
+
+Published stories get shareable URLs. Click the Share button → copies `{origin}/story/{storyId}` to clipboard. When an unauthenticated user opens this URL:
+
+1. Frontend detects `!user && urlStoryId`
+2. Fetches `GET /api/public/stories/{storyId}` (no auth required)
+3. Renders StoryCanvas in read-only mode (no ControlBar, no Director Panel)
+4. Shows a "Sign in to create your own" CTA banner
+
+The backend sanitizes the response — no user UIDs, no narrator history, no internal state. Just the story content.
+
+### Portal-Based Tooltips
+
+A seemingly small but technically interesting challenge: custom tooltips on scene action buttons were getting clipped by `overflow: hidden` on parent containers (the book page inner wrapper, the image container).
+
+The solution uses React's `createPortal` to render tooltips directly on `document.body` with `position: fixed`:
+
+```jsx
+function ActionBtn({ label, children }) {
+  const ref = useRef(null);
+  // On hover, getBoundingClientRect() → fixed position above button
+  // createPortal renders on document.body → escapes all overflow clipping
+}
+```
+
+The tooltip measures its trigger element's position with `getBoundingClientRect()` and positions itself with `position: fixed` — completely outside the DOM hierarchy. No parent can clip it.
+
+---
+
 ## Lessons Learned
 
 ### 1. Prompt Engineering is Architecture
@@ -195,6 +304,18 @@ Any time you have a slow operation that might already be cached/precomputed, the
 
 Content filtering can't be an afterthought. It needs to be baked into the streaming pipeline — intercepting, not just logging. A single refusal chunk can corrupt the entire frontend state if it reaches the React components.
 
+### 6. Language is a Pipeline Concern
+
+Supporting multiple languages isn't a UI feature — it's an architectural concern that touches every agent. The narrator, TTS, and persistence layer all need language awareness. Making it a field on `SharedPipelineState` (alongside art style) was the cleanest pattern.
+
+### 7. Portals Solve DOM Containment Problems
+
+When UI elements need to visually escape their container (tooltips, modals, dropdown menus), React's `createPortal` + `getBoundingClientRect` is the right pattern. Fixed positioning relative to viewport coordinates sidesteps all CSS containment issues.
+
+### 8. Auto-Extraction Fallbacks Matter
+
+AI models don't always return what you expect. When character extraction returns NONE (unnamed characters, abstract scenarios), having a fallback that re-extracts from the full story text prevents features like portraits from silently failing.
+
 ---
 
 ## Tech Stack
@@ -211,16 +332,18 @@ Content filtering can't be an afterthought. It needs to be baked into the stream
 | Auth | Firebase Authentication | Google Sign-In |
 | Database | Cloud Firestore | Story persistence, user libraries, likes |
 | Storage | Google Cloud Storage | Scene images, cover images |
+| PDF Generation | fpdf2 | Storybook PDF export |
+| Ambient Audio | Web Audio API | Mood-based background music |
+| Live Voice | Gemini 2.0 Flash Live API | Real-time voice brainstorming |
 | Hosting | Cloud Run + Firebase Hosting | Containerized deployment |
 
 ---
 
 ## What's Next
 
-- **Firebase Hosting deployment** for the frontend SPA
-- **Cloud Run deployment** for the backend container
 - **Demo video** for hackathon submission
-- Potential improvements: collaborative stories, branching narratives, character voice casting, story export to PDF
+- **Firebase Hosting** — deploy frontend SPA
+- **Cloud Run** — deploy backend container
 
 ---
 

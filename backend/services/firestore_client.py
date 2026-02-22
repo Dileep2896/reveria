@@ -32,6 +32,7 @@ async def persist_story(
     batch_index: int,
     user_input: str,
     director_data: dict[str, Any] | None = None,
+    language: str = "English",
 ) -> None:
     """Upsert story document and write scene/generation subcollections."""
     db = get_db()
@@ -52,6 +53,7 @@ async def persist_story(
             "uid": uid,
             "updated_at": datetime.now(timezone.utc),
             "art_style": art_style,
+            "language": language,
             "total_scene_count": total_scene_count,
             "narrator_history": narrator_history,
             "illustrator_state": illustrator_state,
@@ -71,6 +73,7 @@ async def persist_story(
                 "scene_title": scene.get("scene_title"),
                 "image_url": scene.get("image_url"),
                 "audio_url": scene.get("audio_url"),
+                "word_timestamps": scene.get("word_timestamps"),
                 "prompt": scene.get("prompt", ""),
                 "batch_index": batch_index,
             }

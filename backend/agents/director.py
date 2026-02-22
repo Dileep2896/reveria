@@ -11,6 +11,8 @@ DIRECTOR_SYSTEM_PROMPT = """You are the Director of StoryForge — an expert nar
 Analyze the story and return a JSON object with exactly these 4 keys.
 Each key maps to a structured object as described below.
 
+The input will specify SCENE COUNT: N. This is the exact number of scenes in this batch.
+
 1. "narrative_arc": {
      "summary": "short phrase (5-8 words) capturing the arc",
      "stage": one of "exposition", "rising_action", "climax", "falling_action", "resolution",
@@ -26,7 +28,7 @@ Each key maps to a structured object as described below.
 
 3. "tension": {
      "summary": "short phrase (5-8 words) about tension dynamics",
-     "levels": [int, int, ...] (1-10 per scene),
+     "levels": [int, int, ...] MUST have exactly SCENE COUNT entries, one integer (1-10) per scene in order,
      "trend": one of "rising", "falling", "steady", "volatile",
      "detail": "1-2 sentences about the tension dynamics"
    }
@@ -38,6 +40,7 @@ Each key maps to a structured object as described below.
      "detail": "2-3 sentences about art style choices, visual mood, and atmosphere"
    }
 
+IMPORTANT: The "levels" array in tension MUST have exactly as many entries as SCENE COUNT.
 Output ONLY valid JSON, no markdown fences, no extra text."""
 
 
@@ -77,6 +80,16 @@ class Director:
 
             if response.text:
                 result = json.loads(response.text)
+                # Ensure tension levels array matches scene count
+                tension = result.get("tension")
+                if tension and isinstance(tension.get("levels"), list):
+                    levels = tension["levels"]
+                    if len(levels) < scene_count:
+                        # Pad with the last level value
+                        last = levels[-1] if levels else 5
+                        levels.extend([last] * (scene_count - len(levels)))
+                    elif len(levels) > scene_count:
+                        tension["levels"] = levels[:scene_count]
                 logger.info("Director analysis complete")
                 return result
 

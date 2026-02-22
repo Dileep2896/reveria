@@ -7,6 +7,7 @@ import time
 from typing import Any
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agents.narrator import Narrator
@@ -253,6 +254,93 @@ async def _auto_generate_meta(
         logger.error("Auto meta generation failed for %s: %s", story_id, e)
 
 
+async def _generate_portraits(
+    websocket: WebSocket,
+    illustrator: Illustrator,
+    story_id: str,
+) -> None:
+    """Generate character portrait images from the illustrator's character sheet."""
+    try:
+        sheet = illustrator._character_sheet
+
+        # If character sheet is empty, try extracting characters from story text first
+        if not sheet and illustrator._accumulated_story:
+            logger.info("Character sheet empty, extracting from accumulated story...")
+            await illustrator.extract_characters(illustrator._accumulated_story)
+            sheet = illustrator._character_sheet
+
+        if not sheet:
+            await _safe_send(websocket, {"type": "error", "content": "No character descriptions available."})
+            await _safe_send(websocket, {"type": "portraits_done"})
+            return
+
+        # Parse character names and descriptions from sheet
+        # Sheet format: "CHARACTER_NAME: description..."
+        characters = []
+        for line in sheet.strip().split("\n"):
+            line = line.strip()
+            if ":" in line and len(line) > 5:
+                name, desc = line.split(":", 1)
+                name = name.strip().strip("-•* ")
+                desc = desc.strip()
+                if name and desc and len(name) < 50:
+                    characters.append({"name": name, "description": desc})
+
+        if not characters:
+            await _safe_send(websocket, {"type": "error", "content": "Could not parse character descriptions."})
+            await _safe_send(websocket, {"type": "portraits_done"})
+            return
+
+        art_suffix = illustrator.art_style_suffix
+        portrait_results = []
+
+        for idx, char in enumerate(characters):
+            prompt = (
+                f"{char['description']}. "
+                f"Close-up face portrait of {char['name']}, head and shoulders, "
+                f"looking at the viewer, detailed facial features, expressive eyes, "
+                f"{art_suffix}"
+            )
+            try:
+                image_data, error_reason = await generate_image(prompt, aspect_ratio="1:1")
+                if image_data:
+                    gcs_url = await upload_media(story_id, 900 + idx, "portrait", image_data)
+                    portrait_results.append({"name": char["name"], "image_url": gcs_url})
+                    await _safe_send(websocket, {
+                        "type": "portrait",
+                        "name": char["name"],
+                        "image_url": gcs_url,
+                    })
+                else:
+                    portrait_results.append({"name": char["name"], "image_url": None})
+                    await _safe_send(websocket, {
+                        "type": "portrait",
+                        "name": char["name"],
+                        "image_url": None,
+                        "error": error_reason or "generation_failed",
+                    })
+            except Exception as e:
+                logger.error("Portrait generation error for %s: %s", char["name"], e)
+
+        # Persist portraits to Firestore
+        if portrait_results and story_id:
+            try:
+                db = get_db()
+                await db.collection("stories").document(story_id).set(
+                    {"portraits": portrait_results}, merge=True
+                )
+                logger.info("Persisted %d portraits for story %s", len(portrait_results), story_id)
+            except Exception as e:
+                logger.error("Failed to persist portraits: %s", e)
+
+        await _safe_send(websocket, {"type": "portraits_done"})
+
+    except Exception as e:
+        logger.error("Portrait generation failed: %s", e)
+        await _safe_send(websocket, {"type": "error", "content": "Portrait generation failed."})
+        await _safe_send(websocket, {"type": "portraits_done"})
+
+
 class BookMetaRequest(BaseModel):
     scene_texts: list[str]
     art_style: str
@@ -283,6 +371,147 @@ async def generate_book_meta(
     )
 
     return {"title": title, "cover_image_url": cover_url}
+
+
+@app.get("/api/public/stories/{story_id}")
+async def get_public_story(story_id: str) -> dict[str, Any]:
+    """Return a published story for unauthenticated viewing."""
+    db = get_db()
+    story_ref = db.collection("stories").document(story_id)
+    snap = await story_ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Story not found")
+    data = snap.to_dict()
+    if not data.get("is_public"):
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    # Load scenes
+    scenes = []
+    async for scene_doc in story_ref.collection("scenes").order_by("scene_number").stream():
+        s = scene_doc.to_dict()
+        scenes.append({
+            "scene_number": s.get("scene_number"),
+            "text": s.get("text", ""),
+            "scene_title": s.get("scene_title"),
+            "image_url": s.get("image_url"),
+            "audio_url": s.get("audio_url"),
+            "word_timestamps": s.get("word_timestamps"),
+        })
+
+    # Load generations
+    generations = []
+    async for gen_doc in story_ref.collection("generations").stream():
+        g = gen_doc.to_dict()
+        generations.append({
+            "prompt": g.get("prompt"),
+            "directorData": g.get("director_data"),
+            "sceneNumbers": g.get("scene_numbers", []),
+            "_id": gen_doc.id,
+        })
+    generations.sort(key=lambda g: int(g.pop("_id", "0")))
+
+    return {
+        "storyId": story_id,
+        "title": data.get("title", "Untitled"),
+        "cover_image_url": data.get("cover_image_url"),
+        "author_name": data.get("author_name", "Anonymous"),
+        "author_photo_url": data.get("author_photo_url"),
+        "art_style": data.get("art_style", "cinematic"),
+        "language": data.get("language", "English"),
+        "scenes": scenes,
+        "generations": generations,
+        "status": data.get("status", "completed"),
+        "is_public": True,
+    }
+
+
+# ── Reading bookmarks ──────────────────────────────────────
+
+@app.get("/api/stories/{story_id}/bookmark")
+async def get_bookmark(story_id: str, authorization: str = Header(...)):
+    """Get the user's reading bookmark for a story."""
+    token = authorization.removeprefix("Bearer ").strip()
+    uid = await verify_token(token)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    db = get_db()
+    snap = await db.collection("bookmarks").document(f"{uid}_{story_id}").get()
+    if not snap.exists:
+        return {"scene_index": None}
+    return {"scene_index": snap.to_dict().get("scene_index", 0)}
+
+
+@app.put("/api/stories/{story_id}/bookmark")
+async def save_bookmark(story_id: str, body: dict, authorization: str = Header(...)):
+    """Save the user's reading bookmark for a story."""
+    token = authorization.removeprefix("Bearer ").strip()
+    uid = await verify_token(token)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    db = get_db()
+    await db.collection("bookmarks").document(f"{uid}_{story_id}").set({
+        "uid": uid,
+        "story_id": story_id,
+        "scene_index": body.get("scene_index", 0),
+    })
+    return {"ok": True}
+
+
+@app.delete("/api/stories/{story_id}/bookmark")
+async def delete_bookmark(story_id: str, authorization: str = Header(...)):
+    """Remove the user's reading bookmark for a story."""
+    token = authorization.removeprefix("Bearer ").strip()
+    uid = await verify_token(token)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    db = get_db()
+    await db.collection("bookmarks").document(f"{uid}_{story_id}").delete()
+    return {"ok": True}
+
+
+
+
+@app.get("/api/stories/{story_id}/pdf")
+async def export_story_pdf(
+    story_id: str,
+    authorization: str = Header(...),
+) -> Response:
+    """Export a story as a downloadable PDF."""
+    from services.pdf_export import generate_story_pdf
+
+    token = authorization.removeprefix("Bearer ").strip()
+    uid = await verify_token(token)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    db = get_db()
+    story_ref = db.collection("stories").document(story_id)
+    snap = await story_ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Story not found")
+    data = snap.to_dict()
+
+    # Allow owner or public stories
+    if data.get("uid") != uid and not data.get("is_public"):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Load scenes
+    scenes = []
+    async for scene_doc in story_ref.collection("scenes").order_by("scene_number").stream():
+        scenes.append(scene_doc.to_dict())
+
+    title = data.get("title", "Untitled Story")
+    author = data.get("author_name", "Anonymous")
+    cover_url = data.get("cover_image_url")
+
+    pdf_bytes = generate_story_pdf(title, author, cover_url, scenes)
+
+    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip() or "story"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.pdf"'},
+    )
 
 
 @app.delete("/api/stories/{story_id}")
@@ -379,6 +608,7 @@ async def _run_adk_pipeline(
     total_scene_count: int,
     illustrator: Illustrator,
     story_id: str,
+    **kwargs,
 ) -> tuple[int, list[asyncio.Task[None]], list[dict[str, Any]]]:
     """Run the story pipeline via ADK orchestrator."""
 
@@ -392,6 +622,7 @@ async def _run_adk_pipeline(
     shared_state.scenes = []
     shared_state.full_story = ""
     shared_state.story_id = story_id
+    shared_state.language = kwargs.get("language", "English")
 
     refusal_detected = False
 
@@ -490,6 +721,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     batch_index = 0
     director_result: dict[str, Any] | None = None
 
+    # Gemini Live session state
+    live_session = None
+    live_response_task: asyncio.Task | None = None
+
     try:
         while True:
             data = await websocket.receive_text()
@@ -523,6 +758,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         active_story_id = req_story_id
                         generations_list: list[Any] = story_data.get("generations", [])
                         batch_index = len(generations_list)
+                        # Send persisted portraits to frontend
+                        persisted_portraits = story_data.get("portraits", [])
+                        if persisted_portraits:
+                            for p in persisted_portraits:
+                                await _safe_send(websocket, {
+                                    "type": "portrait",
+                                    "name": p.get("name", ""),
+                                    "image_url": p.get("image_url"),
+                                })
+                            await _safe_send(websocket, {"type": "portraits_done"})
                         logger.info("Resumed story %s (scene count: %d)", req_story_id, total_scene_count)
                 continue
 
@@ -543,6 +788,56 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 # Recreate ADK orchestrator with fresh agents
                 orchestrator, shared_state = create_story_orchestrator(narrator, illustrator, director)
                 session_service = InMemorySessionService()
+                continue
+
+            # ── Gemini Live conversation mode ──
+            if message.get("type") == "live_start":
+                from services.gemini_live import LiveSession
+                if live_session and live_session.is_active:
+                    await live_session.close()
+                    if live_response_task and not live_response_task.done():
+                        live_response_task.cancel()
+                live_session = LiveSession()
+                success = await live_session.start()
+                if success:
+                    # Start background task to relay responses
+                    async def _live_response_loop():
+                        try:
+                            async for msg in live_session.receive_responses():
+                                if not await _safe_send(websocket, msg):
+                                    break
+                        except asyncio.CancelledError:
+                            pass
+                        except Exception as e:
+                            logger.error("Live response loop error: %s", e)
+                    live_response_task = asyncio.create_task(_live_response_loop())
+                    await _safe_send(websocket, {"type": "live_started"})
+                else:
+                    await _safe_send(websocket, {"type": "error", "content": "Failed to start live session"})
+                continue
+
+            if message.get("type") == "live_audio_chunk":
+                if live_session and live_session.is_active:
+                    import base64 as b64mod
+                    audio_b64 = message.get("audio_data", "")
+                    if audio_b64:
+                        audio_bytes = b64mod.b64decode(audio_b64)
+                        await live_session.send_audio(audio_bytes, message.get("mime_type", "audio/pcm"))
+                continue
+
+            if message.get("type") == "live_text":
+                if live_session and live_session.is_active:
+                    await live_session.send_text(message.get("text", ""))
+                continue
+
+            if message.get("type") == "live_stop":
+                if live_session:
+                    await live_session.close()
+                    live_session = None
+                if live_response_task and not live_response_task.done():
+                    live_response_task.cancel()
+                    live_response_task = None
+                await _safe_send(websocket, {"type": "live_stopped"})
                 continue
 
             # Handle voice input — transcribe then feed into pipeline
@@ -587,6 +882,17 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         generations_list = story_data.get("generations", [])
                         batch_index = len(generations_list)
                         logger.info("Auto-resumed story %s for scene action", req_sid)
+
+            if msg_type == "generate_portraits":
+                logger.info("generate_portraits request for story %s", active_story_id)
+                if active_story_id:
+                    asyncio.create_task(_generate_portraits(
+                        websocket, illustrator, active_story_id
+                    ))
+                else:
+                    await _safe_send(websocket, {"type": "error", "content": "No story available yet. Generate a story first."})
+                    await _safe_send(websocket, {"type": "portraits_done"})
+                continue
 
             if msg_type == "regen_image":
                 scene_num = int(message.get("scene_number", 0))
@@ -688,20 +994,38 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         scene_docs = db.collection("stories").document(active_story_id).collection("scenes")
                         async for doc in scene_docs.where("scene_number", "==", scene_num).stream():
                             await doc.reference.delete()
-                        # total_scene_count kept as high-water mark — no decrement
-                        # so new scenes always get unique, non-colliding numbers
-
-                        # Inform narrator about the deletion for story coherence
-                        narrator.history.append(types.Content(
-                            role="user",
-                            parts=[types.Part(text=f"[Scene {scene_num} was removed from the story by the reader]")],
-                        ))
-                        narrator.history.append(types.Content(
-                            role="model",
-                            parts=[types.Part(text=f"Understood. Scene {scene_num} has been removed. I will not reference it in future scenes and will continue the story from the remaining scenes.")],
-                        ))
 
                         await _safe_send(websocket, {"type": "scene_deleted", "scene_number": scene_num})
+
+                        # Check if any scenes remain
+                        remaining = []
+                        async for _ in scene_docs.limit(1).stream():
+                            remaining.append(True)
+
+                        if not remaining:
+                            # All scenes deleted — remove the entire story
+                            logger.info("All scenes deleted, removing story %s", active_story_id)
+                            deleted_sid = active_story_id
+                            await delete_story(active_story_id, uid)
+                            asyncio.create_task(delete_story_media(active_story_id))
+                            await _safe_send(websocket, {"type": "story_deleted", "story_id": deleted_sid})
+                            # Reset WS session state
+                            active_story_id = None
+                            narrator.history.clear()
+                            illustrator.restore_state({})
+                            total_scene_count = 0
+                            generations_list = []
+                            batch_index = 0
+                        else:
+                            # Inform narrator about the deletion for story coherence
+                            narrator.history.append(types.Content(
+                                role="user",
+                                parts=[types.Part(text=f"[Scene {scene_num} was removed from the story by the reader]")],
+                            ))
+                            narrator.history.append(types.Content(
+                                role="model",
+                                parts=[types.Part(text=f"Understood. Scene {scene_num} has been removed. I will not reference it in future scenes and will continue the story from the remaining scenes.")],
+                            ))
                     except Exception as e:
                         logger.error("delete_scene error for scene %d: %s", scene_num, e)
                         await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": str(e)})
@@ -715,6 +1039,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             # Parse user options
             art_style = message.get("art_style", "cinematic")
             scene_count = max(1, min(2, int(message.get("scene_count", 2))))
+            language = message.get("language", "English")
 
             # Generate story_id on first pipeline run
             if not active_story_id:
@@ -746,7 +1071,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     websocket, orchestrator, shared_state,
                     session_service, user_input, art_style,
                     scene_count, total_scene_count, illustrator,
-                    active_story_id,
+                    active_story_id, language=language,
                 )
 
                 # Filter out scenes where image generation completely failed
@@ -765,6 +1090,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         batch_index=batch_index,
                         user_input=user_input,
                         director_data=director_result,
+                        language=language,
                     )
                     # Auto-generate title + cover in background (title_generated race guard inside handles dedup)
                     meta_task = asyncio.create_task(
@@ -803,4 +1129,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         for task in pipeline_tasks:
             if not task.done():
                 task.cancel()
+        if live_session:
+            await live_session.close()
+        if live_response_task and not live_response_task.done():
+            live_response_task.cancel()
         manager.disconnect(websocket)

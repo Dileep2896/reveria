@@ -50,6 +50,7 @@ class SharedPipelineState:
         self.ws_callback: WsCallback | None = None
         self.story_id: str = ""
         self.director_result: dict[str, Any] | None = None
+        self.language: str = "English"
 
 
 class NarratorADKAgent(BaseAgent):
@@ -69,7 +70,7 @@ class NarratorADKAgent(BaseAgent):
         limit = s.scene_count
         limit_hit = False
 
-        async for chunk in self.narrator.generate(s.user_input, scene_count=limit):
+        async for chunk in self.narrator.generate(s.user_input, scene_count=limit, language=s.language):
             if limit_hit:
                 break
             buffer += chunk
@@ -86,28 +87,32 @@ class NarratorADKAgent(BaseAgent):
                 marker = buffer[idx:close + 1]
                 buffer = buffer[close + 1:]
 
+                # Extract title from marker like [SCENE: Title Here]
+                colon_match = re.match(r"\[SCENE:\s*(.+)\]", marker)
+                new_title = colon_match.group(1).strip() if colon_match else None
+
                 # Emit any text before this marker
                 if before:
+                    # If no pending title (text before first marker), use this marker's title
+                    title = pending_title if pending_title is not None else new_title
                     s.total_scene_count += 1
                     if s.ws_callback:
                         await s.ws_callback({
                             "type": "text",
                             "content": before,
                             "scene_number": s.total_scene_count,
-                            "scene_title": pending_title,
+                            "scene_title": title,
                         })
                     scenes.append({
                         "scene_number": s.total_scene_count,
                         "text": before,
-                        "scene_title": pending_title,
+                        "scene_title": title,
                     })
                     if len(scenes) >= limit:
                         limit_hit = True
                         break
 
-                # Extract title from marker like [SCENE: Title Here]
-                colon_match = re.match(r"\[SCENE:\s*(.+)\]", marker)
-                pending_title = colon_match.group(1).strip() if colon_match else None
+                pending_title = new_title
 
         # Handle remaining text (only if we haven't hit the limit)
         if not limit_hit:
@@ -249,25 +254,25 @@ class TTSADKAgent(BaseAgent):
             scene_num = scene["scene_number"]
             text = scene["text"]
             try:
-                audio_data = await synthesize_speech(text)
+                audio_data, word_timestamps = await synthesize_speech(text, language=s.language)
                 if audio_data and s.ws_callback:
+                    msg = {
+                        "type": "audio",
+                        "scene_number": scene_num,
+                    }
+                    if word_timestamps:
+                        scene["word_timestamps"] = word_timestamps
+                        msg["word_timestamps"] = word_timestamps
                     # Upload to GCS
                     try:
                         gcs_url = await upload_media(s.story_id, scene_num, "audio", audio_data)
                         scene["audio_url"] = gcs_url
-                        await s.ws_callback({
-                            "type": "audio",
-                            "content": gcs_url,
-                            "scene_number": scene_num,
-                        })
+                        msg["content"] = gcs_url
                     except Exception as e:
                         logger.error("GCS audio upload error for scene %d: %s", scene_num, e)
                         scene["audio_url"] = audio_data
-                        await s.ws_callback({
-                            "type": "audio",
-                            "content": audio_data,
-                            "scene_number": scene_num,
-                        })
+                        msg["content"] = audio_data
+                    await s.ws_callback(msg)
             except Exception as e:
                 logger.error("TTS error for scene %d: %s", scene_num, e)
 

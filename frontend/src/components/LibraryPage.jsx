@@ -60,6 +60,8 @@ function useLibraryBooks(user) {
             status: data.status || 'draft',
             is_favorite: data.is_favorite || false,
             art_style: data.art_style || 'cinematic',
+            language: data.language || 'English',
+            portraits: data.portraits || [],
             title_generated: !!data.title_generated,
           };
         });
@@ -275,7 +277,7 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
           return aFirst - bFirst;
         });
 
-      onOpenBook({ storyId, scenes, generations, status: book.status, is_public: book.is_public, art_style: book.art_style });
+      onOpenBook({ storyId, scenes, generations, status: book.status, is_public: book.is_public, art_style: book.art_style, language: book.language, portraits: book.portraits });
     } catch (err) {
       console.error('Failed to open book:', err);
     }

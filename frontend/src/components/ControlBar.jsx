@@ -11,13 +11,39 @@ const ART_STYLES = [
   { key: 'pencil', label: 'Pencil Sketch' },
 ];
 
-export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle }) {
+const LANGUAGES = [
+  { key: 'English', label: 'English' },
+  { key: 'Spanish', label: 'Spanish' },
+  { key: 'French', label: 'French' },
+  { key: 'German', label: 'German' },
+  { key: 'Japanese', label: 'Japanese' },
+  { key: 'Hindi', label: 'Hindi' },
+  { key: 'Portuguese', label: 'Portuguese' },
+  { key: 'Chinese', label: 'Chinese' },
+];
+
+const PLACEHOLDERS = {
+  English: 'Describe a story...',
+  Spanish: 'Describe una historia...',
+  French: 'Décrivez une histoire...',
+  German: 'Beschreibe eine Geschichte...',
+  Japanese: '物語を書いてください...',
+  Hindi: 'एक कहानी बताइए...',
+  Portuguese: 'Descreva uma história...',
+  Chinese: '描述一个故事...',
+};
+
+export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, setLanguage, languageLocked, live }) {
   const [focused, setFocused] = useState(false);
   const [sceneCount, setSceneCount] = useState(2);
   const [styleOpen, setStyleOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
   const [menuPos, setMenuPos] = useState(null);
+  const [langMenuPos, setLangMenuPos] = useState(null);
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
+  const langTriggerRef = useRef(null);
+  const langMenuRef = useRef(null);
 
   const openMenu = () => {
     if (triggerRef.current) {
@@ -27,17 +53,32 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
     setStyleOpen(true);
   };
 
+  const openLangMenu = () => {
+    if (langTriggerRef.current) {
+      const rect = langTriggerRef.current.getBoundingClientRect();
+      setLangMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+    }
+    setLangOpen(true);
+  };
+
   // Close dropdown on outside click
   useEffect(() => {
-    if (!styleOpen) return;
+    if (!styleOpen && !langOpen) return;
     const onClickOutside = (e) => {
-      if (menuRef.current?.contains(e.target)) return;
-      if (triggerRef.current?.contains(e.target)) return;
-      setStyleOpen(false);
+      if (styleOpen) {
+        if (!menuRef.current?.contains(e.target) && !triggerRef.current?.contains(e.target)) {
+          setStyleOpen(false);
+        }
+      }
+      if (langOpen) {
+        if (!langMenuRef.current?.contains(e.target) && !langTriggerRef.current?.contains(e.target)) {
+          setLangOpen(false);
+        }
+      }
     };
     document.addEventListener('pointerdown', onClickOutside);
     return () => document.removeEventListener('pointerdown', onClickOutside);
-  }, [styleOpen]);
+  }, [styleOpen, langOpen]);
 
   const { recording, startRecording, stopRecording } = useVoiceCapture({
     onAudioCaptured: (base64, mimeType) => {
@@ -50,7 +91,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!inputValue.trim() || isDisabled) return;
-    onSend(inputValue.trim(), { artStyle, sceneCount });
+    onSend(inputValue.trim(), { artStyle, sceneCount, language });
     setInputValue('');
   };
   const hasText = inputValue.trim().length > 0;
@@ -143,6 +184,43 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
             ))}
           </div>
 
+          {/* Language dropdown — only for new books before first generation */}
+          {!languageLocked && (
+          <div className="control-style-dropdown">
+            <button
+              ref={langTriggerRef}
+              type="button"
+              className="control-style-trigger"
+              onClick={() => langOpen ? setLangOpen(false) : openLangMenu()}
+            >
+              <span>{LANGUAGES.find((l) => l.key === language)?.label || 'English'}</span>
+              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, transition: 'transform 0.2s ease', transform: langOpen ? 'rotate(180deg)' : 'none' }}>
+                <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {langOpen && langMenuPos && createPortal(
+              <div ref={langMenuRef} className="control-style-menu" style={{ bottom: langMenuPos.bottom, left: langMenuPos.left }}>
+                {LANGUAGES.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`control-style-option${key === language ? ' active' : ''}`}
+                    onClick={() => { setLanguage(key); setLangOpen(false); }}
+                  >
+                    {key === language && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>,
+              document.body
+            )}
+          </div>
+          )}
+
           <div className="control-input-divider" />
 
           <textarea
@@ -156,7 +234,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 handleSubmit(e);
               }
             }}
-            placeholder={recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted — retry in ${quotaCooldown}s` : generating ? 'Story is being crafted...' : 'Describe a story...'}
+            placeholder={recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted — retry in ${quotaCooldown}s` : generating ? 'Story is being crafted...' : (PLACEHOLDERS[language] || PLACEHOLDERS.English)}
             disabled={isDisabled}
             className="flex-1 bg-transparent outline-none control-input"
             style={{ color: 'var(--text-primary)', resize: 'none' }}
@@ -229,7 +307,84 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
             </button>
           )}
         </div>
+
+        {/* Live toggle button — inline in form */}
+        {live && (
+          <button
+            type="button"
+            onClick={live.isLive ? live.stopLive : live.startLive}
+            disabled={!connected || generating}
+            className="flex-shrink-0 rounded-full flex items-center justify-center transition-all control-action-btn"
+            style={{
+              background: live.isLive ? 'var(--accent-primary)' : 'var(--glass-bg)',
+              border: `1px solid ${live.isLive ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
+              color: live.isLive ? '#fff' : 'var(--text-muted)',
+              cursor: !connected || generating ? 'not-allowed' : 'pointer',
+              opacity: !connected || generating ? 0.3 : 1,
+              boxShadow: live.isLive ? '0 0 16px var(--accent-primary)' : 'none',
+              animation: live.isLive ? 'micPulse 1.5s ease-in-out infinite' : 'none',
+            }}
+            title={live.isLive ? 'Stop live conversation' : 'Start live conversation with Gemini'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 10l1 2 2-3 2 5 2-4 2 3 2-6 2 4 2-2 2 3 2-5 1 3" />
+              <circle cx="12" cy="20" r="1.5" fill="currentColor" stroke="none" />
+            </svg>
+          </button>
+        )}
       </form>
+
+      {/* Live conversation transcript overlay */}
+      {live?.isLive && live.transcript.length > 0 && (
+        <div style={{
+          position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+          width: '90%', maxWidth: '600px', maxHeight: '200px', overflowY: 'auto',
+          marginBottom: '8px', borderRadius: '12px',
+          background: 'var(--glass-bg-strong)', border: '1px solid var(--glass-border)',
+          backdropFilter: 'var(--glass-blur)', padding: '12px',
+          display: 'flex', flexDirection: 'column', gap: '6px',
+        }}>
+          {live.transcript.slice(-6).map((msg, i) => (
+            <div key={i} style={{
+              fontSize: '0.8rem', lineHeight: 1.5,
+              color: msg.role === 'user' ? 'var(--accent-primary)' : msg.role === 'system' ? 'var(--text-muted)' : 'var(--text-secondary)',
+              fontStyle: msg.role === 'system' ? 'italic' : 'normal',
+            }}>
+              <strong style={{ opacity: 0.6 }}>{msg.role === 'user' ? 'You' : msg.role === 'system' ? 'System' : 'Gemini'}:</strong>{' '}
+              {msg.text}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Ready prompt action */}
+      {live?.readyPrompt && (
+        <div style={{
+          position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+          marginBottom: live.transcript.length > 0 ? '220px' : '8px',
+          background: 'var(--accent-primary-soft)', border: '1px solid var(--glass-border-accent)',
+          borderRadius: '12px', padding: '12px 16px',
+          display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '500px',
+        }}>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', flex: 1, margin: 0 }}>
+            {live.readyPrompt.slice(0, 120)}...
+          </p>
+          <button
+            onClick={() => {
+              setInputValue(live.readyPrompt);
+              live.clearPrompt();
+              live.stopLive();
+            }}
+            style={{
+              padding: '4px 12px', borderRadius: '999px', border: 'none',
+              background: 'var(--accent-primary)', color: '#fff', fontSize: '0.75rem',
+              fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            Use prompt
+          </button>
+        </div>
+      )}
 
       <style>{`
         @keyframes micPulse {

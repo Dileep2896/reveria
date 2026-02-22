@@ -5,6 +5,8 @@ import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
 import { SceneActionsContext } from './contexts/SceneActionsContext';
 import useWebSocket from './hooks/useWebSocket';
+import useAmbientAudio from './hooks/useAmbientAudio';
+import useLiveVoice from './hooks/useLiveVoice';
 import {
   db,
   collection,
@@ -29,6 +31,7 @@ import DirectorPanel from './components/DirectorPanel';
 import ControlBar from './components/ControlBar';
 import LibraryPage from './components/LibraryPage';
 import ExplorePage from './components/ExplorePage';
+import ReadingMode from './components/ReadingMode';
 
 async function loadStoryById(storyId) {
   const storyDoc = await getDoc(doc(db, 'stories', storyId));
@@ -55,7 +58,7 @@ async function loadStoryById(storyId) {
       return aFirst - bFirst;
     });
 
-  return { storyId, scenes, generations, status: storyData.status || 'draft', is_public: storyData.is_public || false, art_style: storyData.art_style || 'cinematic' };
+  return { storyId, scenes, generations, status: storyData.status || 'draft', is_public: storyData.is_public || false, art_style: storyData.art_style || 'cinematic', language: storyData.language || 'English', portraits: storyData.portraits || [] };
 }
 
 function findFallbackCover(scenes) {
@@ -151,11 +154,13 @@ export default function App() {
 
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId);
   const { addToast } = useToast();
-  const { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, send, sendAudio, sendSceneAction, reset, load } = useWebSocket(idToken, initialState, addToast);
+  const { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, send, sendAudio, sendSceneAction, sendPortraitRequest, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler } = useWebSocket(idToken, initialState, addToast);
   const { theme, toggleTheme } = useTheme();
   const [directorOpen, setDirectorOpen] = useState(true);
   const [controlBarInput, setControlBarInput] = useState('');
   const [artStyle, setArtStyle] = useState('cinematic');
+  const [language, setLanguageRaw] = useState('English');
+  const setLanguage = useCallback((lang) => { setLanguageRaw(lang); setControlBarInput(''); }, []);
   const [currentSceneNumber, setCurrentSceneNumber] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -164,6 +169,10 @@ export default function App() {
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
+  const [readingMode, setReadingMode] = useState(false);
+  const ambient = useAmbientAudio();
+  const live = useLiveVoice(wsRef);
+  const [bookmarkedSceneIndex, setBookmarkedSceneIndex] = useState(null);
 
   const isLibrary = location.pathname === '/library';
   const isExplore = location.pathname === '/explore';
@@ -201,8 +210,14 @@ export default function App() {
     navigate(`/story/${storyId}`, { replace: true });
   }, [storyId, urlStoryId, isLibrary, isExplore, navigate]);
 
+  // Track whether scenes were ever populated (hydration completed at least once).
+  // Without this, deleting all scenes would re-trigger the hydrating splash.
+  const hasBeenPopulatedRef = useRef(false);
+  if (scenes.length > 0) hasBeenPopulatedRef.current = true;
+  if (initialState === null || initialState === undefined) hasBeenPopulatedRef.current = false;
+
   // True while Firestore returned scenes but useWebSocket hasn't hydrated them yet
-  const isHydrating = !!(initialState?.scenes?.length) && scenes.length === 0 && !generating;
+  const isHydrating = !!(initialState?.scenes?.length) && scenes.length === 0 && !generating && !hasBeenPopulatedRef.current;
 
   const handleGenreClick = useCallback((prompt) => {
     setControlBarInput(prompt);
@@ -228,6 +243,26 @@ export default function App() {
     });
   }, [bookMeta, storyId]);
 
+  // Fetch bookmark for current story
+  useEffect(() => {
+    if (!storyId || !idToken) {
+      setBookmarkedSceneIndex(null);
+      return;
+    }
+    fetch(`${API_URL}/api/stories/${storyId}/bookmark`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.scene_index != null) {
+          setBookmarkedSceneIndex(data.scene_index);
+        } else {
+          setBookmarkedSceneIndex(null);
+        }
+      })
+      .catch(() => setBookmarkedSceneIndex(null));
+  }, [storyId, idToken]);
+
   // Clear read-only mode when navigating away from story view
   useEffect(() => {
     if (location.pathname !== '/' && !location.pathname.startsWith('/story/')) setViewingReadOnly(false);
@@ -242,6 +277,7 @@ export default function App() {
       setStoryStatus(initialState.status || 'draft');
       setIsPublished(initialState.is_public || false);
       if (initialState.art_style) setArtStyle(initialState.art_style);
+      if (initialState.language) setLanguage(initialState.language);
     }
   }, [initialState]);
 
@@ -408,6 +444,7 @@ export default function App() {
     setStoryStatus(bookData.status || 'draft');
     setIsPublished(bookData.is_public || false);
     if (bookData.art_style) setArtStyle(bookData.art_style);
+    setLanguage(bookData.language || 'English');
 
     setTimeout(() => {
       load(bookData, { skipResume: isCompleted });
@@ -505,22 +542,58 @@ export default function App() {
     }
   }, [storyId, completing, scenes, generations, bookMeta, generateBookMeta, addToast]);
 
-  const handlePublishToggle = useCallback(async () => {
-    if (!storyId) return;
+  const [showPublishDialog, setShowPublishDialog] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+
+  const handlePublish = useCallback(async () => {
+    if (!storyId || publishing) return;
+    setPublishing(true);
     try {
-      const newPublished = !isPublished;
-      const updates = { is_public: newPublished };
-      if (newPublished) {
-        updates.published_at = new Date();
-        updates.author_name = user?.displayName || 'Anonymous';
-        updates.author_photo_url = user?.photoURL || null;
-      }
-      await updateDoc(doc(db, 'stories', storyId), updates);
-      setIsPublished(newPublished);
+      await updateDoc(doc(db, 'stories', storyId), {
+        is_public: true,
+        published_at: new Date(),
+        author_name: user?.displayName || 'Anonymous',
+        author_photo_url: user?.photoURL || null,
+      });
+      setIsPublished(true);
+      setShowPublishDialog(false);
+      addToast('Story published to Explore!', 'success');
     } catch (err) {
-      console.error('Failed to toggle publish:', err);
+      console.error('Failed to publish:', err);
+      addToast('Failed to publish', 'error');
+    } finally {
+      setPublishing(false);
     }
-  }, [storyId, isPublished, user]);
+  }, [storyId, publishing, user, addToast]);
+
+  // Register live voice message handler
+  useEffect(() => {
+    setLiveHandler(live.handleMessage);
+  }, [setLiveHandler, live.handleMessage]);
+
+  // Handle backend deleting the entire story (all scenes removed)
+  useEffect(() => {
+    setStoryDeletedHandler(() => {
+      clearState();
+      setStoryStatus(null);
+      setIsPublished(false);
+      setArtStyle('cinematic');
+      setLanguage('English');
+      setBookmarkedSceneIndex(null);
+      navigate('/');
+      addToast('Story deleted — all scenes were removed', 'info');
+    });
+  }, [setStoryDeletedHandler, clearState, navigate, addToast, setLanguage]);
+
+  // Crossfade ambient music when director mood changes
+  const lastAmbientMood = useRef(null);
+  useEffect(() => {
+    const mood = directorData?.visual_style?.mood;
+    if (mood && mood !== lastAmbientMood.current) {
+      lastAmbientMood.current = mood;
+      ambient.crossfadeTo(mood);
+    }
+  }, [directorData]);
 
   // Derive per-scene image tier info for DirectorPanel
   const imageTiers = useMemo(() =>
@@ -540,6 +613,20 @@ export default function App() {
       right: rightScene?.prompt || null,
     };
   }, [currentSceneNumber, scenes, userPrompt]);
+
+  // Public story viewing for unauthenticated users
+  const [publicStory, setPublicStory] = useState(null);
+  const [publicLoading, setPublicLoading] = useState(false);
+  useEffect(() => {
+    if (!authLoading && !user && urlStoryId && !publicStory && !publicLoading) {
+      setPublicLoading(true);
+      fetch(`${API_URL}/api/public/stories/${urlStoryId}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setPublicStory(data); })
+        .catch(() => {})
+        .finally(() => setPublicLoading(false));
+    }
+  }, [authLoading, user, urlStoryId]);
 
   // Auth loading, story loading, or hydrating — branded splash
   // initialState === undefined means useActiveStory hasn't resolved yet for this user
@@ -620,8 +707,44 @@ export default function App() {
     );
   }
 
-  // Not signed in — show sign-in screen
+  // Not signed in — show public story or sign-in screen
   if (!user) {
+    if (publicStory) {
+      return (
+        <div className="h-screen flex flex-col relative overflow-hidden">
+          <div className="fixed inset-0 -z-10" style={{ background: 'var(--bg-gradient)' }}>
+            <div className="absolute inset-0" style={{ background: 'var(--orb-1)' }} />
+            <div className="absolute inset-0" style={{ background: 'var(--orb-2)' }} />
+            <div className="absolute inset-0" style={{ background: 'var(--orb-3)' }} />
+          </div>
+          <header className="relative z-20 flex items-center justify-between header-bar" style={{ background: 'var(--glass-bg-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', borderBottom: '1px solid var(--glass-border)', boxShadow: 'var(--shadow-glass)' }}>
+            <Logo size="compact" />
+            <div className="flex items-center header-actions">
+              {publicStory.scenes.length > 0 && (
+                <button
+                  onClick={() => setReadingMode(true)}
+                  className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
+                  style={{ background: 'var(--glass-bg)', color: 'var(--text-secondary)', border: '1px solid var(--glass-border)', backdropFilter: 'var(--glass-blur)' }}
+                >
+                  Read
+                </button>
+              )}
+              <button onClick={signInWithGoogle} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
+                Sign in to create
+              </button>
+            </div>
+          </header>
+          <div className="flex flex-1 overflow-hidden relative z-10">
+            <div className="flex-1 relative flex flex-col">
+              <StoryCanvas scenes={publicStory.scenes} generating={false} userPrompt={null} error={null} onGenreClick={() => {}} onPageChange={() => {}} storyId={publicStory.storyId} displayPrompt={null} spreadPrompts={{ left: null, right: null }} />
+            </div>
+          </div>
+          {readingMode && publicStory.scenes.length > 0 && (
+            <ReadingMode scenes={publicStory.scenes} storyId={publicStory.storyId} onExit={() => setReadingMode(false)} />
+          )}
+        </div>
+      );
+    }
     return (
       <div className="h-screen flex flex-col items-center justify-center relative overflow-hidden">
         {/* Full background matching main app */}
@@ -709,11 +832,19 @@ export default function App() {
     return null;
   })();
 
-  // Derive batch scene numbers for tension bar labels
+  // Derive batch scene numbers and titles for tension bar labels
   const activeBatchSceneNumbers = (() => {
     if (generating || !currentSceneNumber || !generations.length) return null;
     const batch = generations.find(g => g.sceneNumbers.includes(currentSceneNumber));
     return batch?.sceneNumbers || null;
+  })();
+
+  const activeBatchSceneTitles = (() => {
+    if (!activeBatchSceneNumbers || !scenes.length) return null;
+    return activeBatchSceneNumbers.map(num => {
+      const sc = scenes.find(s => s.scene_number === num);
+      return sc?.scene_title || null;
+    });
   })();
 
   // Use memoized spreadPrompts (computed before early returns for hook order safety)
@@ -802,7 +933,7 @@ export default function App() {
           {/* New Story — only visible when there's content in story view */}
           {!isLibrary && !isExplore && !viewingReadOnly && scenes.length > 0 && !generating && (
             <button
-              onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); navigate('/'); }}
+              onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate('/'); }}
               disabled={saving || generatingCover}
               className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
               style={{
@@ -857,20 +988,102 @@ export default function App() {
             </button>
           )}
 
-          {/* Publish — visible when story is completed */}
-          {!isLibrary && !isExplore && !viewingReadOnly && storyStatus === 'completed' && storyId && (
+          {/* Publish — visible when story is completed and not yet published */}
+          {!isLibrary && !isExplore && !viewingReadOnly && storyStatus === 'completed' && storyId && !isPublished && (
             <button
-              onClick={handlePublishToggle}
+              onClick={() => setShowPublishDialog(true)}
               className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
               style={{
-                background: isPublished ? 'var(--accent-primary-soft)' : 'var(--glass-bg)',
-                color: isPublished ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                border: `1px solid ${isPublished ? 'var(--glass-border-accent)' : 'var(--glass-border)'}`,
+                background: 'var(--glass-bg)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--glass-border)',
                 backdropFilter: 'var(--glass-blur)',
-                boxShadow: isPublished ? 'var(--shadow-glow-primary)' : 'none',
               }}
             >
-              {isPublished ? 'Published' : 'Publish'}
+              Publish
+            </button>
+          )}
+          {/* Published badge — non-interactive */}
+          {!isLibrary && !isExplore && !viewingReadOnly && storyStatus === 'completed' && storyId && isPublished && (
+            <span
+              className="rounded-full font-semibold uppercase tracking-wider header-btn"
+              style={{
+                background: 'var(--accent-primary-soft)',
+                color: 'var(--accent-primary)',
+                border: '1px solid var(--glass-border-accent)',
+                boxShadow: 'var(--shadow-glow-primary)',
+              }}
+            >
+              Published
+            </span>
+          )}
+
+          {/* Reading Mode — visible for completed/read-only stories with scenes */}
+          {!isLibrary && !isExplore && (viewingReadOnly || storyStatus === 'completed') && scenes.length > 0 && !generating && (
+            <button
+              onClick={() => setReadingMode(true)}
+              className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
+              style={{
+                background: 'var(--glass-bg)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--glass-border)',
+                backdropFilter: 'var(--glass-blur)',
+              }}
+            >
+              Read
+            </button>
+          )}
+
+          {/* PDF Export — visible when saved/completed with 2+ scenes */}
+          {!isLibrary && !isExplore && !viewingReadOnly && storyId && scenes.length >= 2 && !generating && (storyStatus === 'saved' || storyStatus === 'completed') && (
+            <button
+              onClick={async () => {
+                addToast('Generating PDF...', 'info');
+                try {
+                  const token = idToken;
+                  const res = await fetch(`${API_URL}/api/stories/${storyId}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'story.pdf';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  addToast('PDF downloaded!', 'success');
+                } catch (err) {
+                  console.error('PDF export failed:', err);
+                  addToast('PDF export failed', 'error');
+                }
+              }}
+              className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
+              style={{
+                background: 'var(--glass-bg)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--glass-border)',
+                backdropFilter: 'var(--glass-blur)',
+              }}
+            >
+              PDF
+            </button>
+          )}
+
+          {/* Share Link — visible when published */}
+          {!isLibrary && !isExplore && !viewingReadOnly && isPublished && storyId && (
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/story/${storyId}`;
+                navigator.clipboard.writeText(url).then(() => addToast('Link copied!', 'success')).catch(() => addToast('Failed to copy link', 'error'));
+              }}
+              className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
+              style={{
+                background: 'var(--glass-bg)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--glass-border)',
+                backdropFilter: 'var(--glass-blur)',
+              }}
+            >
+              Share
             </button>
           )}
 
@@ -915,6 +1128,35 @@ export default function App() {
             Director
           </button>
 
+          {/* Music toggle */}
+          {ambient.playing && (
+            <button
+              onClick={ambient.toggle}
+              className="rounded-full flex items-center justify-center transition-all header-theme-btn"
+              style={{
+                background: ambient.muted ? 'var(--glass-bg)' : 'var(--accent-primary-soft)',
+                border: `1px solid ${ambient.muted ? 'var(--glass-border)' : 'var(--glass-border-accent)'}`,
+                color: ambient.muted ? 'var(--text-muted)' : 'var(--accent-primary)',
+                backdropFilter: 'var(--glass-blur)',
+              }}
+              title={ambient.muted ? 'Unmute music' : 'Mute music'}
+            >
+              {ambient.muted ? (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                </svg>
+              )}
+            </button>
+          )}
+
           {/* Theme toggle — glass circle */}
           <button
             onClick={toggleTheme}
@@ -957,7 +1199,7 @@ export default function App() {
           path="/library"
           element={
             <div className="flex flex-1 overflow-hidden relative z-10">
-              <LibraryPage user={user} onOpenBook={handleOpenBook} bookMeta={bookMeta} activeStoryId={storyId} onActiveStoryDeleted={() => { clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); navigate('/'); }} onNewStory={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); navigate('/'); }} />
+              <LibraryPage user={user} onOpenBook={handleOpenBook} bookMeta={bookMeta} activeStoryId={storyId} onActiveStoryDeleted={() => { clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate('/'); }} onNewStory={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate('/'); }} />
             </div>
           }
         />
@@ -977,18 +1219,23 @@ export default function App() {
               <SceneActionsContext.Provider value={sceneActionsValue}>
                 <div className="flex flex-1 overflow-hidden relative z-10">
                   <div className="flex-1 relative flex flex-col">
-                    <StoryCanvas key={storyId || 'new'} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={displayPrompt} spreadPrompts={spreadPrompts} />
+                    <StoryCanvas key={storyId || 'new'} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={displayPrompt} spreadPrompts={spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} />
                     {!viewingReadOnly && storyStatus !== 'completed' && (
-                      <ControlBar onSend={send} onSendAudio={sendAudio} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} />
+                      <ControlBar onSend={(text, opts) => { if (scenes.length === 0) addToast(`Language set to ${language} — can't be changed for this story`, 'info'); send(text, opts); }} onSendAudio={(b64, mime) => { if (scenes.length === 0) addToast(`Language set to ${language} — can't be changed for this story`, 'info'); sendAudio(b64, mime); }} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} setLanguage={setLanguage} languageLocked={scenes.length > 0} live={live} />
                     )}
                   </div>
-                  {directorOpen && !viewingReadOnly && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} imageTiers={imageTiers} />}
+                  {directorOpen && !viewingReadOnly && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} sceneTitles={activeBatchSceneTitles} imageTiers={imageTiers} portraits={portraits} portraitsLoading={portraitsLoading} onGeneratePortraits={storyStatus === 'completed' ? null : sendPortraitRequest} language={language} />}
                 </div>
               </SceneActionsContext.Provider>
             }
           />
         ))}
       </Routes>
+
+      {/* Reading Mode overlay */}
+      {readingMode && scenes.length > 0 && (
+        <ReadingMode scenes={scenes} storyId={storyId} idToken={idToken} onExit={() => setReadingMode(false)} onBookmarkChange={setBookmarkedSceneIndex} />
+      )}
 
       {/* Complete Book confirmation dialog */}
       {showCompleteDialog && (
@@ -1067,7 +1314,7 @@ export default function App() {
               margin: '0 auto 2rem',
               maxWidth: '300px',
             }}>
-              Once completed, this book will be locked from further editing. You'll then be able to publish it to Explore.
+              Once completed, this book will be permanently locked. You won't be able to add, edit, or regenerate scenes. You can then publish it to Explore for others to read.
             </p>
 
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
@@ -1123,6 +1370,133 @@ export default function App() {
               100% { opacity: 1; transform: scale(1) translateY(0); }
             }
           `}</style>
+        </div>
+      )}
+      {/* Publish confirmation dialog */}
+      {showPublishDialog && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            animation: 'fadeIn 0.25s ease',
+          }}
+          onClick={() => !publishing && setShowPublishDialog(false)}
+        >
+          <div
+            style={{
+              background: 'var(--glass-bg-strong)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '1.25rem',
+              padding: '2.5rem 2.5rem 2rem',
+              maxWidth: '420px',
+              width: '90%',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.4), 0 0 40px var(--accent-primary-glow)',
+              animation: 'dialogPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              textAlign: 'center',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '64px',
+              height: '64px',
+              margin: '0 auto 1.25rem',
+              borderRadius: '50%',
+              background: 'var(--accent-primary-soft)',
+              border: '1px solid var(--glass-border-accent)',
+              boxShadow: '0 0 24px var(--accent-primary-glow)',
+            }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            </div>
+
+            <h3 style={{
+              fontFamily: "'Playfair Display', serif",
+              fontSize: '1.4rem',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              margin: '0 0 0.6rem',
+              letterSpacing: '0.01em',
+            }}>
+              Publish This Book?
+            </h3>
+
+            <div style={{
+              width: '40px',
+              height: '1px',
+              margin: '0 auto 0.8rem',
+              background: 'linear-gradient(90deg, transparent, var(--accent-primary), transparent)',
+              opacity: 0.5,
+            }} />
+
+            <p style={{
+              color: 'var(--text-muted)',
+              fontSize: '0.85rem',
+              lineHeight: 1.7,
+              margin: '0 auto 2rem',
+              maxWidth: '300px',
+            }}>
+              Your story will be visible on Explore for everyone to read. This action is permanent and cannot be undone.
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowPublishDialog(false)}
+                disabled={publishing}
+                className="transition-all"
+                style={{
+                  padding: '0.6rem 1.5rem',
+                  borderRadius: '999px',
+                  border: '1px solid var(--glass-border)',
+                  background: 'var(--glass-bg)',
+                  color: 'var(--text-secondary)',
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  cursor: publishing ? 'default' : 'pointer',
+                  opacity: publishing ? 0.5 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePublish}
+                disabled={publishing}
+                className="transition-all"
+                style={{
+                  padding: '0.6rem 1.75rem',
+                  borderRadius: '999px',
+                  border: 'none',
+                  background: 'var(--accent-primary)',
+                  color: '#fff',
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  cursor: publishing ? 'default' : 'pointer',
+                  opacity: publishing ? 0.7 : 1,
+                  boxShadow: '0 4px 16px var(--accent-primary-glow)',
+                }}
+              >
+                {publishing ? 'Publishing...' : 'Publish'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

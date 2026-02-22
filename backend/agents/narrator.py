@@ -2,12 +2,22 @@ from google.genai import types
 from services.gemini_client import generate_stream
 
 
-def _build_system_prompt(scene_count: int = 2) -> str:
+def _build_system_prompt(scene_count: int = 2, language: str = "English") -> str:
+    if language and language.lower() != "english":
+        language_rule = (
+            f"\n- Write ALL narrative text in {language}. All dialogue, descriptions, and scene titles must be in {language}."
+            f"\n- IMPORTANT: Even if the user writes in a different language, you MUST always respond in {language}. The story language is {language} and cannot change."
+        )
+    else:
+        language_rule = (
+            "\n- IMPORTANT: Always write in English regardless of what language the user writes or speaks in. The story language is English and cannot change."
+        )
+
     return f"""You are the Narrator of StoryForge, a master storyteller who crafts vivid, \
 immersive narratives. You write in a cinematic style with rich sensory details.
 
 RULES:
-- Write in present tense, third person
+- Write in present tense, third person{language_rule}
 - Each response should contain exactly {scene_count} scenes
 - Mark scene breaks with [SCENE: <short evocative title>] on its own line
 - After each [SCENE] marker, include a short evocative title (2-5 words) inside the brackets
@@ -40,10 +50,10 @@ class Narrator:
     def __init__(self):
         self.history: list[types.Content] = []
 
-    async def generate(self, user_input: str, scene_count: int = 2):
+    async def generate(self, user_input: str, scene_count: int = 2, language: str = "English"):
         """Stream story text, yielding chunks. Maintains conversation history."""
         full_response = ""
-        system_prompt = _build_system_prompt(scene_count)
+        system_prompt = _build_system_prompt(scene_count, language)
 
         async for chunk in generate_stream(
             system_prompt=system_prompt,

@@ -210,7 +210,7 @@ function CharactersVisual({ list, summary }) {
   );
 }
 
-function TensionVisual({ levels, trend, summary, sceneNumbers }) {
+function TensionVisual({ levels, trend, summary, sceneNumbers, sceneTitles }) {
   const trendIcons = { rising: '\u2197', falling: '\u2198', steady: '\u2192', volatile: '\u2195' };
   const trendColors = { rising: '#ef4444', falling: '#22c55e', steady: '#f59e0b', volatile: '#a855f7' };
 
@@ -230,7 +230,7 @@ function TensionVisual({ levels, trend, summary, sceneNumbers }) {
           />
         )}
       </div>
-      <TensionBars tension={{ levels }} sceneNumbers={sceneNumbers} />
+      <TensionBars tension={{ levels }} sceneNumbers={sceneNumbers} sceneTitles={sceneTitles} />
     </div>
   );
 }
@@ -288,16 +288,20 @@ function VisualStyleVisual({ tags, mood, summary }) {
 
 /* ── TensionBars (kept from original) ── */
 
-function TensionBars({ tension, sceneNumbers }) {
+function TensionBars({ tension, sceneNumbers, sceneTitles }) {
   if (!tension?.levels?.length) return null;
   const max = 10;
+  const count = tension.levels.length;
+  const wide = count <= 4;
+  const gap = wide ? '12px' : '6px';
+  const barW = wide ? '36px' : '24px';
   return (
     <div style={{ marginTop: '6px' }}>
       <div style={{
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        gap: tension.levels.length <= 4 ? '12px' : '6px',
+        gap,
         height: '60px',
         padding: '0 4px',
       }}>
@@ -309,7 +313,7 @@ function TensionBars({ tension, sceneNumbers }) {
               flexDirection: 'column',
               alignItems: 'center',
               gap: '3px',
-              width: tension.levels.length <= 4 ? '36px' : '24px',
+              width: barW,
               maxWidth: '44px',
               height: '100%',
               justifyContent: 'flex-end',
@@ -339,10 +343,11 @@ function TensionBars({ tension, sceneNumbers }) {
           </div>
         ))}
       </div>
+      {/* Scene number labels */}
       <div style={{
         display: 'flex',
         justifyContent: 'center',
-        gap: tension.levels.length <= 4 ? '12px' : '6px',
+        gap,
         marginTop: '4px',
         padding: '0 4px',
       }}>
@@ -350,7 +355,7 @@ function TensionBars({ tension, sceneNumbers }) {
           <span
             key={i}
             style={{
-              width: tension.levels.length <= 4 ? '36px' : '24px',
+              width: barW,
               maxWidth: '44px',
               textAlign: 'center',
               fontSize: '8px',
@@ -364,6 +369,37 @@ function TensionBars({ tension, sceneNumbers }) {
           </span>
         ))}
       </div>
+      {/* Scene title labels */}
+      {sceneTitles && sceneTitles.some(Boolean) && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap,
+          marginTop: '1px',
+          padding: '0 4px',
+        }}>
+          {tension.levels.map((_, i) => (
+            <span
+              key={i}
+              title={sceneTitles[i] || ''}
+              style={{
+                width: barW,
+                maxWidth: '44px',
+                textAlign: 'center',
+                fontSize: '7px',
+                fontWeight: 500,
+                color: 'var(--text-muted)',
+                opacity: 0.7,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {sceneTitles[i] || ''}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -758,6 +794,8 @@ const TIER_META = {
 };
 
 function IllustrationsCard({ imageTiers }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (!imageTiers || imageTiers.length === 0) return null;
 
   const fallbackCount = imageTiers.filter(t => t.tier > 1).length;
@@ -776,7 +814,11 @@ function IllustrationsCard({ imageTiers }) {
       }}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2.5">
+      <div
+        className="flex items-center gap-2"
+        style={{ cursor: 'pointer' }}
+        onClick={() => setExpanded(!expanded)}
+      >
         <svg
           width="11"
           height="11"
@@ -797,59 +839,65 @@ function IllustrationsCard({ imageTiers }) {
         >
           Illustrations
         </span>
+        <ChevronToggle
+          expanded={expanded}
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+        />
       </div>
 
-      {/* Per-scene rows */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-        {imageTiers.map(({ scene, tier }) => {
-          const meta = TIER_META[tier] || TIER_META[1];
-          return (
-            <div
-              key={scene}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '11px',
-              }}
-            >
-              <div
-                style={{
-                  width: '7px',
-                  height: '7px',
-                  borderRadius: '50%',
-                  background: meta.dot,
-                  boxShadow: `0 0 6px ${meta.dot}80`,
-                  flexShrink: 0,
-                }}
-              />
-              <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
-                S{scene}
-              </span>
-              <span style={{ color: meta.color, fontWeight: 600, fontSize: '10px' }}>
-                {meta.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Summary */}
+      {/* Summary — always visible */}
       <p style={{
         fontSize: '10px',
         color: fallbackCount === 0 ? '#22c55e' : 'var(--text-muted)',
-        marginTop: '8px',
+        marginTop: '6px',
         fontWeight: 500,
       }}>
         {summary}
       </p>
+
+      {/* Per-scene rows — collapsible */}
+      {expanded && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '8px', animation: 'fadeIn 0.3s ease' }}>
+          {imageTiers.map(({ scene, tier }) => {
+            const meta = TIER_META[tier] || TIER_META[1];
+            return (
+              <div
+                key={scene}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '11px',
+                }}
+              >
+                <div
+                  style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: meta.dot,
+                    boxShadow: `0 0 6px ${meta.dot}80`,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
+                  S{scene}
+                </span>
+                <span style={{ color: meta.color, fontWeight: 600, fontSize: '10px' }}>
+                  {meta.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 /* ── Main panel ── */
 
-export default function DirectorPanel({ data, generating, sceneNumbers, imageTiers }) {
+export default function DirectorPanel({ data, generating, sceneNumbers, sceneTitles, imageTiers, portraits = [], portraitsLoading = false, onGeneratePortraits, language }) {
   const isAnalyzing = generating && !data;
   const [expandedCards, setExpandedCards] = useState({});
   const [helpOpen, setHelpOpen] = useState(false);
@@ -903,6 +951,22 @@ export default function DirectorPanel({ data, generating, sceneNumbers, imageTie
         >
           Director
         </h2>
+        {language && (
+          <span
+            style={{
+              fontSize: '9px',
+              fontWeight: 600,
+              padding: '2px 8px',
+              borderRadius: '9999px',
+              color: 'var(--accent-primary)',
+              background: 'var(--accent-primary-soft)',
+              border: '1px solid var(--glass-border-accent)',
+              letterSpacing: '0.03em',
+            }}
+          >
+            {language}
+          </span>
+        )}
         <button
           onClick={() => setHelpOpen(true)}
           aria-label="Director guide"
@@ -1022,6 +1086,34 @@ export default function DirectorPanel({ data, generating, sceneNumbers, imageTie
             }}>
               Narrative arc, characters, tension, and visual style analysis will appear here as scenes are generated.
             </p>
+
+            {/* Language lock warning */}
+            {language && (
+              <div style={{
+                marginTop: '16px',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                background: 'rgba(255, 180, 50, 0.08)',
+                border: '1px solid rgba(255, 180, 50, 0.2)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '6px',
+                maxWidth: '220px',
+              }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255, 180, 50, 0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '1px' }}>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span style={{
+                  fontSize: '0.62rem',
+                  lineHeight: 1.5,
+                  color: 'rgba(255, 180, 50, 0.7)',
+                }}>
+                  Language ({language}) will be locked once you start generating.
+                </span>
+              </div>
+            )}
           </div>
         ) : (
           /* ── Active / Analyzing state ── */
@@ -1200,6 +1292,7 @@ export default function DirectorPanel({ data, generating, sceneNumbers, imageTie
                                   trend={content.trend}
                                   summary={content.summary}
                                   sceneNumbers={sceneNumbers}
+                                  sceneTitles={sceneTitles}
                                 />
                               )}
                               {key === 'visual_style' && (
@@ -1246,6 +1339,81 @@ export default function DirectorPanel({ data, generating, sceneNumbers, imageTie
 
                 {/* Illustrations tier card — after visual_style */}
                 <IllustrationsCard imageTiers={imageTiers} />
+
+                {/* Portrait Gallery Card */}
+                {(portraits.length > 0 || onGeneratePortraits) && (
+                  <div
+                    className="rounded-xl overflow-hidden"
+                    style={{
+                      background: 'var(--glass-bg)',
+                      border: '1px solid var(--glass-border)',
+                      padding: '14px',
+                      animation: 'fadeIn 0.4s ease-out',
+                    }}
+                  >
+                    <div className="flex items-center justify-between" style={{ marginBottom: portraits.length > 0 ? '10px' : 0 }}>
+                      <div className="flex items-center gap-2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: 'var(--text-secondary)', letterSpacing: '0.08em' }}>
+                          Portraits
+                        </span>
+                      </div>
+                      {onGeneratePortraits && !portraitsLoading && (
+                        <button
+                          onClick={onGeneratePortraits}
+                          className="text-xs font-medium rounded-full transition-all"
+                          style={{
+                            padding: '3px 10px',
+                            background: 'var(--accent-primary-soft)',
+                            color: 'var(--accent-primary)',
+                            border: '1px solid var(--glass-border-accent)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {portraits.length > 0 ? 'Regenerate' : 'Generate'}
+                        </button>
+                      )}
+                      {portraitsLoading && (
+                        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          Generating...
+                        </div>
+                      )}
+                    </div>
+                    {portraits.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                        {portraits.map((p, i) => (
+                          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            {p.image_url ? (
+                              <img
+                                src={p.image_url}
+                                alt={p.name}
+                                style={{
+                                  width: '56px', height: '56px', borderRadius: '50%',
+                                  objectFit: 'cover', border: '2px solid var(--glass-border-accent)',
+                                }}
+                              />
+                            ) : (
+                              <div style={{
+                                width: '56px', height: '56px', borderRadius: '50%',
+                                background: 'var(--accent-primary-soft)', border: '2px solid var(--glass-border)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-primary)',
+                              }}>
+                                {p.name?.charAt(0)?.toUpperCase() || '?'}
+                              </div>
+                            )}
+                            <span className="text-xs" style={{ color: 'var(--text-muted)', maxWidth: '60px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {p.name}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </>

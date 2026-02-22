@@ -1,5 +1,54 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useSceneActions } from '../contexts/SceneActionsContext';
+
+/* ── Fixed-position tooltip that escapes overflow:hidden parents ── */
+function ActionBtn({ label, children }) {
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState(null);
+  const timer = useRef(null);
+  const ref = useRef(null);
+  const onEnter = useCallback(() => {
+    timer.current = setTimeout(() => {
+      if (ref.current) {
+        const r = ref.current.getBoundingClientRect();
+        setPos({ top: r.top - 28, left: r.left + r.width / 2 });
+      }
+      setShow(true);
+    }, 400);
+  }, []);
+  const onLeave = useCallback(() => { clearTimeout(timer.current); setShow(false); }, []);
+  return (
+    <span ref={ref} style={{ display: 'inline-flex' }} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+      {children}
+      {show && pos && createPortal(
+        <span style={{
+          position: 'fixed',
+          top: pos.top,
+          left: pos.left,
+          transform: 'translateX(-50%)',
+          whiteSpace: 'nowrap',
+          fontSize: '10px',
+          fontWeight: 600,
+          letterSpacing: '0.03em',
+          padding: '3px 8px',
+          borderRadius: '6px',
+          background: 'rgba(20,15,30,0.92)',
+          color: '#ccc',
+          border: '1px solid rgba(255,255,255,0.1)',
+          backdropFilter: 'blur(12px)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          pointerEvents: 'none',
+          animation: 'fadeIn 0.15s ease',
+          zIndex: 9999,
+        }}>
+          {label}
+        </span>,
+        document.body,
+      )}
+    </span>
+  );
+}
 
 /* ── Check if browser has cached an image ── */
 function isImageCached(url) {
@@ -151,7 +200,7 @@ function useCompactAudio(src) {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('ended', onEnded);
     };
-  }, []);
+  }, [src]);
 
   useEffect(() => {
     const onOtherPlay = (e) => {
@@ -181,7 +230,7 @@ function useCompactAudio(src) {
 }
 
 /* ── Revealed scene with cinematic animation ── */
-function SceneRevealed({ scene, scale = 1, displayIndex }) {
+function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
   const { regenImage, regenScene, deleteScene, sceneBusy, isReadOnly } = useSceneActions();
   const isBusy = sceneBusy.has(scene.scene_number);
 
@@ -267,11 +316,12 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
 
   return (
     <div
+      className={preloaded ? 'scene-preloaded-fadein' : undefined}
       style={{
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        ...(skip ? {} : { animation: 'sceneReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1)' }),
+        ...(skip && !preloaded ? {} : preloaded ? {} : { animation: 'sceneReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1)' }),
       }}
     >
       {/* Hidden audio element */}
@@ -279,7 +329,7 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
         <audio ref={audio.audioRef} src={scene.audio_url} preload="metadata" style={{ display: 'none' }} />
       )}
 
-      {/* Page number + Scene badge + audio button */}
+      {/* Page number + Scene badge + audio button + scene actions */}
       <div style={{ marginBottom: `${6 * scale}px`, flexShrink: 0 }}>
         <div className="flex items-center gap-2">
           <span
@@ -306,6 +356,21 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
           >
             Scene {displayIndex ?? scene.scene_number}
           </span>
+          {isBookmarked && (
+            <span
+              style={{
+                color: '#d4a850',
+                display: 'flex',
+                alignItems: 'center',
+                opacity: 0.85,
+              }}
+              title="Bookmarked"
+            >
+              <svg width={13 * scale} height={13 * scale} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+              </svg>
+            </span>
+          )}
           {scene.audio_url && (
             <button
               onClick={audio.togglePlay}
@@ -336,6 +401,73 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
                 </svg>
               )}
             </button>
+          )}
+          {/* Scene actions — in header row, right-aligned */}
+          {!isReadOnly && !isBusy && (
+            <div
+              className="scene-external-actions"
+              style={{
+                marginLeft: 'auto',
+                display: 'flex',
+                gap: `${3 * scale}px`,
+                alignItems: 'center',
+              }}
+            >
+              <ActionBtn label="Regenerate scene">
+                <button
+                  onPointerDown={(e) => { e.stopPropagation(); }}
+                  onClick={(e) => { e.stopPropagation(); regenScene?.(scene.scene_number, scene.text); }}
+                  style={{
+                    width: `${18 * scale}px`,
+                    height: `${18 * scale}px`,
+                    borderRadius: '50%',
+                    border: '1px solid var(--glass-border)',
+                    background: 'var(--glass-bg)',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    touchAction: 'manipulation',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--glass-bg-strong)'; e.currentTarget.style.color = 'var(--accent-primary)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--glass-bg)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                >
+                  <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  </svg>
+                </button>
+              </ActionBtn>
+              <ActionBtn label="Delete scene">
+                <button
+                  onPointerDown={(e) => { e.stopPropagation(); }}
+                  onClick={(e) => { e.stopPropagation(); deleteScene?.(scene.scene_number); }}
+                  style={{
+                    width: `${18 * scale}px`,
+                    height: `${18 * scale}px`,
+                    borderRadius: '50%',
+                    border: '1px solid rgba(255,100,100,0.15)',
+                    background: 'rgba(120,20,20,0.25)',
+                    color: '#ff9999',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    touchAction: 'manipulation',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(160,30,30,0.5)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(120,20,20,0.25)'; }}
+                >
+                  <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>
+              </ActionBtn>
+            </div>
           )}
         </div>
         {scene.scene_title && (
@@ -577,7 +709,7 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
           </div>
         )}
 
-        {/* Action buttons — hover to reveal */}
+        {/* Regen Image button — stays on image (only affects image) */}
         {!isReadOnly && !isBusy && (
           <div
             className="scene-action-bar"
@@ -587,104 +719,42 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
               right: `${4 * scale}px`,
               zIndex: 10,
               display: 'flex',
-              gap: `${3 * scale}px`,
             }}
           >
-            {/* Regen Image */}
-            <button
-              onPointerDown={(e) => { e.stopPropagation(); }}
-              onClick={(e) => { e.stopPropagation(); regenImage?.(scene.scene_number, scene.text); }}
-              title="Regenerate image"
-              style={{
-                width: `${22 * scale}px`,
-                height: `${22 * scale}px`,
-                borderRadius: '50%',
-                border: 'none',
-                background: 'rgba(0,0,0,0.6)',
-                backdropFilter: 'blur(8px)',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'background 0.15s ease',
-                touchAction: 'manipulation',
-                position: 'relative',
-                zIndex: 20,
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.6)'}
-            >
-              <svg width={11 * scale} height={11 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-            </button>
-            {/* Regen Scene */}
-            <button
-              onPointerDown={(e) => { e.stopPropagation(); }}
-              onClick={(e) => { e.stopPropagation(); regenScene?.(scene.scene_number, scene.text); }}
-              title="Regenerate scene"
-              style={{
-                width: `${22 * scale}px`,
-                height: `${22 * scale}px`,
-                borderRadius: '50%',
-                border: 'none',
-                background: 'rgba(0,0,0,0.6)',
-                backdropFilter: 'blur(8px)',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'background 0.15s ease',
-                touchAction: 'manipulation',
-                position: 'relative',
-                zIndex: 20,
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.6)'}
-            >
-              <svg width={11 * scale} height={11 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-            </button>
-            {/* Delete Scene */}
-            <button
-              onPointerDown={(e) => { e.stopPropagation(); }}
-              onClick={(e) => { e.stopPropagation(); deleteScene?.(scene.scene_number); }}
-              title="Delete scene"
-              style={{
-                width: `${22 * scale}px`,
-                height: `${22 * scale}px`,
-                borderRadius: '50%',
-                border: 'none',
-                background: 'rgba(120,20,20,0.6)',
-                backdropFilter: 'blur(8px)',
-                color: '#ff9999',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'background 0.15s ease',
-                touchAction: 'manipulation',
-                position: 'relative',
-                zIndex: 20,
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(160,30,30,0.8)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(120,20,20,0.6)'}
-            >
-              <svg width={11 * scale} height={11 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-            </button>
+            <ActionBtn label="Regenerate image">
+              <button
+                onPointerDown={(e) => { e.stopPropagation(); }}
+                onClick={(e) => { e.stopPropagation(); regenImage?.(scene.scene_number, scene.text); }}
+                style={{
+                  width: `${22 * scale}px`,
+                  height: `${22 * scale}px`,
+                  borderRadius: '50%',
+                  border: 'none',
+                  background: 'rgba(0,0,0,0.6)',
+                  backdropFilter: 'blur(8px)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s ease',
+                  touchAction: 'manipulation',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.6)'}
+              >
+                <svg width={11 * scale} height={11 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+              </button>
+            </ActionBtn>
           </div>
         )}
       </div>
       )}
+
 
       {/* Decorative divider */}
       <div key={`divider-${textRegenKey}`} className="flex items-center gap-2" style={{ flexShrink: 0, marginBottom: `${4 * scale}px` }}>
@@ -818,14 +888,14 @@ function SceneRevealed({ scene, scale = 1, displayIndex }) {
 }
 
 /* ── Main SceneCard: decides composing vs revealed ── */
-export default function SceneCard({ scene, scale = 1, displayIndex }) {
+export default function SceneCard({ scene, scale = 1, displayIndex, isBookmarked }) {
   const wrapperStyle = scene._deleting
     ? { animation: 'sceneDeleteOut 0.5s ease-in forwards', height: '100%' }
     : { height: '100%' };
 
   // Show revealed state as soon as text is available (don't wait for image)
   const content = scene.text
-    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} />
+    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} />
     : <SceneComposing sceneNumber={scene.scene_number} displayIndex={displayIndex} scale={scale} />;
 
   return <div style={wrapperStyle}>{content}</div>;

@@ -527,6 +527,16 @@
   box-shadow: 0 0 12px var(--accent-primary-glow);
 }
 
+.book-nav-dot.bookmarked {
+  background: #d4a850;
+  box-shadow: 0 0 8px rgba(212, 168, 80, 0.4);
+}
+
+.book-nav-dot.bookmarked.active {
+  background: linear-gradient(90deg, var(--accent-primary), #d4a850);
+  box-shadow: 0 0 12px var(--accent-primary-glow), 0 0 8px rgba(212, 168, 80, 0.3);
+}
+
 /* ---- Keyframes (explicit, not relying on Tailwind) ---- */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -594,6 +604,27 @@
   pointer-events: none;
 }
 
+/* Scene header actions (regen/delete) — hidden until page hovered */
+.scene-external-actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.book-page:hover .scene-external-actions,
+.book-page-inner:hover .scene-external-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.scene-external-actions button {
+  pointer-events: auto;
+}
+
+.scene-external-actions button svg {
+  pointer-events: none;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -602,4 +633,31 @@
   0% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.95); filter: blur(2px); }
   100% { opacity: 0; transform: scale(0.85) rotateY(10deg); filter: blur(6px); }
+}
+
+/* ============================================
+   BOOK ENTRANCE ANIMATION
+   ============================================ */
+.storybook-entering {
+  opacity: 0;
+  transform: translateY(30px) scale(0.95);
+}
+
+.storybook-entrance {
+  animation: bookEntrance 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes bookEntrance {
+  from { opacity: 0; transform: translateY(30px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Preloaded scene subtle fade-in */
+@keyframes preloadedFadeIn {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+.scene-preloaded-fadein {
+  animation: preloadedFadeIn 0.4s ease-out forwards;
 }

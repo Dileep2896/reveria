@@ -410,9 +410,100 @@
   - Save button already had this behavior
 - Added "Generating AI title & cover..." info toast when Tier 3 cover generation starts (both Save and Complete flows)
 
+**Session 34: Multi-Language Story Generation**
+
+- Added 8-language support: English, Spanish, French, German, Japanese, Hindi, Portuguese, Chinese
+- Backend: `narrator.py` inserts language directive into system prompt; `tts_client.py` maps language→voice (e.g. `es-US-Studio-B`, `ja-JP-Standard-B`)
+- `orchestrator.py` passes language through `SharedPipelineState` to Narrator + TTS agents
+- `main.py` reads `language` from WS message, persists to Firestore, restores on resume
+- Frontend: Language dropdown in ControlBar (same glassmorphism pattern as art style), localized placeholder text
+- Language persisted per story in Firestore, restored on Library open, reset to English on New Story
+
+**Session 35: Animated Page Transitions**
+
+- Added entrance animation when book first appears on StoryCanvas
+- `entranceReady` state transitions from hidden to visible after scene hydration
+- CSS: `bookEntrance` keyframe — `translateY(30px) scale(0.95)` → `translateY(0) scale(1)` with cubic-bezier easing
+- Preloaded scenes (from Library) get a subtle `fadeIn 0.4s` instead of full reveal animation
+
+**Session 36: Share Link for Published Stories**
+
+- New REST endpoint `GET /api/public/stories/{story_id}` — no auth required, checks `is_public`, returns sanitized story data
+- Frontend: Share button in header copies public URL to clipboard (visible when published + storyId exists)
+- Unauthenticated story viewing: when `!user && urlStoryId`, fetch public story and render StoryCanvas in read-only mode with "Sign in to create" CTA
+- Fixed timing: added `!authLoading` guard to prevent premature public fetch during Firebase auth resolution
+
+**Session 37: Story Export to PDF**
+
+- New backend service `pdf_export.py` using `fpdf2` — generates polished storybook PDF
+- Cover page with image/dark background, scene pages with illustrations + text, decorative separators, page numbering, colophon
+- Endpoint `GET /api/stories/{story_id}/pdf` with auth (owner or public story)
+- Frontend: PDF download button in header, fetches with auth token, creates blob → download
+- Added `fpdf2>=2.7.0` to requirements.txt
+
+**Session 38: Reading Mode (Published Books Only)**
+
+- New component `ReadingMode.jsx` — full-screen immersive overlay
+- Word-by-word narration highlighting (karaoke-style sync with audio)
+- Pause/play controls, bookmarking (Firestore for authenticated, sessionStorage for guests)
+- Segmented progress bar showing scene-by-scene progress
+- Auto-advance to next scene after narration ends (1.5s delay)
+- Keyboard controls: Space/Right = next, Left = prev, Escape = exit
+- Fade transitions between scenes
+
+**Session 39: Background Music / Ambience**
+
+- New hook `useAmbientAudio.js` — Web Audio API with `AudioContext` + `GainNode`
+- 7 mood-mapped ambient tracks in `/public/ambient/`: peaceful, mysterious, tense, chaotic, melancholic, joyful, epic
+- Crossfade between moods (1s fade-out, 2s fade-in), ambient volume 15%
+- Music toggle button in header (speaker icon)
+- Auto-switches mood when Director's `visual_style.mood` changes
+- Initially had 2-second placeholder files; replaced with proper 30-second synthesized ambient tracks (~240KB each)
+
+**Session 40: Character Portrait Gallery**
+
+- Backend `_generate_portraits()`: Parses character sheet, generates face portrait prompts, generates 1:1 images via Imagen, uploads to GCS
+- Auto-extracts characters from story if `_character_sheet` is empty (fallback for stories where `extract_characters` returned NONE)
+- All error paths send `portraits_done` so frontend loading never gets stuck
+- WS handler: `generate_portraits` message type; relaxed guard (no longer requires pre-existing character sheet)
+- Frontend: `PortraitGalleryCard` in DirectorPanel — circular thumbnails (56px) with name labels, "Generate Portraits" button
+- Portraits persisted to Firestore and restored from Library (fixed: LibraryPage now includes `portraits` + `language` in `onOpenBook`)
+- Portrait generation hidden for completed/published books
+
+**Session 41: Gemini Live Voice Conversation**
+
+- Backend `gemini_live.py`: `LiveSession` class using `gemini-2.0-flash-live-001` model
+- System prompt: creative story collaborator; detects `[STORY_PROMPT]` prefix for auto-fill
+- WS message types: `live_start`, `live_stop`, `live_audio_chunk`, `live_text`
+- Frontend `useLiveVoice.js`: AudioContext + MediaRecorder for continuous 16kHz PCM streaming
+- ControlBar: "Live" toggle, conversation transcript display, auto-fill prompt on `live_prompt_ready`
+
+**Session 42: Complete/Publish Flow & Bug Fixes**
+
+- Added confirmation dialogs for Complete and Publish actions
+- Publishing is now permanent (can't unpublish) — button becomes non-interactive "Published" badge
+- Delete all scenes → auto-delete entire book from Firestore + GCS, send `story_deleted` WS message
+- Fixed stuck splash screen after deleting all scenes (`hasBeenPopulatedRef` prevents re-triggering `isHydrating`)
+- Language lock warning in Director empty state: "Language will be locked once you start generating"
+
 ---
 
-## Current State (Feb 21, 2026)
+### Day 5 (Feb 22, 2026)
+
+**Session 43: Director Analysis Fixes & Scene Action UX**
+
+- Fixed Director tension bars showing wrong number of bars vs actual scenes
+- Strengthened Director prompt to enforce exact scene count in tension levels array
+- Added backend validation: pad or trim tension `levels` array to match `scene_count`
+- Added `sceneTitles` prop to DirectorPanel → TensionVisual → TensionBars for scene title labels
+- Fixed React hooks order violation: converted `activeBatchSceneTitles` from `useMemo` to plain IIFE (was after early return)
+- Reorganized scene action buttons: "Regenerate image" stays on image overlay, "Regenerate scene" + "Delete scene" moved to scene header row (right-aligned, appear on page hover)
+- Replaced `ActionBtn` tooltip with portal-based fixed-position tooltip using `createPortal` + `getBoundingClientRect()` — escapes all `overflow:hidden` ancestors
+- Removed Fork Story feature entirely (frontend SceneCard, App.jsx, SceneActionsContext; backend fork endpoint + ForkRequest model)
+
+---
+
+## Current State (Feb 22, 2026)
 
 ### What's Working
 - Full text + image generation pipeline: prompt → Gemini 2.0 Flash → streamed scenes → Imagen 3 illustrations → interactive flipbook
@@ -458,11 +549,21 @@
 - Auto-session recovery for scene actions when WS session is lost
 - **Cover art style matching** — book covers use the same art style suffix as scene images
 - Page auto-advance fix — clamp effect generation-aware to prevent fighting auto-flip
+- Multi-language story generation (8 languages) with language-specific TTS voices
+- Animated book entrance transitions
+- Share link for published stories (public URL, unauthenticated viewing)
+- PDF export with cover page, scene images, and polished typography
+- Reading Mode — full-screen immersive with karaoke-style narration sync
+- Background ambient music with mood-based crossfade (7 mood tracks)
+- Character portrait gallery with auto-extraction fallback
+- Gemini Live Voice conversation for brainstorming story ideas
+- Complete/Publish confirmation dialogs (publish is permanent)
+- Auto-delete book when all scenes removed
+- Portal-based tooltips for scene action buttons
 
 ### What Needs to Be Built
-- **Firebase Hosting** — Deploy frontend SPA
-- **Cloud Run Deployment** — Deploy backend container
 - **Demo Video** — 4-minute walkthrough for submission
 
 ### Known Issues / Improvements Needed
-- **react-pageflip limitations** — Mouse-based page flipping disabled due to unwanted drag behavior on page edges; 21 pre-allocated page slots exist to avoid React reconciliation conflicts
+- **react-pageflip limitations** — Mouse-based page flipping disabled; 21 pre-allocated page slots
+- **Director panel doesn't update when a scene is deleted** — tension bars and analysis remain stale after scene deletion; need to re-trigger Director analysis or clear stale data

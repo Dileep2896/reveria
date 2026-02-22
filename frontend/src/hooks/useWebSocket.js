@@ -22,6 +22,13 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const cooldownTimer = useRef(null);
   const [sceneBusy, setSceneBusy] = useState(new Set());
   const [bookMeta, setBookMeta] = useState(null);
+  const [portraits, setPortraits] = useState([]);
+  const [portraitsLoading, setPortraitsLoading] = useState(false);
+
+  // Live voice message handler ref (set by App via setLiveHandler)
+  const liveHandlerRef = useRef(null);
+  // Callback when backend deletes entire story (all scenes removed)
+  const storyDeletedRef = useRef(null);
 
   // Ref for idToken so reconnects always use the latest token
   const idTokenRef = useRef(idToken);
@@ -63,6 +70,9 @@ export default function useWebSocket(idToken, initialState, addToast) {
         generationsRef.current = initialState.generations;
         currentBatchIndexRef.current = initialState.generations.length - 1;
         setGenerations([...initialState.generations]);
+      }
+      if (initialState.portraits?.length) {
+        setPortraits(initialState.portraits);
       }
     }
   }, [initialState]);
@@ -114,6 +124,11 @@ export default function useWebSocket(idToken, initialState, addToast) {
       } catch {
         console.warn('WebSocket: malformed message', event.data);
         return;
+      }
+
+      // Route live voice messages to handler
+      if (data.type?.startsWith('live_') && liveHandlerRef.current) {
+        if (liveHandlerRef.current(data)) return;
       }
 
       if (data.type === 'story_id') {
@@ -181,7 +196,11 @@ export default function useWebSocket(idToken, initialState, addToast) {
         setScenes((prev) =>
           prev.map((scene) =>
             scene.scene_number === data.scene_number
-              ? { ...scene, audio_url: data.content }
+              ? {
+                  ...scene,
+                  audio_url: data.content,
+                  ...(data.word_timestamps ? { word_timestamps: data.word_timestamps } : {}),
+                }
               : scene,
           ),
         );
@@ -285,6 +304,44 @@ export default function useWebSocket(idToken, initialState, addToast) {
         return;
       }
 
+      if (data.type === 'story_deleted') {
+        // Backend deleted the entire story (all scenes removed)
+        setScenes([]);
+        setUserPrompt(null);
+        setError(null);
+        setGenerating(false);
+        setDirectorData(null);
+        setBookMeta(null);
+        setPortraits([]);
+        setPortraitsLoading(false);
+        setStoryId(null);
+        storyIdRef.current = null;
+        generationsRef.current = [];
+        currentBatchIndexRef.current = -1;
+        setGenerations([]);
+        initialStateRef.current = null;
+        hydratedRef.current = false;
+        storyDeletedRef.current?.();
+        return;
+      }
+
+      if (data.type === 'portrait') {
+        setPortraits((prev) => {
+          // Avoid duplicates (WS resume may resend portraits already loaded from Firestore)
+          const exists = prev.some(p => p.name === data.name && p.image_url === data.image_url);
+          if (exists) return prev;
+          // Replace existing entry for same character (regeneration)
+          const withoutOld = prev.filter(p => p.name !== data.name);
+          return [...withoutOld, { name: data.name, image_url: data.image_url, error: data.error }];
+        });
+        return;
+      }
+
+      if (data.type === 'portraits_done') {
+        setPortraitsLoading(false);
+        return;
+      }
+
       if (data.type === 'error') {
         setError(data.content);
         addToastRef.current?.(data.content, 'error');
@@ -328,6 +385,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
         content,
         art_style: options.artStyle || 'cinematic',
         scene_count: options.sceneCount || 2,
+        language: options.language || 'English',
       }));
     }
   }, []);
@@ -349,6 +407,14 @@ export default function useWebSocket(idToken, initialState, addToast) {
     }
   }, []);
 
+  const sendPortraitRequest = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setPortraits([]);
+      setPortraitsLoading(true);
+      wsRef.current.send(JSON.stringify({ type: 'generate_portraits' }));
+    }
+  }, []);
+
   const reset = useCallback(() => {
     setScenes([]);
     setUserPrompt(null);
@@ -356,6 +422,8 @@ export default function useWebSocket(idToken, initialState, addToast) {
     setGenerating(false);
     setDirectorData(null);
     setBookMeta(null);
+    setPortraits([]);
+    setPortraitsLoading(false);
     quotaImageToastFired.current = false;
     setStoryId(null);
     storyIdRef.current = null;
@@ -380,11 +448,16 @@ export default function useWebSocket(idToken, initialState, addToast) {
     generationsRef.current = state.generations?.length ? state.generations : [];
     currentBatchIndexRef.current = state.generations?.length ? state.generations.length - 1 : -1;
     setGenerations(state.generations?.length ? [...state.generations] : []);
+    // Restore portraits from Firestore (WS resume may also send them)
+    setPortraits(state.portraits?.length ? state.portraits : []);
     // Skip resume for read-only viewing (other users' stories)
     if (!skipResume && wsRef.current?.readyState === WebSocket.OPEN && state.storyId) {
       wsRef.current.send(JSON.stringify({ type: 'resume', story_id: state.storyId }));
     }
   }, []);
 
-  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, send, sendAudio, sendSceneAction, reset, load };
+  const setLiveHandler = useCallback((handler) => { liveHandlerRef.current = handler; }, []);
+  const setStoryDeletedHandler = useCallback((handler) => { storyDeletedRef.current = handler; }, []);
+
+  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, send, sendAudio, sendSceneAction, sendPortraitRequest, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler };
 }
