@@ -316,6 +316,14 @@ When UI elements need to visually escape their container (tooltips, modals, drop
 
 AI models don't always return what you expect. When character extraction returns NONE (unnamed characters, abstract scenarios), having a fallback that re-extracts from the full story text prevents features like portraits from silently failing.
 
+### 9. Modular Code Scales, Monoliths Don't
+
+We started with big files for speed — SceneCard.jsx hit 782 lines, useWebSocket.js hit 462. Every bug fix became an archaeology expedition. Breaking them into focused modules (SceneHeader, SceneImageArea, WritingSkeleton, wsHandlers) made each piece testable and comprehensible in isolation. The rule: if you can't understand a file in one screen, it's too big.
+
+### 10. Regen UX Needs Optimistic Patterns
+
+When users regenerate a scene, the naive approach (clear → loading → new) creates jarring flashes. The better pattern: keep the old content visible with a loading overlay, replace atomically when the new content arrives. If generation fails, the old content is still there. Same philosophy as optimistic UI updates in collaborative apps.
+
 ---
 
 ## Tech Stack

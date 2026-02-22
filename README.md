@@ -48,6 +48,10 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Gemini Live Voice** — Real-time voice conversation with Gemini for brainstorming story ideas; detected prompts auto-fill the story input
 - **Complete & Publish Flow** — Confirmation dialogs for completing and publishing stories; publishing is permanent and creates a shareable public link
 - **Portal-Based Tooltips** — Custom glassmorphism tooltips using React `createPortal` that escape overflow:hidden containers
+- **Scene Delete Confirmation** — Portal-based confirmation dialog with scene title preview, matching Library's glassmorphism design
+- **Smart Regen UX** — Scene regeneration keeps old image visible during generation; failed regen preserves previous image instead of showing error
+- **Writing Skeleton Animation** — Animated skeleton lines with typing cursor glow and shimmer sweep, shown during both initial scene generation and scene rewriting
+- **Modular Codebase** — 7 monolithic files decomposed into ~22 focused modules (all under 320 lines) for maintainability
 
 ---
 
@@ -522,7 +526,23 @@ storyforge/
 │   │   │   ├── ControlBar.jsx         # Input + art style pills + voice
 │   │   │   ├── LibraryPage.jsx        # User's book library with 3D cards
 │   │   │   ├── ExplorePage.jsx        # Public story browser with likes
-│   │   │   ├── ReadingMode.jsx         # Full-screen reading with karaoke narration
+│   │   │   ├── ReadingMode.jsx        # Full-screen reading with karaoke narration
+│   │   │   ├── SplashScreen.jsx       # Loading splash with branded animation
+│   │   │   ├── SignInScreen.jsx       # Google sign-in screen
+│   │   │   ├── scene/                 # SceneCard sub-components
+│   │   │   │   ├── SceneComposing.jsx # Skeleton loading state
+│   │   │   │   ├── SceneHeader.jsx    # Badge, title, audio, action buttons
+│   │   │   │   ├── SceneImageArea.jsx # Image + shimmer + regen overlay
+│   │   │   │   ├── SceneTextArea.jsx  # Drop-cap text + writing skeleton
+│   │   │   │   └── WritingSkeleton.jsx# Shared typing animation skeleton
+│   │   │   ├── director/              # DirectorPanel sub-components
+│   │   │   │   ├── DirectorEmptyState.jsx
+│   │   │   │   ├── DirectorAnalyzing.jsx
+│   │   │   │   └── DirectorCardList.jsx
+│   │   │   ├── storybook/            # StoryCanvas sub-components
+│   │   │   │   ├── CoverPage.jsx
+│   │   │   │   ├── EmptyPageContent.jsx
+│   │   │   │   └── GeneratingContent.jsx
 │   │   │   └── storybook.css          # Flipbook & page styles
 │   │   ├── contexts/
 │   │   │   ├── ThemeContext.jsx        # Dark/light mode
@@ -530,6 +550,10 @@ storyforge/
 │   │   │   └── ToastContext.jsx        # Global toast notifications
 │   │   ├── hooks/
 │   │   │   ├── useWebSocket.js        # WebSocket connection + story load/resume
+│   │   │   ├── wsHandlers.js          # WS message handler dispatch map
+│   │   │   ├── useStoryNavigation.js  # Page nav, keyboard, URL sync
+│   │   │   ├── useBookSize.js         # Responsive book sizing
+│   │   │   ├── useAppEffects.js       # App-level useEffect hooks
 │   │   │   ├── useVoiceCapture.js     # Web Audio API hook
 │   │   │   ├── useAuth.js             # Firebase Auth hook (Google Sign-In)
 │   │   │   ├── useAmbientAudio.js     # Background ambient music hook
@@ -544,6 +568,10 @@ storyforge/
 │   └── package.json
 ├── backend/
 │   ├── main.py                        # FastAPI + WebSocket endpoint
+│   ├── handlers/
+│   │   ├── scene_actions.py           # Regen image/scene, delete scene
+│   │   ├── live_session.py            # Gemini Live start/stop/audio/text
+│   │   └── ws_resume.py              # Resume, auto-recover, reset
 │   ├── agents/
 │   │   ├── orchestrator.py            # ADK root agent — coordinates all agents
 │   │   ├── narrator.py                # Story text generation agent

@@ -1,0 +1,198 @@
+/* Registered custom property — enables smooth gradient animation */
+@property --sweep {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
+.rm {
+  position: fixed; inset: 0; z-index: 200;
+  background: #07070a;
+  display: flex; flex-direction: column;
+  overflow: hidden; user-select: none;
+}
+
+/* Blurred ambient glow */
+.rm-blur {
+  position: absolute; inset: -60px;
+  background-size: cover; background-position: center;
+  filter: blur(50px) brightness(0.35) saturate(1.4);
+  transition: opacity 0.6s ease;
+}
+.rm-blur.rm-in  { opacity: 1; }
+.rm-blur.rm-out { opacity: 0; }
+
+.rm-bg-overlay {
+  position: absolute; inset: 0;
+  background: rgba(7,7,10,0.55);
+  pointer-events: none;
+}
+
+/* Top bar */
+.rm-top {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px 0;
+  z-index: 15; position: relative;
+}
+.rm-segs { display: flex; gap: 5px; flex: 1; }
+.rm-s {
+  flex: 1; height: 2.5px; border-radius: 2px;
+  background: rgba(255,255,255,0.12);
+  transition: background 0.4s;
+}
+.rm-s.done { background: rgba(255,255,255,0.55); }
+.rm-s.now  {
+  background: rgba(255,255,255,0.9);
+  box-shadow: 0 0 6px rgba(255,255,255,0.25);
+}
+
+.rm-controls { display: flex; gap: 6px; flex-shrink: 0; }
+.rm-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+.rm-btn:hover { background: rgba(255,255,255,0.12); }
+.rm-bm { color: #f0c040; border-color: rgba(240,192,64,0.3); }
+
+/* Body */
+.rm-body {
+  flex: 1; display: flex; flex-direction: column;
+  padding: 16px 24px 8px;
+  min-height: 0;
+  position: relative; z-index: 5;
+}
+
+/* Contained image */
+.rm-img-wrap {
+  flex: 1 1 0;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 0; overflow: hidden;
+  border-radius: 14px; position: relative;
+  transition: opacity 0.5s ease;
+}
+.rm-img-wrap.rm-in  { opacity: 1; }
+.rm-img-wrap.rm-out { opacity: 0; }
+
+.rm-img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain; border-radius: 12px;
+  will-change: transform;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+.rm-img-ph {
+  width: 100%; height: 200px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.03); border-radius: 12px;
+}
+
+/* Ken Burns */
+.rm-kb-0 { animation: kb0 30s ease-in-out infinite alternate; }
+.rm-kb-1 { animation: kb1 28s ease-in-out infinite alternate; }
+.rm-kb-2 { animation: kb2 26s ease-in-out infinite alternate; }
+@keyframes kb0 {
+  0%   { transform: scale(1); }
+  100% { transform: scale(1.04) translate(-0.5%, -0.3%); }
+}
+@keyframes kb1 {
+  0%   { transform: scale(1.03) translate(-0.3%, 0.2%); }
+  100% { transform: scale(1) translate(0.3%, -0.2%); }
+}
+@keyframes kb2 {
+  0%   { transform: scale(1); }
+  100% { transform: scale(1.04) translate(0.3%, 0.3%); }
+}
+
+/* Text area */
+.rm-text-area {
+  flex-shrink: 0;
+  padding: 18px 8px 4px;
+  max-width: 740px; margin: 0 auto; width: 100%;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.rm-text-area.rm-in  { opacity: 1; transform: translateY(0); }
+.rm-text-area.rm-out { opacity: 0; transform: translateY(10px); }
+
+.rm-title {
+  font-family: 'Playfair Display', 'Georgia', serif;
+  font-size: 1.15rem; font-weight: 600;
+  color: rgba(255,255,255,0.88);
+  margin: 0 0 8px; text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.rm-text {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 0.92rem; line-height: 1.85;
+  margin: 0; text-align: center;
+}
+
+/* ── Smooth per-letter karaoke highlight ──────────
+   Uses @property --sweep to animate a gradient wipe
+   across each word via background-clip: text.
+   The gradient sweeps left→right through the letters. */
+
+.rm-w {
+  --sweep: 0%;
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.9)  calc(var(--sweep) - 8%),
+    rgba(255,255,255,0.18) calc(var(--sweep) + 8%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  transition: --sweep 0.55s ease-out;
+}
+
+/* Already spoken — fully lit */
+.rm-w.rm-past {
+  --sweep: 100%;
+}
+
+/* Current word — sweep animates 0% → 100%, soft glow via filter */
+.rm-w.rm-now {
+  --sweep: 100%;
+  filter: drop-shadow(0 0 6px rgba(255,255,255,0.18));
+}
+
+/* Bottom bar */
+.rm-bottom {
+  display: flex; align-items: center; justify-content: center; gap: 28px;
+  padding: 8px 24px 18px;
+  z-index: 15; position: relative;
+}
+.rm-counter {
+  font-size: 0.7rem; font-weight: 500;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 0.18em; text-transform: uppercase;
+  min-width: 60px; text-align: center;
+}
+.rm-nav-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s, color 0.2s, opacity 0.2s;
+}
+.rm-nav-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.8);
+}
+.rm-nav-btn:disabled { opacity: 0.2; cursor: default; }
+
+/* Mobile */
+@media (max-width: 640px) {
+  .rm-body { padding: 10px 14px 4px; }
+  .rm-text-area { padding: 12px 4px 2px; }
+  .rm-title { font-size: 1rem; }
+  .rm-text  { font-size: 0.85rem; line-height: 1.7; }
+  .rm-bottom { padding: 6px 16px 14px; gap: 20px; }
+  .rm-controls { gap: 4px; }
+  .rm-btn { width: 30px; height: 30px; }
+}

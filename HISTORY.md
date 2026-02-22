@@ -501,6 +501,27 @@
 - Replaced `ActionBtn` tooltip with portal-based fixed-position tooltip using `createPortal` + `getBoundingClientRect()` — escapes all `overflow:hidden` ancestors
 - Removed Fork Story feature entirely (frontend SceneCard, App.jsx, SceneActionsContext; backend fork endpoint + ForkRequest model)
 
+**Session 44: Deep Decomposition (Round 2)**
+
+- Broke 7 monolithic files (500–800 lines) into ~22 smaller modules, all under ~320 lines:
+  - **Phase A**: Extracted CSS from ReadingMode.jsx → `reading-mode.css`, DirectorPanel.jsx → `director-panel.css`
+  - **Phase B**: SceneCard.jsx (782→128) → `scene/SceneComposing`, `scene/SceneHeader`, `scene/SceneImageArea`, `scene/SceneTextArea`
+  - **Phase C**: StoryCanvas.jsx (617→319) → `storybook/CoverPage`, `storybook/EmptyPageContent`, `storybook/GeneratingContent`, `hooks/useStoryNavigation`, `hooks/useBookSize`
+  - **Phase D**: App.jsx (557→324) → `SplashScreen`, `SignInScreen`, `hooks/useAppEffects`
+  - **Phase E**: DirectorPanel.jsx (525→138) → `director/DirectorEmptyState`, `director/DirectorAnalyzing`, `director/DirectorCardList`
+  - **Phase F**: useWebSocket.js (462→233) → `hooks/wsHandlers.js` (message handler dispatch map)
+  - **Phase G**: main.py (650→407) → `handlers/scene_actions.py`, `handlers/live_session.py`, `handlers/ws_resume.py`
+
+**Session 45: Scene Deletion, Regen & UX Bug Fixes**
+
+- **Director updates on scene delete**: Removed deleted scene number from `generations[].sceneNumbers` AND spliced corresponding `tension.levels` entry — Director panel now re-renders with correct data
+- **Library updates on scene delete**: Backend now counts remaining scenes and updates Firestore `total_scene_count` after deletion
+- **Delete scene confirmation dialog**: Added portal-based confirmation dialog (matching Library's style) with scene title, warning, Cancel/Delete buttons
+- **Regen scene preserves old image**: `is_regen` text handler no longer clears `image_url` — old image stays visible with busy overlay while new one generates
+- **Regen image error preserves old image**: If regen fails but scene already has an image, old image is kept (no "Illustration unavailable")
+- **Regen scene language fix**: Frontend now sends `language` in regen_scene WS message; `scene_rewrite.py` includes "Write entirely in {language}" instruction; TTS receives correct language for voice selection
+- **Writing skeleton animation**: New `WritingSkeleton` component with animated drop-cap block, 8 staggered skeleton lines with shimmer sweep + typing cursor glow, used in both `SceneComposing` (initial generation) and `SceneTextArea` (regen overlay)
+
 ---
 
 ## Current State (Feb 22, 2026)
@@ -560,10 +581,15 @@
 - Complete/Publish confirmation dialogs (publish is permanent)
 - Auto-delete book when all scenes removed
 - Portal-based tooltips for scene action buttons
+- **Scene delete confirmation dialog** with portal overlay matching Library design
+- **Scene regen preserves old image** during regeneration (no flash of "unavailable")
+- **Scene regen respects language** — rewritten text and TTS use story's language
+- **Writing skeleton animation** — animated typing cursor + skeleton lines during text generation
+- **Director auto-updates on scene deletion** — tension bars and scene numbers stay accurate
+- **Library scene count updates on deletion** — Firestore `total_scene_count` synced
 
 ### What Needs to Be Built
 - **Demo Video** — 4-minute walkthrough for submission
 
 ### Known Issues / Improvements Needed
 - **react-pageflip limitations** — Mouse-based page flipping disabled; 21 pre-allocated page slots
-- **Director panel doesn't update when a scene is deleted** — tension bars and analysis remain stale after scene deletion; need to re-trigger Director analysis or clear stale data

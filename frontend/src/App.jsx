@@ -10,13 +10,8 @@ import useLiveVoice from './hooks/useLiveVoice';
 import useActiveStory from './hooks/useActiveStory';
 import useStoryActions from './hooks/useStoryActions';
 import useBookManager from './hooks/useBookManager';
-import {
-  db,
-  getDoc,
-  doc,
-  updateDoc,
-} from './firebase';
-import { API_URL, findFallbackCover } from './utils/storyHelpers';
+import useAppEffects from './hooks/useAppEffects';
+import { API_URL } from './utils/storyHelpers';
 
 import Logo from './components/Logo';
 import StoryCanvas from './components/StoryCanvas';
@@ -28,13 +23,14 @@ import ControlBar from './components/ControlBar';
 import LibraryPage from './components/LibraryPage';
 import ExplorePage from './components/ExplorePage';
 import ReadingMode from './components/ReadingMode';
+import SplashScreen from './components/SplashScreen';
+import SignInScreen from './components/SignInScreen';
 
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, idToken, loading: authLoading, signInWithGoogle, signOut } = useAuth();
 
-  // Extract storyId from URL: /story/:storyId
   const urlStoryMatch = location.pathname.match(/^\/story\/(.+?)(?:\/|$)/);
   const urlStoryId = urlStoryMatch ? urlStoryMatch[1] : null;
 
@@ -45,8 +41,9 @@ export default function App() {
   const [directorOpen, setDirectorOpen] = useState(true);
   const [controlBarInput, setControlBarInput] = useState('');
   const [artStyle, setArtStyle] = useState('cinematic');
-  const [language, setLanguageRaw] = useState('English');
+  const [languageRaw, setLanguageRaw] = useState('English');
   const setLanguage = useCallback((lang) => { setLanguageRaw(lang); setControlBarInput(''); }, []);
+  const language = languageRaw;
   const [currentSceneNumber, setCurrentSceneNumber] = useState(null);
   const {
     saving, saved, generatingCover,
@@ -75,8 +72,8 @@ export default function App() {
   const handleRegenScene = useCallback((sceneNumber, sceneText) => {
     if (!storyId || generating) return;
     const allScenes = scenes.map((s) => ({ scene_number: s.scene_number, text: s.text }));
-    sendSceneAction('regen_scene', { scene_number: sceneNumber, scene_text: sceneText, all_scenes: allScenes, story_id: storyId });
-  }, [storyId, generating, scenes, sendSceneAction]);
+    sendSceneAction('regen_scene', { scene_number: sceneNumber, scene_text: sceneText, all_scenes: allScenes, story_id: storyId, language });
+  }, [storyId, generating, scenes, sendSceneAction, language]);
 
   const handleDeleteScene = useCallback((sceneNumber) => {
     if (!storyId || generating) return;
@@ -91,15 +88,7 @@ export default function App() {
     isReadOnly: viewingReadOnly || storyStatus === 'completed',
   }), [handleRegenImage, handleRegenScene, handleDeleteScene, sceneBusy, viewingReadOnly, storyStatus]);
 
-  // Sync storyId → URL: navigate to /story/:id when storyId changes
-  useEffect(() => {
-    if (!storyId || isLibrary || isExplore) return;
-    if (urlStoryId === storyId) return; // URL already matches
-    navigate(`/story/${storyId}`, { replace: true });
-  }, [storyId, urlStoryId, isLibrary, isExplore, navigate]);
-
-  // Track whether scenes were ever populated (hydration completed at least once).
-  // Without this, deleting all scenes would re-trigger the hydrating splash.
+  // Track whether scenes were ever populated (hydration completed at least once)
   const [hasBeenPopulated, setHasBeenPopulated] = useState(false);
   useEffect(() => {
     if (scenes.length > 0) setHasBeenPopulated(true);
@@ -108,105 +97,28 @@ export default function App() {
     if (initialState === null || initialState === undefined) setHasBeenPopulated(false);
   }, [initialState]);
 
-  // True while Firestore returned scenes but useWebSocket hasn't hydrated them yet
   const isHydrating = !!(initialState?.scenes?.length) && scenes.length === 0 && !generating && !hasBeenPopulated;
 
   const handleGenreClick = useCallback((prompt) => {
     setControlBarInput(prompt);
   }, []);
 
-  // Reset "Saved!" when new generation starts
-  useEffect(() => {
-    if (generating) resetSaved();
-  }, [generating, resetSaved]);
-
-  // Persist bookMeta to Firestore as soon as it arrives from WS
-  useEffect(() => {
-    if (!bookMeta || !storyId) return;
-    const storyRef = doc(db, 'stories', storyId);
-    getDoc(storyRef).then((snap) => {
-      if (snap.exists() && snap.data().title_generated) return; // already written
-      updateDoc(storyRef, {
-        title: bookMeta.title || 'Untitled Story',
-        cover_image_url: bookMeta.coverUrl || findFallbackCover(scenes),
-        title_generated: true,
-        updated_at: new Date(),
-      }).catch((err) => console.error('Failed to persist bookMeta:', err));
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- scenes used only as fallback cover; must not re-run on scene changes
-  }, [bookMeta, storyId]);
-
-  // Fetch bookmark for current story
-  useEffect(() => {
-    if (!storyId || !idToken) {
-      setBookmarkedSceneIndex(null);
-      return;
-    }
-    fetch(`${API_URL}/api/stories/${storyId}/bookmark`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.scene_index != null) {
-          setBookmarkedSceneIndex(data.scene_index);
-        } else {
-          setBookmarkedSceneIndex(null);
-        }
-      })
-      .catch(() => setBookmarkedSceneIndex(null));
-  }, [storyId, idToken]);
-
-  // Clear read-only mode when navigating away from story view
-  useEffect(() => {
-    if (location.pathname !== '/' && !location.pathname.startsWith('/story/')) setViewingReadOnly(false);
-  }, [location.pathname]);
-
-  // Sync storyStatus + artStyle from loaded initial state
-  useEffect(() => {
-    if (initialState === null || initialState === undefined) {
-      setStoryStatus(null);
-      setIsPublished(false);
-    } else if (initialState) {
-      setStoryStatus(initialState.status || 'draft');
-      setIsPublished(initialState.is_public || false);
-      if (initialState.art_style) setArtStyle(initialState.art_style);
-      if (initialState.language) setLanguage(initialState.language);
-    }
-  }, [initialState, setStoryStatus, setIsPublished, setLanguage]);
-
   const { handleOpenBook, handleOpenPublicBook } = useBookManager({
     storyId, autoSaveCurrent, reset, load, navigate, user,
     setStoryStatus, setIsPublished, setArtStyle, setLanguage, setViewingReadOnly,
   });
 
-  // Register live voice message handler
-  useEffect(() => {
-    setLiveHandler(live.handleMessage);
-  }, [setLiveHandler, live.handleMessage]);
-
-  // Handle backend deleting the entire story (all scenes removed)
-  useEffect(() => {
-    setStoryDeletedHandler(() => {
-      clearState();
-      setStoryStatus(null);
-      setIsPublished(false);
-      setArtStyle('cinematic');
-      setLanguage('English');
-      setBookmarkedSceneIndex(null);
-      navigate('/');
-      addToast('Story deleted — all scenes were removed', 'info');
-    });
-  }, [setStoryDeletedHandler, clearState, navigate, addToast, setStoryStatus, setIsPublished, setLanguage]);
-
-  // Crossfade ambient music when director mood changes
-  const lastAmbientMood = useRef(null);
-  useEffect(() => {
-    const mood = directorData?.visual_style?.mood;
-    if (mood && mood !== lastAmbientMood.current) {
-      lastAmbientMood.current = mood;
-      ambient.crossfadeTo(mood);
-    }
-  }, [directorData, ambient]);
+  // All side effects extracted to useAppEffects
+  useAppEffects({
+    storyId, urlStoryId, isLibrary, isExplore, navigate,
+    scenes, generating, initialState, idToken,
+    bookMeta, setBookmarkedSceneIndex, resetSaved,
+    setStoryStatus, setIsPublished, setArtStyle, setLanguage,
+    setViewingReadOnly, setLiveHandler, setStoryDeletedHandler,
+    clearState, reset, addToast, live,
+    directorData, ambient,
+    location,
+  });
 
   // Derive per-scene image tier info for DirectorPanel
   const imageTiers = useMemo(() =>
@@ -216,7 +128,6 @@ export default function App() {
     [scenes]
   );
 
-  // Memoize spreadPrompts so StoryCanvas memo isn't defeated by new object reference
   const spreadPromptsMemo = useMemo(() => {
     if (!currentSceneNumber || !scenes.length) return { left: userPrompt, right: null };
     const leftScene = scenes[currentSceneNumber - 1];
@@ -241,8 +152,7 @@ export default function App() {
     }
   }, [authLoading, user, urlStoryId, publicStory, publicLoading]);
 
-  // Auth loading, story loading, or hydrating — branded splash
-  // initialState === undefined means useActiveStory hasn't resolved yet for this user
+  // Loading splash
   const showSplash = authLoading || (user && storyLoading) || (user && initialState === undefined) || (user && isHydrating);
 
   if (showSplash) {
@@ -251,73 +161,7 @@ export default function App() {
       : isHydrating
         ? 'Resuming your story...'
         : 'Loading your story...';
-
-    return (
-      <div className="h-screen flex flex-col items-center justify-center relative overflow-hidden">
-        <div
-          className="fixed inset-0 -z-10"
-          style={{ background: 'var(--bg-gradient)' }}
-        >
-          <div className="absolute inset-0" style={{ background: 'var(--orb-1)' }} />
-          <div className="absolute inset-0" style={{ background: 'var(--orb-2)' }} />
-          <div className="absolute inset-0" style={{ background: 'var(--orb-3)' }} />
-        </div>
-
-        <div
-          className="flex flex-col items-center"
-          style={{ animation: 'fadeIn 0.6s ease-out' }}
-        >
-          <Logo size="full" />
-
-          {/* Progress bar */}
-          <div
-            style={{
-              width: '120px',
-              height: '2px',
-              borderRadius: '1px',
-              background: 'var(--glass-border)',
-              overflow: 'hidden',
-              marginTop: '1.5rem',
-            }}
-          >
-            <div
-              style={{
-                width: '40%',
-                height: '100%',
-                borderRadius: '1px',
-                background: 'var(--accent-primary)',
-                boxShadow: '0 0 8px var(--accent-primary-glow)',
-                animation: 'loadingSlide 1.4s ease-in-out infinite',
-              }}
-            />
-          </div>
-
-          <p
-            style={{
-              color: 'var(--text-muted)',
-              fontSize: '0.8rem',
-              marginTop: '1rem',
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              animation: 'loadingTextPulse 2s ease-in-out infinite',
-            }}
-          >
-            {splashMessage}
-          </p>
-        </div>
-
-        <style>{`
-          @keyframes loadingSlide {
-            0% { transform: translateX(-120px); }
-            100% { transform: translateX(300px); }
-          }
-          @keyframes loadingTextPulse {
-            0%, 100% { opacity: 0.4; }
-            50% { opacity: 0.8; }
-          }
-        `}</style>
-      </div>
-    );
+    return <SplashScreen message={splashMessage} />;
   }
 
   // Not signed in — show public story or sign-in screen
@@ -358,94 +202,23 @@ export default function App() {
         </div>
       );
     }
-    return (
-      <div className="h-screen flex flex-col items-center justify-center relative overflow-hidden">
-        {/* Full background matching main app */}
-        <div
-          className="fixed inset-0 -z-10"
-          style={{ background: 'var(--bg-gradient)' }}
-        >
-          <div className="absolute inset-0" style={{ background: 'var(--orb-1)' }} />
-          <div className="absolute inset-0" style={{ background: 'var(--orb-2)' }} />
-          <div className="absolute inset-0" style={{ background: 'var(--orb-3)' }} />
-          <div
-            className="absolute inset-0 opacity-30"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E")`,
-            }}
-          />
-        </div>
-
-        {/* Glass card */}
-        <div
-          className="flex flex-col items-center px-12 py-10 rounded-2xl"
-          style={{
-            background: 'var(--glass-bg-strong)',
-            backdropFilter: 'var(--glass-blur)',
-            WebkitBackdropFilter: 'var(--glass-blur)',
-            border: '1px solid var(--glass-border)',
-            boxShadow: 'var(--shadow-glass)',
-          }}
-        >
-          <Logo size="full" />
-
-          <p className="mt-3 mb-1 text-sm tracking-wide uppercase" style={{ color: 'var(--text-muted)', letterSpacing: '0.15em' }}>
-            AI-Powered Interactive Fiction
-          </p>
-
-          <div
-            className="w-16 my-6"
-            style={{ height: '1px', background: 'var(--glass-border)' }}
-          />
-
-          <p className="mb-6" style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-            Sign in to start crafting your story
-          </p>
-
-          <button
-            onClick={signInWithGoogle}
-            className="flex items-center gap-3 px-8 py-3 rounded-full font-semibold transition-all cursor-pointer"
-            style={{
-              background: 'white',
-              color: '#333',
-              border: 'none',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.25)'}
-            onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.15)'}
-          >
-            <svg width="18" height="18" viewBox="0 0 48 48">
-              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-            </svg>
-            Continue with Google
-          </button>
-        </div>
-      </div>
-    );
+    return <SignInScreen onSignIn={signInWithGoogle} />;
   }
 
-  // Derive per-scene director data based on which batch the current scene belongs to
+  // Derive per-scene director data
   const activeDirectorData = (() => {
-    // During generation, use live directorData from WebSocket
     if (generating) return directorData;
-    // If a specific scene is focused, find its batch
     if (currentSceneNumber && generations.length) {
       const batch = generations.find(g => g.sceneNumbers.includes(currentSceneNumber));
       if (batch?.directorData) return batch.directorData;
     }
-    // Use live directorData if available (set during current session)
     if (directorData) return directorData;
-    // Fall back to the most recent generation's director data (hydrated from Firestore on reload)
     for (let i = generations.length - 1; i >= 0; i--) {
       if (generations[i].directorData) return generations[i].directorData;
     }
     return null;
   })();
 
-  // Derive batch scene numbers and titles for tension bar labels
   const activeBatchSceneNumbers = (() => {
     if (generating || !currentSceneNumber || !generations.length) return null;
     const batch = generations.find(g => g.sceneNumbers.includes(currentSceneNumber));
@@ -460,13 +233,11 @@ export default function App() {
     });
   })();
 
-  // Use memoized spreadPrompts (computed before early returns for hook order safety)
   const spreadPrompts = spreadPromptsMemo;
   const displayPrompt = spreadPrompts.left;
 
   return (
     <div className="h-screen flex flex-col relative overflow-hidden">
-      {/* Background layer with gradient + color orbs */}
       <div
         className="fixed inset-0 -z-10"
         style={{ background: 'var(--bg-gradient)' }}
@@ -474,7 +245,6 @@ export default function App() {
         <div className="absolute inset-0" style={{ background: 'var(--orb-1)' }} />
         <div className="absolute inset-0" style={{ background: 'var(--orb-2)' }} />
         <div className="absolute inset-0" style={{ background: 'var(--orb-3)' }} />
-        {/* Noise texture for depth */}
         <div
           className="absolute inset-0 opacity-30"
           style={{
@@ -501,7 +271,6 @@ export default function App() {
         user={user} signOut={signOut}
       />
 
-      {/* Routed content */}
       <Routes>
         <Route
           path="/library"
@@ -540,7 +309,6 @@ export default function App() {
         ))}
       </Routes>
 
-      {/* Reading Mode overlay */}
       {readingMode && scenes.length > 0 && (
         <ReadingMode scenes={scenes} storyId={storyId} idToken={idToken} onExit={() => setReadingMode(false)} onBookmarkChange={setBookmarkedSceneIndex} />
       )}
