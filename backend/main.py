@@ -1,25 +1,28 @@
 import asyncio
 import json
 import logging
-import os
-import re
 import time
 from typing import Any
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from agents.narrator import Narrator
 from agents.illustrator import Illustrator
 from agents.director import Director
 from google.genai import types
 from services.tts_client import synthesize_speech
-from services.gemini_client import get_client as get_gemini_client, get_model as get_gemini_model, transcribe_audio, ContentBlockedError
-from services.auth import verify_token
+from services.gemini_client import transcribe_audio, ContentBlockedError
 from services.imagen_client import generate_image, is_quota_available, get_quota_cooldown_remaining
-from services.storage_client import upload_media, upload_cover, delete_story_media
+from services.storage_client import upload_media
 from services.firestore_client import persist_story, load_story, delete_story, get_db
+from services.auth import verify_token
+from services.content_filter import is_refusal as _is_refusal
+from services.scene_rewrite import rewrite_scene_text as _rewrite_scene_text
+from services.book_meta import auto_generate_meta as _auto_generate_meta
+from services.portrait_service import generate_portraits as _generate_portraits
+from services.storage_client import delete_story_media
+
+from routers import stories, bookmarks, meta
 
 from agents.orchestrator import create_story_orchestrator
 from google.adk.sessions import InMemorySessionService  # type: ignore[import-untyped]
@@ -43,6 +46,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(stories.router)
+app.include_router(bookmarks.router)
+app.include_router(meta.router)
 
 
 class ConnectionManager:
@@ -68,473 +75,6 @@ async def health() -> dict[str, Any]:
     return {"status": "ok", "adk": True}
 
 
-# ---------------------------------------------------------------------------
-# Book meta generation (title + cover)
-# ---------------------------------------------------------------------------
-
-async def _gen_title(full_text: str) -> str:
-    """Generate a short book title (max 4 words) from story text."""
-    try:
-        client = get_gemini_client()
-        model = get_gemini_model()
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=types.Content(
-                role="user",
-                parts=[types.Part(text=f"Here is a children's story:\n\n{full_text}\n\nGenerate a book title for this story. Maximum 4 words. Do not use quotes. Output only the title, nothing else.")],
-            ),
-            config=types.GenerateContentConfig(
-                temperature=0.7,
-                max_output_tokens=20,
-            ),
-        )
-        if response.text:
-            title = response.text.strip().strip('"\'')
-            words = title.split()
-            if len(words) > 4:
-                title = " ".join(words[:4])
-            return title
-    except Exception as e:
-        logger.error("Title generation failed: %s", e)
-    return "Untitled"
-
-
-async def _gen_cover(full_text: str, art_style: str, story_id: str) -> str | None:
-    """Generate a portrait book cover and upload to GCS."""
-    from agents.illustrator import ART_STYLES as ILLUSTRATOR_ART_STYLES
-    art_style_suffix = ILLUSTRATOR_ART_STYLES.get(art_style, ILLUSTRATOR_ART_STYLES["cinematic"])
-
-    try:
-        # Wait for quota cooldown if scene images exhausted it
-        cooldown = get_quota_cooldown_remaining()
-        if cooldown > 0:
-            logger.info("Cover gen waiting %ds for quota cooldown...", cooldown)
-            await asyncio.sleep(cooldown + 2)
-
-        client = get_gemini_client()
-        model = get_gemini_model()
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=types.Content(
-                role="user",
-                parts=[types.Part(text=(
-                    f"Here is a story:\n\n{full_text}\n\n"
-                    f"Generate a single detailed image prompt for a book cover illustration.\n"
-                    f"The cover should capture the essence and key characters of the story.\n"
-                    f"The image MUST match this art style: {art_style_suffix}.\n"
-                    f"End the prompt with: {art_style_suffix}\n"
-                    f"Do NOT include any text, titles, words, or lettering in the image.\n"
-                    f"Output only the image prompt, nothing else."
-                ))],
-            ),
-            config=types.GenerateContentConfig(
-                temperature=0.7,
-                max_output_tokens=200,
-            ),
-        )
-        cover_prompt = response.text.strip() if response.text else None
-        if not cover_prompt:
-            return None
-
-        cover_data = None
-        for attempt in range(3):
-            cover_data, err = await generate_image(cover_prompt, aspect_ratio="3:4")
-            if cover_data:
-                break
-            if err == "safety_filter":
-                return None  # terminal — re-prompting won't help
-            # Wait for quota cooldown on exhaustion, short delay otherwise
-            if err == "quota_exhausted":
-                wait = get_quota_cooldown_remaining() + 2
-                logger.info("Cover gen retry %d: waiting %ds for quota...", attempt + 1, wait)
-                await asyncio.sleep(wait)
-            elif attempt < 2:
-                await asyncio.sleep(3)
-        if not cover_data:
-            return None
-
-        cover_url = await upload_cover(story_id, cover_data)
-        return cover_url
-    except Exception as e:
-        logger.error("Cover generation failed: %s", e)
-        return None
-
-
-async def _rewrite_scene_text(
-    scene_text: str,
-    scene_number: int,
-    all_scenes: list[dict[str, Any]],
-) -> str | None:
-    """Rewrite a single scene using Gemini with full story context."""
-    try:
-        context_parts = []
-        for s in all_scenes:
-            num = s.get("scene_number", "?")
-            txt = s.get("text", "")
-            if txt:
-                context_parts.append(f"[Scene {num}]\n{txt}")
-        story_context = "\n\n".join(context_parts)
-
-        prompt = (
-            f"Here is a children's story so far:\n\n{story_context}\n\n"
-            f"Rewrite Scene {scene_number} with a fresh take. Keep the same characters and "
-            f"general plot point but use different descriptions and phrasing. "
-            f"Write 80-100 words, present tense, third person, plain text only (no markdown, "
-            f"no scene markers, no titles). Output only the rewritten scene text."
-        )
-
-        client = get_gemini_client()
-        model = get_gemini_model()
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=types.Content(
-                role="user",
-                parts=[types.Part(text=prompt)],
-            ),
-            config=types.GenerateContentConfig(
-                temperature=0.9,
-                max_output_tokens=300,
-            ),
-        )
-        if response.text:
-            return response.text.strip()
-    except Exception as e:
-        logger.error("Scene rewrite failed for scene %d: %s", scene_number, e)
-    return None
-
-
-async def _auto_generate_meta(
-    story_id: str,
-    scenes: list[dict[str, Any]],
-    art_style: str,
-    websocket: WebSocket | None = None,
-) -> None:
-    """Background task: generate title + cover after pipeline run, notify frontend via WS."""
-    try:
-        scene_texts = [s.get("text", "") for s in scenes if s.get("text")]
-        if not scene_texts:
-            return
-
-        full_text = "\n\n".join(scene_texts)
-        title, cover_url = await asyncio.gather(
-            _gen_title(full_text),
-            _gen_cover(full_text, art_style, story_id),
-        )
-
-        # Fall back to first scene image if cover generation failed
-        # Filter out base64 data URLs (can happen if GCS upload failed)
-        if not cover_url:
-            cover_url = next(
-                (s.get("image_url") for s in scenes
-                 if s.get("image_url") and not s["image_url"].startswith("data:")),
-                None,
-            )
-
-        db = get_db()
-        doc_ref = db.collection("stories").document(story_id)
-        snap = await doc_ref.get()
-        if snap.exists and snap.to_dict().get("title_generated"):
-            return  # Already done (race guard)
-
-        update: dict[str, Any] = {
-            "title": title,
-            "title_generated": True,
-        }
-        if cover_url:
-            update["cover_image_url"] = cover_url
-        await doc_ref.update(update)
-        logger.info("Auto-generated meta for %s: title=%r, cover=%s", story_id, title, bool(cover_url))
-        if websocket:
-            await _safe_send(websocket, {
-                "type": "book_meta",
-                "title": title,
-                "cover_image_url": update.get("cover_image_url"),
-            })
-    except Exception as e:
-        logger.error("Auto meta generation failed for %s: %s", story_id, e)
-
-
-async def _generate_portraits(
-    websocket: WebSocket,
-    illustrator: Illustrator,
-    story_id: str,
-) -> None:
-    """Generate character portrait images from the illustrator's character sheet."""
-    try:
-        sheet = illustrator._character_sheet
-
-        # If character sheet is empty, try extracting characters from story text first
-        if not sheet and illustrator._accumulated_story:
-            logger.info("Character sheet empty, extracting from accumulated story...")
-            await illustrator.extract_characters(illustrator._accumulated_story)
-            sheet = illustrator._character_sheet
-
-        if not sheet:
-            await _safe_send(websocket, {"type": "error", "content": "No character descriptions available."})
-            await _safe_send(websocket, {"type": "portraits_done"})
-            return
-
-        # Parse character names and descriptions from sheet
-        # Sheet format: "CHARACTER_NAME: description..."
-        characters = []
-        for line in sheet.strip().split("\n"):
-            line = line.strip()
-            if ":" in line and len(line) > 5:
-                name, desc = line.split(":", 1)
-                name = name.strip().strip("-•* ")
-                desc = desc.strip()
-                if name and desc and len(name) < 50:
-                    characters.append({"name": name, "description": desc})
-
-        if not characters:
-            await _safe_send(websocket, {"type": "error", "content": "Could not parse character descriptions."})
-            await _safe_send(websocket, {"type": "portraits_done"})
-            return
-
-        art_suffix = illustrator.art_style_suffix
-        portrait_results = []
-
-        for idx, char in enumerate(characters):
-            prompt = (
-                f"{char['description']}. "
-                f"Close-up face portrait of {char['name']}, head and shoulders, "
-                f"looking at the viewer, detailed facial features, expressive eyes, "
-                f"{art_suffix}"
-            )
-            try:
-                image_data, error_reason = await generate_image(prompt, aspect_ratio="1:1")
-                if image_data:
-                    gcs_url = await upload_media(story_id, 900 + idx, "portrait", image_data)
-                    portrait_results.append({"name": char["name"], "image_url": gcs_url})
-                    await _safe_send(websocket, {
-                        "type": "portrait",
-                        "name": char["name"],
-                        "image_url": gcs_url,
-                    })
-                else:
-                    portrait_results.append({"name": char["name"], "image_url": None})
-                    await _safe_send(websocket, {
-                        "type": "portrait",
-                        "name": char["name"],
-                        "image_url": None,
-                        "error": error_reason or "generation_failed",
-                    })
-            except Exception as e:
-                logger.error("Portrait generation error for %s: %s", char["name"], e)
-
-        # Persist portraits to Firestore
-        if portrait_results and story_id:
-            try:
-                db = get_db()
-                await db.collection("stories").document(story_id).set(
-                    {"portraits": portrait_results}, merge=True
-                )
-                logger.info("Persisted %d portraits for story %s", len(portrait_results), story_id)
-            except Exception as e:
-                logger.error("Failed to persist portraits: %s", e)
-
-        await _safe_send(websocket, {"type": "portraits_done"})
-
-    except Exception as e:
-        logger.error("Portrait generation failed: %s", e)
-        await _safe_send(websocket, {"type": "error", "content": "Portrait generation failed."})
-        await _safe_send(websocket, {"type": "portraits_done"})
-
-
-class BookMetaRequest(BaseModel):
-    scene_texts: list[str]
-    art_style: str
-    story_id: str
-
-
-@app.post("/api/generate-book-meta")
-async def generate_book_meta(
-    body: BookMetaRequest,
-    authorization: str = Header(...),
-) -> dict[str, Any]:
-    # Auth
-    token = authorization.removeprefix("Bearer ").strip()
-    uid = await verify_token(token)
-    if not uid:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-
-    # Verify story ownership before generating (cover uploads to GCS under story_id)
-    story_ref = get_db().collection("stories").document(body.story_id)
-    snap = await story_ref.get()
-    if snap.exists and snap.to_dict().get("uid") != uid:
-        raise HTTPException(status_code=403, detail="Not your story")
-
-    full_text = "\n\n".join(body.scene_texts)
-    title, cover_url = await asyncio.gather(
-        _gen_title(full_text),
-        _gen_cover(full_text, body.art_style, body.story_id),
-    )
-
-    return {"title": title, "cover_image_url": cover_url}
-
-
-@app.get("/api/public/stories/{story_id}")
-async def get_public_story(story_id: str) -> dict[str, Any]:
-    """Return a published story for unauthenticated viewing."""
-    db = get_db()
-    story_ref = db.collection("stories").document(story_id)
-    snap = await story_ref.get()
-    if not snap.exists:
-        raise HTTPException(status_code=404, detail="Story not found")
-    data = snap.to_dict()
-    if not data.get("is_public"):
-        raise HTTPException(status_code=404, detail="Story not found")
-
-    # Load scenes
-    scenes = []
-    async for scene_doc in story_ref.collection("scenes").order_by("scene_number").stream():
-        s = scene_doc.to_dict()
-        scenes.append({
-            "scene_number": s.get("scene_number"),
-            "text": s.get("text", ""),
-            "scene_title": s.get("scene_title"),
-            "image_url": s.get("image_url"),
-            "audio_url": s.get("audio_url"),
-            "word_timestamps": s.get("word_timestamps"),
-        })
-
-    # Load generations
-    generations = []
-    async for gen_doc in story_ref.collection("generations").stream():
-        g = gen_doc.to_dict()
-        generations.append({
-            "prompt": g.get("prompt"),
-            "directorData": g.get("director_data"),
-            "sceneNumbers": g.get("scene_numbers", []),
-            "_id": gen_doc.id,
-        })
-    generations.sort(key=lambda g: int(g.pop("_id", "0")))
-
-    return {
-        "storyId": story_id,
-        "title": data.get("title", "Untitled"),
-        "cover_image_url": data.get("cover_image_url"),
-        "author_name": data.get("author_name", "Anonymous"),
-        "author_photo_url": data.get("author_photo_url"),
-        "art_style": data.get("art_style", "cinematic"),
-        "language": data.get("language", "English"),
-        "scenes": scenes,
-        "generations": generations,
-        "status": data.get("status", "completed"),
-        "is_public": True,
-    }
-
-
-# ── Reading bookmarks ──────────────────────────────────────
-
-@app.get("/api/stories/{story_id}/bookmark")
-async def get_bookmark(story_id: str, authorization: str = Header(...)):
-    """Get the user's reading bookmark for a story."""
-    token = authorization.removeprefix("Bearer ").strip()
-    uid = await verify_token(token)
-    if not uid:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    db = get_db()
-    snap = await db.collection("bookmarks").document(f"{uid}_{story_id}").get()
-    if not snap.exists:
-        return {"scene_index": None}
-    return {"scene_index": snap.to_dict().get("scene_index", 0)}
-
-
-@app.put("/api/stories/{story_id}/bookmark")
-async def save_bookmark(story_id: str, body: dict, authorization: str = Header(...)):
-    """Save the user's reading bookmark for a story."""
-    token = authorization.removeprefix("Bearer ").strip()
-    uid = await verify_token(token)
-    if not uid:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    db = get_db()
-    await db.collection("bookmarks").document(f"{uid}_{story_id}").set({
-        "uid": uid,
-        "story_id": story_id,
-        "scene_index": body.get("scene_index", 0),
-    })
-    return {"ok": True}
-
-
-@app.delete("/api/stories/{story_id}/bookmark")
-async def delete_bookmark(story_id: str, authorization: str = Header(...)):
-    """Remove the user's reading bookmark for a story."""
-    token = authorization.removeprefix("Bearer ").strip()
-    uid = await verify_token(token)
-    if not uid:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    db = get_db()
-    await db.collection("bookmarks").document(f"{uid}_{story_id}").delete()
-    return {"ok": True}
-
-
-
-
-@app.get("/api/stories/{story_id}/pdf")
-async def export_story_pdf(
-    story_id: str,
-    authorization: str = Header(...),
-) -> Response:
-    """Export a story as a downloadable PDF."""
-    from services.pdf_export import generate_story_pdf
-
-    token = authorization.removeprefix("Bearer ").strip()
-    uid = await verify_token(token)
-    if not uid:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-
-    db = get_db()
-    story_ref = db.collection("stories").document(story_id)
-    snap = await story_ref.get()
-    if not snap.exists:
-        raise HTTPException(status_code=404, detail="Story not found")
-    data = snap.to_dict()
-
-    # Allow owner or public stories
-    if data.get("uid") != uid and not data.get("is_public"):
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    # Load scenes
-    scenes = []
-    async for scene_doc in story_ref.collection("scenes").order_by("scene_number").stream():
-        scenes.append(scene_doc.to_dict())
-
-    title = data.get("title", "Untitled Story")
-    author = data.get("author_name", "Anonymous")
-    cover_url = data.get("cover_image_url")
-
-    pdf_bytes = generate_story_pdf(title, author, cover_url, scenes)
-
-    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip() or "story"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{safe_title}.pdf"'},
-    )
-
-
-@app.delete("/api/stories/{story_id}")
-async def delete_story_endpoint(
-    story_id: str,
-    authorization: str = Header(...),
-) -> dict[str, Any]:
-    """Delete a story: Firestore doc + subcollections + GCS media."""
-    token = authorization.removeprefix("Bearer ").strip()
-    uid = await verify_token(token)
-    if not uid:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-
-    deleted = await delete_story(story_id, uid)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Story not found or access denied")
-
-    # Clean up GCS media in background (don't block the response)
-    asyncio.create_task(delete_story_media(story_id))
-
-    return {"deleted": True, "story_id": story_id}
-
-
 async def _safe_send(websocket: WebSocket, data: dict[str, Any]) -> bool:
     """Send JSON to websocket, return False if connection is dead."""
     try:
@@ -557,43 +97,6 @@ def _serialize_narrator_history(narrator: Narrator) -> list[dict[str, str]]:
 
 
 # ---------------------------------------------------------------------------
-# Refusal detection
-# ---------------------------------------------------------------------------
-
-_REFUSAL_PATTERNS = [
-    "i am programmed to be a harmless",
-    "i am unable to generate",
-    "i cannot generate",
-    "i'm not able to generate",
-    "i can't generate content",
-    "i cannot create content",
-    "i'm unable to create",
-    "as an ai language model",
-    "as a language model",
-    "i cannot write sexually",
-    "sexually suggestive",
-    "sexually explicit",
-    "i cannot produce",
-    "i'm designed to be helpful, harmless",
-    "i must decline",
-    "i cannot fulfill this request",
-    "i'm not able to fulfill",
-    "would you like me to try generating something different",
-    "i cannot assist with",
-    "i'm not able to assist with",
-    "violates my safety guidelines",
-    "against my programming",
-    "inappropriate content",
-]
-
-
-def _is_refusal(text: str) -> bool:
-    """Detect if text is an AI refusal rather than actual story content."""
-    lower = text.lower()
-    return any(pattern in lower for pattern in _REFUSAL_PATTERNS)
-
-
-# ---------------------------------------------------------------------------
 # ADK pipeline
 # ---------------------------------------------------------------------------
 
@@ -609,7 +112,7 @@ async def _run_adk_pipeline(
     illustrator: Illustrator,
     story_id: str,
     **kwargs,
-) -> tuple[int, list[asyncio.Task[None]], list[dict[str, Any]]]:
+) -> tuple[int, list[asyncio.Task[None]], list[dict[str, Any]], dict[str, Any] | None]:
     """Run the story pipeline via ADK orchestrator."""
 
     illustrator.art_style = art_style
@@ -630,14 +133,19 @@ async def _run_adk_pipeline(
         nonlocal refusal_detected
         if refusal_detected:
             return  # Suppress all further messages after refusal
-        if data.get("type") == "text" and _is_refusal(data.get("content", "")):
-            refusal_detected = True
-            logger.warning("ADK narrator produced refusal text, aborting batch")
-            await _safe_send(websocket, {
-                "type": "error",
-                "content": "Your prompt was blocked by our safety filters. Please try a different story idea.",
-            })
-            return
+        if data.get("type") == "text":
+            refusal_kind = _is_refusal(data.get("content", ""))
+            if refusal_kind:
+                refusal_detected = True
+                if refusal_kind == "offtopic":
+                    msg = "StoryForge is a storytelling app — try describing a story you'd like me to create!"
+                else:
+                    msg = "Your prompt was blocked by our safety filters. Please try a different story idea."
+                logger.warning("ADK narrator produced %s refusal, aborting batch", refusal_kind)
+                await _safe_send(websocket, {"type": "error", "content": msg})
+                # Send done immediately so the loading spinner stops
+                await _safe_send(websocket, {"type": "status", "content": "done"})
+                return
         await _safe_send(websocket, data)
     shared_state.ws_callback = ws_callback
 
@@ -887,7 +395,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 logger.info("generate_portraits request for story %s", active_story_id)
                 if active_story_id:
                     asyncio.create_task(_generate_portraits(
-                        websocket, illustrator, active_story_id
+                        websocket, illustrator, active_story_id,
+                        safe_send=_safe_send,
                     ))
                 else:
                     await _safe_send(websocket, {"type": "error", "content": "No story available yet. Generate a story first."})
@@ -958,11 +467,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                             else:
                                 await _safe_send(websocket, {"type": "image_error", "scene_number": scene_num, "reason": img_err or "generation_failed"})
 
-                        # Handle audio
+                        # Handle audio — synthesize_speech returns (data_url, word_timestamps)
                         if not isinstance(audio_data, Exception) and audio_data:
-                            audio_url = await upload_media(active_story_id, scene_num, "audio", audio_data)
-                            scene_update["audio_url"] = audio_url
-                            await _safe_send(websocket, {"type": "audio", "content": audio_url, "scene_number": scene_num})
+                            audio_data_url, word_ts = audio_data
+                            if audio_data_url:
+                                audio_url = await upload_media(active_story_id, scene_num, "audio", audio_data_url)
+                                scene_update["audio_url"] = audio_url
+                                if word_ts:
+                                    scene_update["word_timestamps"] = word_ts
+                                await _safe_send(websocket, {"type": "audio", "content": audio_url, "scene_number": scene_num})
 
                         # Update Firestore scene doc
                         scene_docs = db.collection("stories").document(active_story_id).collection("scenes")
@@ -1094,7 +607,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     )
                     # Auto-generate title + cover in background (title_generated race guard inside handles dedup)
                     meta_task = asyncio.create_task(
-                        _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket)
+                        _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send)
                     )
                     pipeline_tasks.append(meta_task)
                 except Exception as e:

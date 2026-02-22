@@ -1,64 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect, useRef } from 'react';
 import { useSceneActions } from '../contexts/SceneActionsContext';
+import { cleanText, isImageCached } from '../utils/textUtils';
+import ActionBtn from './ActionBtn';
+import useCompactAudio from '../hooks/useCompactAudio';
 
-/* ── Fixed-position tooltip that escapes overflow:hidden parents ── */
-function ActionBtn({ label, children }) {
-  const [show, setShow] = useState(false);
-  const [pos, setPos] = useState(null);
-  const timer = useRef(null);
-  const ref = useRef(null);
-  const onEnter = useCallback(() => {
-    timer.current = setTimeout(() => {
-      if (ref.current) {
-        const r = ref.current.getBoundingClientRect();
-        setPos({ top: r.top - 28, left: r.left + r.width / 2 });
-      }
-      setShow(true);
-    }, 400);
-  }, []);
-  const onLeave = useCallback(() => { clearTimeout(timer.current); setShow(false); }, []);
-  return (
-    <span ref={ref} style={{ display: 'inline-flex' }} onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      {children}
-      {show && pos && createPortal(
-        <span style={{
-          position: 'fixed',
-          top: pos.top,
-          left: pos.left,
-          transform: 'translateX(-50%)',
-          whiteSpace: 'nowrap',
-          fontSize: '10px',
-          fontWeight: 600,
-          letterSpacing: '0.03em',
-          padding: '3px 8px',
-          borderRadius: '6px',
-          background: 'rgba(20,15,30,0.92)',
-          color: '#ccc',
-          border: '1px solid rgba(255,255,255,0.1)',
-          backdropFilter: 'blur(12px)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-          pointerEvents: 'none',
-          animation: 'fadeIn 0.15s ease',
-          zIndex: 9999,
-        }}>
-          {label}
-        </span>,
-        document.body,
-      )}
-    </span>
-  );
-}
-
-/* ── Check if browser has cached an image ── */
-function isImageCached(url) {
-  if (!url || url === 'error') return false;
-  const img = new Image();
-  img.src = url;
-  return img.complete;
-}
-
-/* ── Composing placeholder shown while waiting for image ── */
 export function SceneComposing({ sceneNumber, displayIndex, scale = 1 }) {
   return (
     <div style={{ animation: 'fadeIn 0.4s ease-out', display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -161,72 +106,6 @@ export function SceneComposing({ sceneNumber, displayIndex, scale = 1 }) {
       </div>
     </div>
   );
-}
-
-/* ── Strip markdown formatting from story text ── */
-function cleanText(text) {
-  return text
-    .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/__(.*?)__/g, '$1')
-    .replace(/_(.*?)_/g, '$1')
-    .replace(/~~(.*?)~~/g, '$1')
-    .replace(/`(.*?)`/g, '$1');
-}
-
-/* ── Custom hook for audio playback (only-one-at-a-time logic) ── */
-function useCompactAudio(src) {
-  const audioRef = useRef(null);
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const instanceId = useRef(Math.random().toString(36).slice(2));
-  const playingRef = useRef(false);
-
-  useEffect(() => { playingRef.current = playing; }, [playing]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const onTimeUpdate = () => {
-      setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0);
-    };
-    const onEnded = () => { setPlaying(false); setProgress(0); };
-
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('ended', onEnded);
-    return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('ended', onEnded);
-    };
-  }, [src]);
-
-  useEffect(() => {
-    const onOtherPlay = (e) => {
-      if (e.detail !== instanceId.current && playingRef.current) {
-        audioRef.current?.pause();
-        setPlaying(false);
-      }
-    };
-    window.addEventListener('storyforge:audio:play', onOtherPlay);
-    return () => window.removeEventListener('storyforge:audio:play', onOtherPlay);
-  }, []);
-
-  const togglePlay = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (playing) {
-      audio.pause();
-      setPlaying(false);
-    } else {
-      window.dispatchEvent(new CustomEvent('storyforge:audio:play', { detail: instanceId.current }));
-      audio.play().catch(() => {});
-      setPlaying(true);
-    }
-  };
-
-  return { audioRef, playing, progress, togglePlay };
 }
 
 /* ── Revealed scene with cinematic animation ── */

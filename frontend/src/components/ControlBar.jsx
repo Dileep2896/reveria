@@ -1,37 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import useVoiceCapture from '../hooks/useVoiceCapture';
-
-const ART_STYLES = [
-  { key: 'cinematic', label: 'Cinematic' },
-  { key: 'watercolor', label: 'Watercolor' },
-  { key: 'comic', label: 'Comic Book' },
-  { key: 'anime', label: 'Anime' },
-  { key: 'oil', label: 'Oil Painting' },
-  { key: 'pencil', label: 'Pencil Sketch' },
-];
-
-const LANGUAGES = [
-  { key: 'English', label: 'English' },
-  { key: 'Spanish', label: 'Spanish' },
-  { key: 'French', label: 'French' },
-  { key: 'German', label: 'German' },
-  { key: 'Japanese', label: 'Japanese' },
-  { key: 'Hindi', label: 'Hindi' },
-  { key: 'Portuguese', label: 'Portuguese' },
-  { key: 'Chinese', label: 'Chinese' },
-];
-
-const PLACEHOLDERS = {
-  English: 'Describe a story...',
-  Spanish: 'Describe una historia...',
-  French: 'Décrivez une histoire...',
-  German: 'Beschreibe eine Geschichte...',
-  Japanese: '物語を書いてください...',
-  Hindi: 'एक कहानी बताइए...',
-  Portuguese: 'Descreva uma história...',
-  Chinese: '描述一个故事...',
-};
+import { ART_STYLES } from '../data/artStyles';
+import { LANGUAGES, PLACEHOLDERS } from '../data/languages';
 
 export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, setLanguage, languageLocked, live }) {
   const [focused, setFocused] = useState(false);
