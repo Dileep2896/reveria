@@ -1,9 +1,8 @@
 import { useSceneActions } from '../../contexts/SceneActionsContext';
 import IconBtn from '../IconBtn';
 
-export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, imageFailed, isBusy, showError, preloaded, skip, wasRegenerated }) {
+export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, isBusy, showError, preloaded, skip, wasRegenerated }) {
   const { regenImage, isReadOnly, canRegen } = useSceneActions();
-  const isError = scene.image_url === 'error';
 
   // Collapsed error / no-image indicator
   if (showError || (preloaded && !scene.image_url)) {

@@ -4,14 +4,14 @@ import { API_URL } from '../utils/storyHelpers';
 
 export default function AppHeader({
   navigate, storyId, connected,
-  viewingReadOnly, setViewingReadOnly, reset,
+  viewingReadOnly, reset,
   isLibrary, isExplore, isBookPage,
   scenes, generating,
   autoSaveCurrent, clearState,
   setStoryStatus, setIsPublished, setArtStyle, setLanguage, setBookmarkedSceneIndex,
   saving, saved, generatingCover, handleSave,
   storyStatus, setShowCompleteDialog,
-  isPublished, setShowPublishDialog,
+  isPublished,
   setReadingMode,
   idToken, addToast,
   directorOpen, setDirectorOpen,

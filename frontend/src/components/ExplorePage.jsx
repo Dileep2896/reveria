@@ -141,7 +141,7 @@ function PublicBookCard({ book, onOpen, onToggleLike, userId }) {
   );
 }
 
-export default function ExplorePage({ user, onOpenBook }) {
+export default function ExplorePage({ user }) {
   const navigate = useNavigate();
   const { books, setBooks, loading, error } = usePublicBooks();
   const [searchQuery, setSearchQuery] = useState('');

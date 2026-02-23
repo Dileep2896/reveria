@@ -193,7 +193,7 @@ const VERIFIED_OPTIONS = [['all', 'All'], ['yes', 'Verified'], ['no', 'Unverifie
 const SORT_OPTIONS = [['newest', 'Newest'], ['oldest', 'Oldest'], ['most_stories', 'Most Stories']];
 
 export default function AdminDashboard({ idToken, addToast }) {
-  const { users, loading, page, setPage, total, search, setSearch, updateTier, deleteUser, refresh } = useAdminUsers(idToken);
+  const { users, loading, page, setPage, total, search, setSearch, updateTier, deleteUser } = useAdminUsers(idToken);
   const [selectedUser, setSelectedUser] = useState(null);
   const [filterTier, setFilterTier] = useState('all');
   const [filterProvider, setFilterProvider] = useState('all');

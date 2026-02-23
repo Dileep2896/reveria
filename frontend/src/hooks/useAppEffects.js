@@ -8,8 +8,7 @@ export default function useAppEffects({
   bookMeta, setBookmarkedSceneIndex, resetSaved,
   setStoryStatus, setIsPublished, setArtStyle, setLanguage,
   setViewingReadOnly, setStoryDeletedHandler,
-  clearState, reset, addToast,
-  directorData,
+  clearState, addToast,
   location,
 }) {
   // Sync storyId → URL (skip for /book/ pages, library, explore, subscription, admin)

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, forwardRef, memo } from 'react';
+import { useState, useEffect, useRef, forwardRef, memo } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 import { useTheme } from '../contexts/ThemeContext';
 import './storybook.css';
@@ -33,7 +33,7 @@ const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWit
 
 const PAGE_SLOTS = 21;
 
-function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English' }) {
+function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English' }) {
   const { theme } = useTheme();
   const lang = getLangData(language);
   const bookRef = useRef(null);

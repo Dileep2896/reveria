@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from './contexts/ThemeContext';
 import { useAuth } from './contexts/AuthContext';
@@ -54,8 +54,8 @@ export default function App() {
     storyStatus, setStoryStatus,
     showCompleteDialog, setShowCompleteDialog, completing,
     isPublished, setIsPublished,
-    showPublishDialog, setShowPublishDialog, publishing,
-    autoSaveCurrent, handleSave, handleComplete, handlePublish,
+    setShowPublishDialog,
+    autoSaveCurrent, handleSave, handleComplete,
     resetSaved,
   } = useStoryActions({ storyId, scenes, generations, bookMeta, idToken, addToast, user });
   const [readingMode, setReadingMode] = useState(false);
@@ -63,7 +63,6 @@ export default function App() {
 
   const isLibrary = location.pathname === '/library';
   const isExplore = location.pathname === '/explore';
-  const isSubscription = location.pathname === '/subscription';
   const isBookPage = location.pathname.startsWith('/book/');
   const [viewingReadOnly, setViewingReadOnly] = useState(false);
 
@@ -121,8 +120,7 @@ export default function App() {
     bookMeta, setBookmarkedSceneIndex, resetSaved,
     setStoryStatus, setIsPublished, setArtStyle, setLanguage,
     setViewingReadOnly, setStoryDeletedHandler,
-    clearState, reset, addToast,
-    directorData,
+    clearState, addToast,
     location,
   });
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { db, getDoc, doc, updateDoc } from '../firebase';
 import { API_URL, findFallbackCover } from '../utils/storyHelpers';
 
