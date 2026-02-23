@@ -177,9 +177,15 @@ export function createWsHandlers({
           const idx = gen.sceneNumbers.indexOf(data.scene_number);
           if (idx !== -1) {
             gen.sceneNumbers.splice(idx, 1);
-            // Also remove per-scene tension level at the same index
+            // Also remove per-scene arrays at the same index
             if (gen.directorData?.tension?.levels) {
               gen.directorData.tension.levels.splice(idx, 1);
+            }
+            if (gen.directorData?.emotional_arc?.values) {
+              gen.directorData.emotional_arc.values.splice(idx, 1);
+            }
+            if (gen.directorData?.directors_notes?.notes) {
+              gen.directorData.directors_notes.notes.splice(idx, 1);
             }
           }
         }

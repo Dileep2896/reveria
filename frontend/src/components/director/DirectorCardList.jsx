@@ -3,6 +3,11 @@ import NarrativeArcVisual from './NarrativeArcVisual';
 import CharactersVisual from './CharactersVisual';
 import TensionVisual from './TensionVisual';
 import VisualStyleVisual from './VisualStyleVisual';
+import EmotionalArcVisual from './EmotionalArcVisual';
+import DirectorsNotesVisual from './DirectorsNotesVisual';
+import StoryHealthVisual from './StoryHealthVisual';
+import ThemesVisual from './ThemesVisual';
+import BeatsVisual from './BeatsVisual';
 import IllustrationsCard from './IllustrationsCard';
 import PortraitGallery from './PortraitGallery';
 
@@ -94,6 +99,40 @@ export default function DirectorCardList({ data, expandedCards, toggleCard, scen
                       <VisualStyleVisual
                         tags={content.tags}
                         mood={content.mood}
+                        summary={content.summary}
+                      />
+                    )}
+                    {key === 'emotional_arc' && (
+                      <EmotionalArcVisual
+                        values={content.values}
+                        dominant_emotion={content.dominant_emotion}
+                        arc_shape={content.arc_shape}
+                        summary={content.summary}
+                      />
+                    )}
+                    {key === 'directors_notes' && (
+                      <DirectorsNotesVisual
+                        notes={content.notes}
+                        summary={content.summary}
+                      />
+                    )}
+                    {key === 'story_health' && (
+                      <StoryHealthVisual
+                        scores={content.scores}
+                        summary={content.summary}
+                      />
+                    )}
+                    {key === 'themes' && (
+                      <ThemesVisual
+                        themes={content.themes}
+                        summary={content.summary}
+                      />
+                    )}
+                    {key === 'beats' && (
+                      <BeatsVisual
+                        current_beat={content.current_beat}
+                        beats_hit={content.beats_hit}
+                        next_expected={content.next_expected}
                         summary={content.summary}
                       />
                     )}

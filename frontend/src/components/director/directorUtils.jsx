@@ -19,6 +19,31 @@ export const CARDS = [
     label: 'Visual Style',
     icon: 'M12 2L2 7l10 5 10-5-10-5z',
   },
+  {
+    key: 'emotional_arc',
+    label: 'Emotional Arc',
+    icon: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z',
+  },
+  {
+    key: 'directors_notes',
+    label: "Director's Notes",
+    icon: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 5h6',
+  },
+  {
+    key: 'story_health',
+    label: 'Story Health',
+    icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  },
+  {
+    key: 'themes',
+    label: 'Themes',
+    icon: 'M4 9h16M4 15h16M10 3L8 21M16 3l-2 18',
+  },
+  {
+    key: 'beats',
+    label: 'Story Beats',
+    icon: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+  },
 ];
 
 /* ── Backward-compat normalizer ── */
@@ -40,6 +65,30 @@ export function normalizeCardData(key, content) {
     };
   }
 
+  // Normalize new card types
+  if (key === 'emotional_arc' && Array.isArray(content.values)) {
+    content.values = content.values.map((v) => Math.max(-1, Math.min(1, v)));
+  }
+
+  if (key === 'story_health' && content.scores) {
+    const dims = ['pacing', 'character_depth', 'world_building', 'dialogue', 'coherence'];
+    for (const d of dims) {
+      if (typeof content.scores[d] !== 'number') content.scores[d] = 0;
+    }
+  }
+
+  if (key === 'themes' && Array.isArray(content.themes)) {
+    for (const t of content.themes) {
+      if (typeof t.confidence === 'number') {
+        t.confidence = Math.max(0, Math.min(1, t.confidence));
+      }
+    }
+  }
+
+  if (key === 'beats') {
+    if (!Array.isArray(content.beats_hit)) content.beats_hit = [];
+  }
+
   return content;
 }
 
@@ -50,6 +99,11 @@ export function hasVisualFields(key, content) {
   if (key === 'characters') return !!(content.list && content.list.length);
   if (key === 'tension') return !!(content.levels && content.levels.length);
   if (key === 'visual_style') return !!(content.tags && content.tags.length);
+  if (key === 'emotional_arc') return !!(content.values?.length);
+  if (key === 'directors_notes') return !!(content.notes?.length);
+  if (key === 'story_health') return !!(content.scores && Object.keys(content.scores).length);
+  if (key === 'themes') return !!(content.themes?.length);
+  if (key === 'beats') return !!(content.beats_hit?.length);
   return false;
 }
 

@@ -49,3 +49,15 @@
   0% { opacity: 0; transform: scale(0.9) translateY(10px); }
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
+@keyframes sparklineDraw {
+  from { stroke-dashoffset: 200; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes beatDotPop {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes healthBarGrow {
+  from { width: 0; opacity: 0; }
+  to { opacity: 1; }
+}
