@@ -95,6 +95,9 @@ jobs:
             --project storyforge-hackathon \
             --region us-central1 \
             --allow-unauthenticated \
+            --startup-cpu-boost \
+            --cpu-throttling \
+            --timeout=300 \
             --quiet
 
   deploy-frontend:
