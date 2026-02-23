@@ -2,7 +2,7 @@
 @property --sweep {
   syntax: '<percentage>';
   inherits: false;
-  initial-value: 0%;
+  initial-value: -20%;
 }
 
 .rm {
@@ -62,14 +62,14 @@
 /* Body */
 .rm-body {
   flex: 1; display: flex; flex-direction: column;
-  padding: 16px 24px 8px;
+  padding: clamp(8px, 1vh, 16px) clamp(14px, 2vw, 60px) clamp(4px, 0.5vh, 8px);
   min-height: 0;
   position: relative; z-index: 5;
 }
 
-/* Contained image */
+/* Contained image — 60% of body height */
 .rm-img-wrap {
-  flex: 1 1 0;
+  flex: 0 0 60%;
   display: flex; align-items: center; justify-content: center;
   min-height: 0; overflow: hidden;
   border-radius: 14px; position: relative;
@@ -107,11 +107,12 @@
   100% { transform: scale(1.04) translate(0.3%, 0.3%); }
 }
 
-/* Text area */
+/* Text area — fills remaining ~40%, vertically centers content */
 .rm-text-area {
-  flex-shrink: 0;
-  padding: 18px 8px 4px;
-  max-width: 740px; margin: 0 auto; width: 100%;
+  flex: 1 1 0; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 0 clamp(4px, 1vw, 24px);
+  max-width: clamp(340px, 66vw, 1000px); margin: 0 auto; width: 100%;
   transition: opacity 0.5s ease, transform 0.5s ease;
 }
 .rm-text-area.rm-in  { opacity: 1; transform: translateY(0); }
@@ -119,15 +120,16 @@
 
 .rm-title {
   font-family: 'Playfair Display', 'Georgia', serif;
-  font-size: 1.15rem; font-weight: 600;
+  font-size: clamp(1rem, 1.8vh + 0.4vw, 1.75rem); font-weight: 600;
   color: rgba(255,255,255,0.88);
-  margin: 0 0 8px; text-align: center;
+  margin: 0 0 clamp(4px, 0.6vh, 12px); text-align: center;
   letter-spacing: 0.02em;
 }
 
 .rm-text {
   font-family: 'Georgia', 'Times New Roman', serif;
-  font-size: 0.92rem; line-height: 1.85;
+  font-size: clamp(0.8rem, 1.5vh + 0.3vw, 1.45rem);
+  line-height: clamp(1.6, 1.4 + 0.4vh, 2);
   margin: 0; text-align: center;
 }
 
@@ -137,7 +139,7 @@
    The gradient sweeps left→right through the letters. */
 
 .rm-w {
-  --sweep: 0%;
+  --sweep: -20%;
   background: linear-gradient(90deg,
     rgba(255,255,255,0.9)  calc(var(--sweep) - 8%),
     rgba(255,255,255,0.18) calc(var(--sweep) + 8%)
@@ -162,7 +164,7 @@
 /* Bottom bar */
 .rm-bottom {
   display: flex; align-items: center; justify-content: center; gap: 28px;
-  padding: 8px 24px 18px;
+  padding: clamp(4px, 0.8vh, 10px) 24px clamp(8px, 1.2vh, 18px);
   z-index: 15; position: relative;
 }
 .rm-counter {
@@ -188,11 +190,30 @@
 
 /* Mobile */
 @media (max-width: 640px) {
-  .rm-body { padding: 10px 14px 4px; }
-  .rm-text-area { padding: 12px 4px 2px; }
-  .rm-title { font-size: 1rem; }
-  .rm-text  { font-size: 0.85rem; line-height: 1.7; }
-  .rm-bottom { padding: 6px 16px 14px; gap: 20px; }
   .rm-controls { gap: 4px; }
   .rm-btn { width: 30px; height: 30px; }
+  .rm-bottom { gap: 20px; }
+}
+
+/* Tablet+ */
+@media (min-width: 768px) {
+  .rm-top { padding: 16px 24px 0; }
+  .rm-nav-btn { width: 44px; height: 44px; }
+  .rm-counter { font-size: 0.75rem; }
+  .rm-btn { width: 38px; height: 38px; }
+}
+
+/* Desktop+ */
+@media (min-width: 1024px) {
+  .rm-top { padding: 18px 32px 0; }
+  .rm-nav-btn { width: 48px; height: 48px; }
+  .rm-counter { font-size: 0.8rem; min-width: 70px; }
+  .rm-s { height: 3px; }
+}
+
+/* Wide screens */
+@media (min-width: 1440px) {
+  .rm-top { padding: 20px 40px 0; }
+  .rm-nav-btn { width: 52px; height: 52px; }
+  .rm-counter { font-size: 0.85rem; min-width: 80px; }
 }

@@ -17,8 +17,8 @@ import Logo from './components/Logo';
 import StoryCanvas from './components/StoryCanvas';
 import AppHeader from './components/AppHeader';
 import CompleteBookDialog from './components/dialogs/CompleteBookDialog';
-import PublishDialog from './components/dialogs/PublishDialog';
 import DirectorPanel from './components/DirectorPanel';
+import BookDetailsPage from './components/BookDetailsPage';
 import ControlBar from './components/ControlBar';
 import LibraryPage from './components/LibraryPage';
 import ExplorePage from './components/ExplorePage';
@@ -33,6 +33,8 @@ export default function App() {
 
   const urlStoryMatch = location.pathname.match(/^\/story\/(.+?)(?:\/|$)/);
   const urlStoryId = urlStoryMatch ? urlStoryMatch[1] : null;
+  const urlBookMatch = location.pathname.match(/^\/book\/(.+?)(?:\/|$)/);
+  const isBookRoute = !!urlBookMatch;
 
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId);
   const { addToast } = useToast();
@@ -61,6 +63,7 @@ export default function App() {
 
   const isLibrary = location.pathname === '/library';
   const isExplore = location.pathname === '/explore';
+  const isBookPage = location.pathname.startsWith('/book/');
   const [viewingReadOnly, setViewingReadOnly] = useState(false);
 
   // Per-scene action callbacks
@@ -164,8 +167,36 @@ export default function App() {
     return <SplashScreen message={splashMessage} />;
   }
 
-  // Not signed in — show public story or sign-in screen
+  // Not signed in — show public story, book details, or sign-in screen
   if (!user) {
+    // Guest viewing a book details page — no login required
+    if (isBookRoute) {
+      return (
+        <div className="h-screen flex flex-col relative overflow-hidden">
+          <div className="fixed inset-0 -z-10" style={{ background: 'var(--bg-gradient)' }}>
+            <div className="absolute inset-0" style={{ background: 'var(--orb-1)' }} />
+            <div className="absolute inset-0" style={{ background: 'var(--orb-2)' }} />
+            <div className="absolute inset-0" style={{ background: 'var(--orb-3)' }} />
+          </div>
+          <header className="relative z-20 flex items-center justify-between header-bar" style={{ background: 'var(--glass-bg-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', borderBottom: '1px solid var(--glass-border)', boxShadow: 'var(--shadow-glass)' }}>
+            <div style={{ cursor: 'pointer' }} onClick={() => navigate('/')}>
+              <Logo size="compact" />
+            </div>
+            <div className="flex items-center header-actions">
+              <button onClick={signInWithGoogle} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
+                Sign in to create
+              </button>
+            </div>
+          </header>
+          <div className="flex flex-1 overflow-hidden relative z-10">
+            <Routes>
+              <Route path="/book/:storyId" element={<BookDetailsPage user={null} />} />
+            </Routes>
+          </div>
+        </div>
+      );
+    }
+
     if (publicStory) {
       return (
         <div className="h-screen flex flex-col relative overflow-hidden">
@@ -256,7 +287,7 @@ export default function App() {
       <AppHeader
         navigate={navigate} storyId={storyId} connected={connected}
         viewingReadOnly={viewingReadOnly} setViewingReadOnly={setViewingReadOnly} reset={reset}
-        isLibrary={isLibrary} isExplore={isExplore}
+        isLibrary={isLibrary} isExplore={isExplore} isBookPage={isBookPage}
         scenes={scenes} generating={generating}
         autoSaveCurrent={autoSaveCurrent} clearState={clearState}
         setStoryStatus={setStoryStatus} setIsPublished={setIsPublished} setArtStyle={setArtStyle} setLanguage={setLanguage} setBookmarkedSceneIndex={setBookmarkedSceneIndex}
@@ -288,6 +319,14 @@ export default function App() {
             </div>
           }
         />
+        <Route
+          path="/book/:storyId"
+          element={
+            <div className="flex flex-1 overflow-hidden relative z-10">
+              <BookDetailsPage user={user} setAppIsPublished={setIsPublished} onOpenBook={handleOpenBook} onOpenPublicBook={handleOpenPublicBook} />
+            </div>
+          }
+        />
         {['/story/:storyId', '*'].map((path) => (
           <Route
             key={path}
@@ -296,7 +335,7 @@ export default function App() {
               <SceneActionsContext.Provider value={sceneActionsValue}>
                 <div className="flex flex-1 overflow-hidden relative z-10">
                   <div className="flex-1 relative flex flex-col">
-                    <StoryCanvas key={storyId || 'new'} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={displayPrompt} spreadPrompts={spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} />
+                    <StoryCanvas key={storyId || 'new'} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={viewingReadOnly ? null : displayPrompt} spreadPrompts={viewingReadOnly ? null : spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} />
                     {!viewingReadOnly && storyStatus !== 'completed' && (
                       <ControlBar onSend={(text, opts) => { if (scenes.length === 0) addToast(`Language set to ${language} — can't be changed for this story`, 'info'); send(text, opts); }} onSendAudio={(b64, mime) => { if (scenes.length === 0) addToast(`Language set to ${language} — can't be changed for this story`, 'info'); sendAudio(b64, mime); }} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} setLanguage={setLanguage} languageLocked={scenes.length > 0} live={live} />
                     )}
@@ -315,9 +354,6 @@ export default function App() {
 
       {showCompleteDialog && (
         <CompleteBookDialog completing={completing} onClose={() => setShowCompleteDialog(false)} onComplete={handleComplete} />
-      )}
-      {showPublishDialog && (
-        <PublishDialog publishing={publishing} onClose={() => setShowPublishDialog(false)} onPublish={handlePublish} />
       )}
     </div>
   );

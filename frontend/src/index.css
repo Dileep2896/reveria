@@ -310,6 +310,51 @@ body {
   border-radius: clamp(10px, 1.2vw, 16px);
 }
 
+/* ── Unified icon button (used app-wide via IconBtn component) ── */
+.icon-btn {
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  touch-action: manipulation;
+}
+.icon-btn:hover {
+  background: var(--glass-bg-strong);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+.icon-btn--danger {
+  color: rgba(255, 80, 80, 0.5);
+  border-color: rgba(255, 80, 80, 0.15);
+}
+.icon-btn--danger:hover {
+  color: #ff5050;
+  border-color: rgba(255, 80, 80, 0.4);
+  background: rgba(255, 80, 80, 0.08);
+}
+.icon-btn--dark {
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  color: #fff;
+}
+.icon-btn--dark:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+.icon-btn--active {
+  color: var(--accent-primary);
+  border-color: var(--glass-border-accent);
+}
+
 .control-action-btn {
   width: clamp(28px, 2.8vw, 36px);
   height: clamp(28px, 2.8vw, 36px);

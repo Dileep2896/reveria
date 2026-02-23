@@ -524,6 +524,51 @@
 
 ---
 
+**Session 46: Social Features — Likes, Ratings & Comments**
+
+- Built full social interaction system on BookDetailsPage (`/book/:storyId`):
+  - **Likes**: Reused existing `liked_by` array on story docs, optimistic toggle with `arrayUnion`/`arrayRemove`
+  - **Star Ratings (1-5)**: New subcollection `stories/{id}/ratings/{uid}`, denormalized `rating_sum`/`rating_count` on story doc for instant display
+  - **Comments**: New subcollection `stories/{id}/comments/{autoId}`, denormalized `comment_count` on story doc
+- New backend router `routers/social.py` with 5 endpoints:
+  - `POST /api/stories/{id}/rate` — upsert rating with atomic `Increment` updates
+  - `GET /api/public/stories/{id}/social` — returns avg rating, count, user rating, comment count
+  - `POST /api/stories/{id}/comments` — create comment (author info from Firebase token)
+  - `GET /api/public/stories/{id}/comments` — list comments (newest first, limit 50)
+  - `DELETE /api/stories/{id}/comments/{cid}` — delete own comment or any comment on own story
+- Updated `book_details.py` to include `rating_avg`, `rating_count`, `comment_count` in public response
+- Frontend: social stats row (heart+count, stars+avg, comment icon+count), inline star rating with hover preview, comment form + list with delete button
+- **Pre-populated data**: Rating avg/count/commentCount loaded from initial story fetch (no delayed pop-in)
+- Comprehensive skeleton loading for BookDetailsPage (back button, cover, title, author, tags, stats, social, synopsis, actions, comments)
+- Share button moved inline next to title for visitor view
+
+**Session 47: Explore Page Skeleton Redesign**
+
+- Replaced 3D book skeleton with simple flat card skeleton (rounded rectangle cover + text lines)
+- Gentle opacity shimmer animation with staggered fade-in per card
+- Removed shadow artifacts from loading state
+
+**Session 48: Content Filtering — Multilingual Pre-Pipeline Validation**
+
+- Fixed issue where narrator produced refusal text as scene content (with images) for off-topic/non-story prompts
+- Added `validate_prompt()` pre-filter using Gemini Flash for fast multilingual classification (STORY/REJECT)
+- Expanded `is_refusal()` patterns to cover Hindi, Spanish, French, German, Japanese refusal phrases
+- Pre-filter runs BEFORE expensive pipeline — rejects coding questions, homework, recipes, etc.
+- Fails open on errors (allows prompt through) to avoid blocking legitimate requests
+
+**Session 49: Prompt Engineering — Character Consistency & Quality Improvements**
+
+- **Enhanced character sheet format** — extraction prompt now requests hex color codes for all colors, face shape + features, detailed outfit with colors, signature items/accessories, and dominant color palette per character
+- **Anti-drift language** — explicit instruction block between character descriptions and scene composition in image prompts: "Render each character EXACTLY as described above — same colors, same outfit, same signature items"
+- **Richer art style suffixes** — expanded from 5-8 words to 20-25 words per style with rendering-specific details (volumetric lighting, paper texture, cel shading, impasto brushstrokes, cross-hatching, etc.)
+- **Consistency anchors in scene composition** — new CONSISTENCY ANCHORS section in scene composer prompt instructs Gemini to mention signature accessories by name, reference same location names, and use consistent time-of-day cues
+- **Language-aware title generation** — `gen_title()` now accepts language parameter; non-English stories get "The title MUST be in {language}" instruction; removed "children's story" hardcode; language flows from WS message through `auto_generate_meta()` to `gen_title()`
+- Bumped scene composition word limit from 80 → 100 words for richer descriptions
+- Bumped character extraction `max_output_tokens` from 600 → 1000 for detailed format
+- Bumped title `max_output_tokens` from 20 → 30 and word limit from 4 → 6 for non-Latin scripts
+
+---
+
 ## Current State (Feb 22, 2026)
 
 ### What's Working
@@ -587,9 +632,17 @@
 - **Writing skeleton animation** — animated typing cursor + skeleton lines during text generation
 - **Director auto-updates on scene deletion** — tension bars and scene numbers stay accurate
 - **Library scene count updates on deletion** — Firestore `total_scene_count` synced
+- **Social features on BookDetailsPage** — likes, 1-5 star ratings, comments with optimistic UI
+  - Denormalized counts on story doc (rating_sum, rating_count, comment_count) for instant display
+  - Story author can delete any comment; commenters can delete own
+  - Pre-populated social stats from initial story fetch (no delayed pop-in)
+- **Content filtering** — multilingual pre-pipeline validation via Gemini Flash + expanded refusal patterns
+- **Enhanced prompt engineering** for character consistency:
+  - Character sheets with hex color codes, face details, signature items, dominant color palette
+  - Anti-drift language in image prompts ("Render EXACTLY as described")
+  - Richer art style suffixes (20-25 words with rendering-specific details)
+  - Consistency anchors in scene composition (signature items, location names, time-of-day)
+  - Language-aware title generation (titles in story's language, not always English)
 
 ### What Needs to Be Built
 - **Demo Video** — 4-minute walkthrough for submission
-
-### Known Issues / Improvements Needed
-- **react-pageflip limitations** — Mouse-based page flipping disabled; 21 pre-allocated page slots

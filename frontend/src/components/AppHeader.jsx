@@ -5,7 +5,7 @@ import { API_URL } from '../utils/storyHelpers';
 export default function AppHeader({
   navigate, storyId, connected,
   viewingReadOnly, setViewingReadOnly, reset,
-  isLibrary, isExplore,
+  isLibrary, isExplore, isBookPage,
   scenes, generating,
   autoSaveCurrent, clearState,
   setStoryStatus, setIsPublished, setArtStyle, setLanguage, setBookmarkedSceneIndex,
@@ -19,6 +19,8 @@ export default function AppHeader({
   theme, toggleTheme,
   user, signOut,
 }) {
+  // On /book/ pages, hide all story-specific action buttons
+  const isNonStoryPage = isLibrary || isExplore || isBookPage;
   return (
     <header
       className="relative z-20 flex items-center justify-between header-bar"
@@ -63,24 +65,8 @@ export default function AppHeader({
           </span>
         </div>
 
-        {/* Back to Explore — visible when viewing someone else's story read-only */}
-        {viewingReadOnly && (
-          <button
-            onClick={() => { setViewingReadOnly(false); reset(); navigate('/explore'); }}
-            className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
-            style={{
-              background: 'var(--glass-bg)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--glass-border)',
-              backdropFilter: 'var(--glass-blur)',
-            }}
-          >
-            Back to Explore
-          </button>
-        )}
-
         {/* New Story — only visible when there's content in story view */}
-        {!isLibrary && !isExplore && !viewingReadOnly && scenes.length > 0 && !generating && (
+        {!isNonStoryPage && !viewingReadOnly && scenes.length > 0 && !generating && (
           <button
             onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate('/'); }}
             disabled={saving || generatingCover}
@@ -99,7 +85,7 @@ export default function AppHeader({
         )}
 
         {/* Save to Library — visible when story has 2+ scenes and not generating */}
-        {!isLibrary && !isExplore && !viewingReadOnly && storyStatus !== 'completed' && scenes.length >= 2 && !generating && storyId && (
+        {!isNonStoryPage && !viewingReadOnly && storyStatus !== 'completed' && scenes.length >= 2 && !generating && storyId && (
           <button
             onClick={handleSave}
             disabled={saving || saved || generatingCover}
@@ -119,7 +105,7 @@ export default function AppHeader({
         )}
 
         {/* Complete Book — visible when story is saved */}
-        {!isLibrary && !isExplore && !viewingReadOnly && storyStatus === 'saved' && scenes.length >= 2 && !generating && storyId && (
+        {!isNonStoryPage && !viewingReadOnly && storyStatus === 'saved' && scenes.length >= 2 && !generating && storyId && (
           <button
             onClick={() => setShowCompleteDialog(true)}
             disabled={saving || generatingCover}
@@ -137,10 +123,10 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* Publish — visible when story is completed and not yet published */}
-        {!isLibrary && !isExplore && !viewingReadOnly && storyStatus === 'completed' && storyId && !isPublished && (
+        {/* Publish — navigates to Book Details pre-publish page */}
+        {!isNonStoryPage && !viewingReadOnly && storyStatus === 'completed' && storyId && !isPublished && (
           <button
-            onClick={() => setShowPublishDialog(true)}
+            onClick={() => navigate(`/book/${storyId}`, { state: { prepublish: true } })}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
               background: 'var(--glass-bg)',
@@ -152,23 +138,25 @@ export default function AppHeader({
             Publish
           </button>
         )}
-        {/* Published badge — non-interactive */}
-        {!isLibrary && !isExplore && !viewingReadOnly && storyStatus === 'completed' && storyId && isPublished && (
-          <span
-            className="rounded-full font-semibold uppercase tracking-wider header-btn"
+        {/* Published — "Book Page" button to navigate to /book/:storyId */}
+        {!isNonStoryPage && !viewingReadOnly && storyStatus === 'completed' && storyId && isPublished && (
+          <button
+            onClick={() => navigate(`/book/${storyId}`)}
+            className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
               background: 'var(--accent-primary-soft)',
               color: 'var(--accent-primary)',
               border: '1px solid var(--glass-border-accent)',
               boxShadow: 'var(--shadow-glow-primary)',
+              cursor: 'pointer',
             }}
           >
-            Published
-          </span>
+            Book Page
+          </button>
         )}
 
-        {/* Reading Mode — visible for completed/read-only stories with scenes */}
-        {!isLibrary && !isExplore && (viewingReadOnly || storyStatus === 'completed') && scenes.length > 0 && !generating && (
+        {/* Reading Mode — visible for read-only stories (from Explore) */}
+        {!isNonStoryPage && viewingReadOnly && scenes.length > 0 && !generating && (
           <button
             onClick={() => setReadingMode(true)}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
@@ -183,8 +171,8 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* PDF Export — visible when saved/completed with 2+ scenes */}
-        {!isLibrary && !isExplore && !viewingReadOnly && storyId && scenes.length >= 2 && !generating && (storyStatus === 'saved' || storyStatus === 'completed') && (
+        {/* PDF Export — visible only for completed stories */}
+        {!isNonStoryPage && !viewingReadOnly && storyId && scenes.length >= 2 && !generating && storyStatus === 'completed' && !isPublished && (
           <button
             onClick={async () => {
               addToast('Generating PDF...', 'info');
@@ -217,25 +205,6 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* Share Link — visible when published */}
-        {!isLibrary && !isExplore && !viewingReadOnly && isPublished && storyId && (
-          <button
-            onClick={() => {
-              const url = `${window.location.origin}/story/${storyId}`;
-              navigator.clipboard.writeText(url).then(() => addToast('Link copied!', 'success')).catch(() => addToast('Failed to copy link', 'error'));
-            }}
-            className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
-            style={{
-              background: 'var(--glass-bg)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--glass-border)',
-              backdropFilter: 'var(--glass-blur)',
-            }}
-          >
-            Share
-          </button>
-        )}
-
         {/* Library / Explore segmented nav */}
         <div className="header-nav-group">
           <button
@@ -262,20 +231,22 @@ export default function AppHeader({
           </button>
         </div>
 
-        {/* Director toggle — glass pill */}
-        <button
-          onClick={() => setDirectorOpen(!directorOpen)}
-          className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
-          style={{
-            background: directorOpen ? 'var(--accent-secondary-soft)' : 'var(--glass-bg)',
-            color: directorOpen ? 'var(--accent-secondary)' : 'var(--text-muted)',
-            border: `1px solid ${directorOpen ? 'var(--glass-border-secondary)' : 'var(--glass-border)'}`,
-            backdropFilter: 'var(--glass-blur)',
-            boxShadow: directorOpen ? 'var(--shadow-glow-secondary)' : 'none',
-          }}
-        >
-          Director
-        </button>
+        {/* Director toggle — glass pill (hidden on non-story pages and read-only views) */}
+        {!isNonStoryPage && !viewingReadOnly && (
+          <button
+            onClick={() => setDirectorOpen(!directorOpen)}
+            className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
+            style={{
+              background: directorOpen ? 'var(--accent-secondary-soft)' : 'var(--glass-bg)',
+              color: directorOpen ? 'var(--accent-secondary)' : 'var(--text-muted)',
+              border: `1px solid ${directorOpen ? 'var(--glass-border-secondary)' : 'var(--glass-border)'}`,
+              backdropFilter: 'var(--glass-blur)',
+              boxShadow: directorOpen ? 'var(--shadow-glow-secondary)' : 'none',
+            }}
+          >
+            Director
+          </button>
+        )}
 
         {/* Music toggle */}
         {ambient.playing && (

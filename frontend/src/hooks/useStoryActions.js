@@ -55,7 +55,11 @@ export default function useStoryActions({
     try {
       const storyRef = doc(db, 'stories', storyId);
       const snap = await getDoc(storyRef);
-      const alreadyGenerated = snap.exists() && snap.data().title_generated;
+      if (!snap.exists()) return;
+      const dbData = snap.data();
+      // Never regress a completed story back to saved
+      if (dbData.status === 'completed') return;
+      const alreadyGenerated = dbData.title_generated;
 
       // Tier 1: already has AI title + cover
       if (alreadyGenerated) {
@@ -95,7 +99,14 @@ export default function useStoryActions({
     try {
       const storyRef = doc(db, 'stories', capturedStoryId);
       const snap = await getDoc(storyRef);
-      const alreadyGenerated = snap.exists() && snap.data().title_generated;
+      if (!snap.exists()) return;
+      const dbData = snap.data();
+      // Never regress a completed story back to saved
+      if (dbData.status === 'completed') {
+        setStoryStatus('completed');
+        return;
+      }
+      const alreadyGenerated = dbData.title_generated;
 
       // Tier 1: already has AI title + cover — just update status (instant)
       if (alreadyGenerated) {

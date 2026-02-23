@@ -371,6 +371,55 @@
 }
 
 /* ===========================================================
+   SKELETON LOADING
+   =========================================================== */
+.explore-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  animation: exploreFadeIn 0.4s ease both;
+}
+
+.explore-skeleton-cover {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 0.75rem;
+  background: var(--glass-bg);
+  animation: exploreShimmer 1.6s ease-in-out infinite;
+}
+
+.explore-skeleton-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 0.25rem 0;
+}
+
+.explore-skeleton-line {
+  height: 0.65rem;
+  border-radius: 0.35rem;
+  background: var(--glass-bg);
+  animation: exploreShimmer 1.6s ease-in-out infinite;
+}
+
+.explore-skeleton-line--title {
+  width: 75%;
+}
+
+.explore-skeleton-line--subtitle {
+  width: 50%;
+}
+
+@keyframes exploreShimmer {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes exploreFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===========================================================
    RESPONSIVE
    =========================================================== */
 @media (max-width: 480px) {

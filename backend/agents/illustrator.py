@@ -11,13 +11,18 @@ separately — do NOT describe any characters' appearance.
 
 RULES:
 - Output ONLY the scene composition, nothing else
-- Keep it under 80 words
+- Keep it under 100 words
 - Describe: setting, environment, action/pose, lighting, mood, weather, camera angle
 - Reference characters by name only (e.g., "Alice stands near the window")
 - Do NOT describe character appearance (hair, clothes, age, skin, build, etc.)
 - Do NOT include text, labels, words, or watermarks
 - Do NOT describe dialogue or thoughts
 - Describe ONLY what a camera would capture in a single frame
+
+CONSISTENCY ANCHORS (important for visual continuity):
+- Mention distinguishing accessories, props, or signature items by name (e.g., "Luna's red scarf", "Kai's wooden staff")
+- Reference the same location names across scenes (e.g., "the old oak tree", "the crystal cave")
+- Use consistent time-of-day and weather cues
 - End with the ART STYLE SUFFIX provided below
 """
 
@@ -28,12 +33,36 @@ Do NOT add explanations or extra text."""
 
 
 ART_STYLES = {
-    "cinematic": "cinematic digital painting, highly detailed, dramatic lighting",
-    "watercolor": "watercolor illustration, soft washes, delicate brushstrokes",
-    "comic": "comic book panel art, bold outlines, vibrant colors",
-    "anime": "anime illustration, Studio Ghibli style, detailed backgrounds",
-    "oil": "oil painting on canvas, rich textures, classical composition",
-    "pencil": "detailed pencil sketch, cross-hatching, black and white",
+    "cinematic": (
+        "cinematic digital painting, highly detailed, dramatic volumetric lighting, "
+        "depth of field, rich color grading, photorealistic textures, "
+        "8k render quality, concept art style, atmospheric perspective"
+    ),
+    "watercolor": (
+        "traditional watercolor illustration, soft translucent washes, visible paper texture, "
+        "delicate wet-on-wet brushstrokes, gentle color bleeding at edges, "
+        "hand-painted look, luminous highlights, muted pastel palette"
+    ),
+    "comic": (
+        "comic book panel art, bold clean ink outlines, vibrant flat colors with cel shading, "
+        "dynamic composition, halftone dot texture, strong shadows, "
+        "graphic novel style, pop art color palette, action lines"
+    ),
+    "anime": (
+        "anime illustration in Studio Ghibli style, detailed lush backgrounds, "
+        "soft cel shading, expressive large eyes, warm natural lighting, "
+        "hand-drawn line quality, painterly background layers, nostalgic color palette"
+    ),
+    "oil": (
+        "oil painting on textured canvas, rich impasto brushstrokes, classical composition, "
+        "warm golden-hour chiaroscuro lighting, visible palette knife texture, "
+        "old master color harmony, deep shadows, luminous glazing technique"
+    ),
+    "pencil": (
+        "detailed graphite pencil sketch on cream paper, fine cross-hatching for shading, "
+        "precise line weight variation, realistic proportions, "
+        "high contrast black and white, subtle smudge shading, technical illustration quality"
+    ),
 }
 
 
@@ -98,17 +127,24 @@ class Illustrator:
             user_text = story_text
 
         system_instruction = (
-            "You are a character designer. Read this story and create a "
+            "You are a character designer for an AI image generator. Read this story and create a "
             "CHARACTER REFERENCE SHEET listing every named character.\n\n"
-            "For each character, output exactly one line:\n"
-            "NAME: gender, approximate age, body build, skin tone, "
-            "hair color/style, facial features, clothing/outfit, "
-            "distinguishing features (scars, accessories, unique traits), "
-            "dominant color palette (e.g., 'dominant colors: black, silver, pale blue')\n\n"
-            "Be VERY specific about gender (man/woman/boy/girl). "
-            "Be specific and exhaustive about visual details — these descriptions "
-            "will be passed VERBATIM to an image generator. "
-            "If the story implies details, fill them in consistently.\n"
+            "For each character, output exactly one line in this format:\n"
+            "NAME: [gender: man/woman/boy/girl], [age: e.g. 8-year-old], "
+            "[body: e.g. slim/stocky/tall/petite with height hint], "
+            "[skin: specific tone with hex e.g. warm brown #8D5524], "
+            "[hair: color with hex + style e.g. jet black #0A0A0A straight shoulder-length], "
+            "[face: shape + key features e.g. round face, button nose, large almond-shaped brown #4A2810 eyes, thick eyebrows], "
+            "[outfit: detailed clothing with colors e.g. navy blue #1B2A4A hoodie, faded jeans, red #C41E3A sneakers], "
+            "[signature items: unique accessories/props that identify this character e.g. silver moon pendant, round glasses, wooden walking staff], "
+            "[palette: 3-4 dominant hex colors e.g. #1B2A4A, #C41E3A, #0A0A0A]\n\n"
+            "CRITICAL RULES:\n"
+            "- Include hex color codes for ALL colors (skin, hair, eyes, clothing)\n"
+            "- Be VERY specific about gender (man/woman/boy/girl)\n"
+            "- Always include at least one signature item or distinguishing feature per character\n"
+            "- These descriptions will be passed VERBATIM to an image generator — be precise and visual\n"
+            "- If the story implies details, fill them in consistently and inventively\n"
+            "- Use concrete visual descriptors, not abstract ones (e.g. 'freckled cheeks' not 'friendly face')\n"
         )
         if self._character_sheet:
             system_instruction += (
@@ -129,7 +165,7 @@ class Illustrator:
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     temperature=0.1,
-                    max_output_tokens=600,
+                    max_output_tokens=1000,
                 ),
             )
             if response.text and "NONE" not in response.text.upper():
@@ -297,9 +333,14 @@ class Illustrator:
         if not scene_composition:
             return None
 
-        # Step 3: Concatenate character descriptions + scene composition
+        # Step 3: Concatenate character descriptions + scene composition with anti-drift anchors
         if char_block:
-            final_prompt = f"{char_block}\n\n{scene_composition}"
+            anti_drift = (
+                "IMPORTANT: Render each character EXACTLY as described above — "
+                "same colors, same outfit, same signature items. "
+                "Do not alter, omit, or reinterpret any character detail."
+            )
+            final_prompt = f"{char_block}\n\n{anti_drift}\n\n{scene_composition}"
         else:
             final_prompt = scene_composition
 

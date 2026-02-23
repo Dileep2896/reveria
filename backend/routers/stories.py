@@ -62,6 +62,7 @@ async def get_public_story(story_id: str) -> dict[str, Any]:
         "generations": generations,
         "status": data.get("status", "completed"),
         "is_public": True,
+        "book_details": data.get("book_details", {}),
     }
 
 

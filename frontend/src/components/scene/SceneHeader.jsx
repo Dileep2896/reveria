@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSceneActions } from '../../contexts/SceneActionsContext';
-import ActionBtn from '../ActionBtn';
+import IconBtn from '../IconBtn';
 
 export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, isBusy, audio, onRegenSceneStart }) {
   const { regenScene, deleteScene, isReadOnly } = useSceneActions();
@@ -92,60 +92,29 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
               alignItems: 'center',
             }}
           >
-            <ActionBtn label="Regenerate scene">
-              <button
-                onPointerDown={(e) => { e.stopPropagation(); }}
-                onClick={(e) => { e.stopPropagation(); onRegenSceneStart?.(); regenScene?.(scene.scene_number, scene.text); }}
-                style={{
-                  width: `${18 * scale}px`,
-                  height: `${18 * scale}px`,
-                  borderRadius: '50%',
-                  border: '1px solid var(--glass-border)',
-                  background: 'var(--glass-bg)',
-                  color: 'var(--text-secondary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  touchAction: 'manipulation',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--glass-bg-strong)'; e.currentTarget.style.color = 'var(--accent-primary)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--glass-bg)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
-              >
-                <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="23 4 23 10 17 10" />
-                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                </svg>
-              </button>
-            </ActionBtn>
-            <ActionBtn label="Delete scene">
-              <button
-                onPointerDown={(e) => { e.stopPropagation(); }}
-                onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
-                style={{
-                  width: `${18 * scale}px`,
-                  height: `${18 * scale}px`,
-                  borderRadius: '50%',
-                  border: '1px solid rgba(255,100,100,0.15)',
-                  background: 'rgba(120,20,20,0.25)',
-                  color: '#ff9999',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  touchAction: 'manipulation',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(160,30,30,0.5)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(120,20,20,0.25)'; }}
-              >
-                <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-              </button>
-            </ActionBtn>
+            <IconBtn
+              label="Regenerate scene"
+              size={18 * scale}
+              onPointerDown={(e) => { e.stopPropagation(); }}
+              onClick={(e) => { e.stopPropagation(); onRegenSceneStart?.(); regenScene?.(scene.scene_number, scene.text); }}
+            >
+              <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+            </IconBtn>
+            <IconBtn
+              label="Delete scene"
+              size={18 * scale}
+              danger
+              onPointerDown={(e) => { e.stopPropagation(); }}
+              onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+            >
+              <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </IconBtn>
           </div>
         )}
       </div>

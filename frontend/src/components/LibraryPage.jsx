@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import {
@@ -11,6 +12,7 @@ import {
   doc,
   updateDoc,
 } from '../firebase';
+import IconBtn from './IconBtn';
 import './LibraryPage.css';
 
 const API_URL = (() => {
@@ -81,7 +83,7 @@ function useLibraryBooks(user) {
   return { books, setBooks, loading, error, refresh };
 }
 
-function BookCard({ book, onOpen, onDelete, onPublish, onUnpublish, onToggleFavorite }) {
+function BookCard({ book, onOpen, onDelete, onToggleFavorite }) {
   const dateStr = book.updated_at.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -149,46 +151,31 @@ function BookCard({ book, onOpen, onDelete, onPublish, onUnpublish, onToggleFavo
 
       {/* Action bar below book */}
       <div className="book-action-bar">
-        <button
-          className={`book-action-btn${book.is_favorite ? ' book-action-btn--fav-active' : ''}`}
-          title={book.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+        <IconBtn
+          label={book.is_favorite ? 'Unfavorite' : 'Favorite'}
+          size={28}
+          active={book.is_favorite}
+          activeColor="#ef4444"
           onClick={() => onToggleFavorite(book.id, !book.is_favorite)}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill={book.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
           </svg>
-        </button>
+        </IconBtn>
 
-        {book.status === 'completed' && (
-          <button
-            className={`book-action-btn${book.is_public ? ' book-action-btn--pub-active' : ''}`}
-            title={book.is_public ? 'Unpublish' : 'Publish to Explore'}
-            onClick={() => book.is_public ? onUnpublish(book.id) : onPublish(book.id)}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-          </button>
-        )}
-
-        <button
-          className="book-action-btn book-action-btn--delete"
-          title="Delete story"
-          onClick={() => onDelete(book)}
-        >
+        <IconBtn label="Delete" size={28} danger onClick={() => onDelete(book)}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="3 6 5 6 21 6" />
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
           </svg>
-        </button>
+        </IconBtn>
       </div>
     </div>
   );
 }
 
 export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, activeStoryId, onActiveStoryDeleted }) {
+  const navigate = useNavigate();
   const { idToken } = useAuth();
   const { addToast } = useToast();
   const { books, setBooks, loading, error, refresh } = useLibraryBooks(user);
@@ -253,6 +240,12 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
   }, [books, searchQuery, sortBy, statusFilter]);
 
   const handleOpen = useCallback(async (book) => {
+    // Published books go to the Book Details page
+    if (book.is_public) {
+      navigate(`/book/${book.id}`, { state: { from: 'library' } });
+      return;
+    }
+
     try {
       const storyId = book.id;
 
@@ -281,7 +274,7 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
     } catch (err) {
       console.error('Failed to open book:', err);
     }
-  }, [onOpenBook]);
+  }, [onOpenBook, navigate]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteTarget || deleting) return;
@@ -303,29 +296,6 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
       setDeleteTarget(null);
     }
   }, [deleteTarget, deleting, idToken, refresh, addToast, activeStoryId, onActiveStoryDeleted]);
-
-  const handlePublish = useCallback(async (bookId) => {
-    try {
-      await updateDoc(doc(db, 'stories', bookId), {
-        is_public: true,
-        published_at: new Date(),
-        author_name: user?.displayName || 'Anonymous',
-        author_photo_url: user?.photoURL || null,
-      });
-      refresh();
-    } catch (err) {
-      console.error('Failed to publish:', err);
-    }
-  }, [user, refresh]);
-
-  const handleUnpublish = useCallback(async (bookId) => {
-    try {
-      await updateDoc(doc(db, 'stories', bookId), { is_public: false });
-      refresh();
-    } catch (err) {
-      console.error('Failed to unpublish:', err);
-    }
-  }, [refresh]);
 
   const handleToggleFavorite = useCallback(async (bookId, newValue) => {
     // Optimistic update — no reload/skeleton
@@ -484,8 +454,6 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
               book={book}
               onOpen={handleOpen}
               onDelete={setDeleteTarget}
-              onPublish={handlePublish}
-              onUnpublish={handleUnpublish}
               onToggleFavorite={handleToggleFavorite}
             />
           ))}

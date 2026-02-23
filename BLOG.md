@@ -105,13 +105,16 @@ The background task starts automatically after the first generation batch comple
 
 ### Art Style as a First-Class Citizen
 
-We offer 6 art styles: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, and Pencil Sketch. Each has a detailed suffix:
+We offer 6 art styles: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, and Pencil Sketch. Each has a rich suffix with rendering-specific details (20-25 words):
 
 ```python
 ART_STYLES = {
-    "cinematic": "cinematic digital painting, highly detailed, dramatic lighting",
-    "anime": "anime illustration, Studio Ghibli style, detailed backgrounds",
-    "watercolor": "watercolor illustration, soft washes, delicate brushstrokes",
+    "cinematic": "cinematic digital painting, highly detailed, dramatic volumetric lighting, "
+                 "depth of field, rich color grading, photorealistic textures, 8k render quality...",
+    "anime": "anime illustration in Studio Ghibli style, detailed lush backgrounds, "
+             "soft cel shading, expressive large eyes, warm natural lighting...",
+    "watercolor": "traditional watercolor illustration, soft translucent washes, "
+                  "visible paper texture, delicate wet-on-wet brushstrokes...",
     ...
 }
 ```
@@ -280,6 +283,71 @@ function ActionBtn({ label, children }) {
 
 The tooltip measures its trigger element's position with `getBoundingClientRect()` and positions itself with `position: fixed` — completely outside the DOM hierarchy. No parent can clip it.
 
+### Social Features: Likes, Ratings & Comments
+
+Published stories aren't just for reading — they're for community interaction. The BookDetailsPage (`/book/:storyId`) now supports:
+
+- **Heart-based likes** using the existing `liked_by` array pattern from ExplorePage, with optimistic Firestore updates
+- **1-5 star ratings** with hover preview, per-user upsert (ratings subcollection + denormalized `rating_sum`/`rating_count` on the story doc)
+- **Threaded comments** with author avatars, timestamps, and delete permissions (comment author + story author)
+
+The key UX challenge was eliminating "delayed pop-in" — social stats (ratings, comment count) appearing a second after the page loaded. We solved this by **denormalizing counts directly on the story document** and pre-populating the UI from the initial data fetch. The `/social` endpoint is only needed for the user's own rating, which arrives shortly after.
+
+### Multilingual Content Filtering
+
+A subtle but critical bug: when users submitted non-story prompts (coding questions, math homework) in non-English languages, the narrator would generate refusal text — and that text would get rendered as actual story scenes, complete with AI-generated illustrations of the refusal message. Not a great look.
+
+The fix has two layers:
+
+1. **Pre-pipeline validation** — A Gemini Flash classifier (`validate_prompt()`) runs before the expensive generation pipeline. It's fast (~200ms), multilingual, and classifies prompts as `STORY` or `REJECT`. This catches coding questions, recipes, homework, and general knowledge queries in any language.
+
+2. **Post-generation pattern matching** — Expanded `is_refusal()` with patterns in Hindi, Spanish, French, German, and Japanese. This catches edge cases where the narrator slips through the pre-filter.
+
+The pre-filter **fails open** on errors — if Gemini Flash has an issue, the prompt goes through rather than blocking a legitimate request. Better to occasionally process a non-story prompt than to block real stories.
+
+### Advanced Prompt Engineering for Character Consistency
+
+This was the culmination of deep research into image generation best practices for consistent characters across scenes. Five targeted improvements:
+
+**1. Character DNA Format**
+
+The character extraction prompt was upgraded from vague descriptors to a precise visual DNA format with hex color codes:
+
+```
+Elena: [gender: woman], [age: late 20s], [skin: pale ivory #F5E6D3],
+[hair: dark wavy #2A1810 shoulder-length], [face: oval, green #4A7C59 eyes,
+high cheekbones], [outfit: black #1A1A2E Victorian dress, silver moon pendant],
+[signature items: silver moon pendant, lace gloves],
+[palette: #1A1A2E, #F5E6D3, #4A7C59, #C0C0C0]
+```
+
+This gives Imagen specific, unambiguous visual targets instead of subjective descriptions like "pretty woman in dark clothing."
+
+**2. Anti-Drift Anchoring**
+
+Between the character block and scene composition, we inject:
+
+> "IMPORTANT: Render each character EXACTLY as described above — same colors, same outfit, same signature items. Do not alter, omit, or reinterpret any character detail."
+
+This explicit instruction fights the tendency of image models to "drift" from reference descriptions, especially in complex multi-character scenes.
+
+**3. Richer Art Style Suffixes**
+
+Each art style suffix expanded from ~6 words to ~22 words with rendering-specific details:
+
+| Style | Before | After |
+|-------|--------|-------|
+| Cinematic | "cinematic digital painting, highly detailed, dramatic lighting" | "cinematic digital painting, highly detailed, dramatic volumetric lighting, depth of field, rich color grading, photorealistic textures, 8k render quality, concept art style, atmospheric perspective" |
+| Watercolor | "watercolor illustration, soft washes, delicate brushstrokes" | "traditional watercolor illustration, soft translucent washes, visible paper texture, delicate wet-on-wet brushstrokes, gentle color bleeding at edges, hand-painted look, luminous highlights, muted pastel palette" |
+
+**4. Consistency Anchors in Scene Composition**
+
+The scene composer prompt now instructs Gemini to explicitly mention distinguishing accessories and props by name ("Luna's red scarf", "Kai's wooden staff"), reference the same location names across scenes, and use consistent time-of-day/weather cues.
+
+**5. Language-Aware Titles**
+
+Title generation was hardcoded to "children's story" and always produced English titles — even for Hindi or Japanese stories. Now `gen_title()` accepts a language parameter, and non-English stories get titles in their native language.
+
 ---
 
 ## Lessons Learned
@@ -324,6 +392,18 @@ We started with big files for speed — SceneCard.jsx hit 782 lines, useWebSocke
 
 When users regenerate a scene, the naive approach (clear → loading → new) creates jarring flashes. The better pattern: keep the old content visible with a loading overlay, replace atomically when the new content arrives. If generation fails, the old content is still there. Same philosophy as optimistic UI updates in collaborative apps.
 
+### 11. Denormalize for Instant UI
+
+Social features taught us that subcollection queries (even fast ones) create visible pop-in. Denormalizing counts (`rating_sum`, `rating_count`, `comment_count`) directly on the parent document means the data arrives with the initial fetch — zero additional round trips, zero delayed rendering.
+
+### 12. Content Filtering is a Two-Layer Problem
+
+A single filter isn't enough. Pre-pipeline validation (Gemini Flash classifier) catches most bad prompts cheaply. But some slip through — the narrator might still produce refusal text in edge cases. Post-generation pattern matching catches these. Both layers are needed, and both must be multilingual.
+
+### 13. Character Consistency Requires Structural Solutions
+
+You can't prompt-engineer your way to consistent characters with a single Gemini call. The solution is structural: separate character extraction from scene composition, prepend descriptions verbatim (no summarization), add anti-drift anchoring, and use hex color codes instead of subjective color names. Each of these individually helps a little; together they transform consistency.
+
 ---
 
 ## Tech Stack
@@ -338,7 +418,7 @@ When users regenerate a scene, the naive approach (clear → loading → new) cr
 | Image Gen | Imagen 3 (Vertex AI) | Scene illustrations, book covers |
 | Voice | Web Audio API + Cloud TTS | Input capture + narration |
 | Auth | Firebase Authentication | Google Sign-In |
-| Database | Cloud Firestore | Story persistence, user libraries, likes |
+| Database | Cloud Firestore | Story persistence, user libraries, likes, ratings, comments |
 | Storage | Google Cloud Storage | Scene images, cover images |
 | PDF Generation | fpdf2 | Storybook PDF export |
 | Ambient Audio | Web Audio API | Mood-based background music |
@@ -349,6 +429,7 @@ When users regenerate a scene, the naive approach (clear → loading → new) cr
 
 ## What's Next
 
+- **Portrait-as-reference pipeline** — Using Imagen 3's subject customization API (`imagen-3.0-capability-001`) to feed character portrait images back as reference images for scene generation, achieving true visual consistency
 - **Demo video** for hackathon submission
 - **Firebase Hosting** — deploy frontend SPA
 - **Cloud Run** — deploy backend container

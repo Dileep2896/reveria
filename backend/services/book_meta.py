@@ -15,27 +15,36 @@ from services.firestore_client import get_db
 logger = logging.getLogger("storyforge")
 
 
-async def gen_title(full_text: str) -> str:
+async def gen_title(full_text: str, language: str = "English") -> str:
     """Generate a short book title (max 4 words) from story text."""
     try:
         client = get_gemini_client()
         model = get_gemini_model()
+
+        lang_instruction = ""
+        if language and language.lower() != "english":
+            lang_instruction = f" The title MUST be in {language}."
+
         response = await client.aio.models.generate_content(
             model=model,
             contents=types.Content(
                 role="user",
-                parts=[types.Part(text=f"Here is a children's story:\n\n{full_text}\n\nGenerate a book title for this story. Maximum 4 words. Do not use quotes. Output only the title, nothing else.")],
+                parts=[types.Part(text=(
+                    f"Here is a story:\n\n{full_text}\n\n"
+                    f"Generate a book title for this story. Maximum 4 words.{lang_instruction} "
+                    f"Do not use quotes. Output only the title, nothing else."
+                ))],
             ),
             config=types.GenerateContentConfig(
                 temperature=0.7,
-                max_output_tokens=20,
+                max_output_tokens=30,
             ),
         )
         if response.text:
             title = response.text.strip().strip('"\'')
             words = title.split()
-            if len(words) > 4:
-                title = " ".join(words[:4])
+            if len(words) > 6:
+                title = " ".join(words[:6])
             return title
     except Exception as e:
         logger.error("Title generation failed: %s", e)
@@ -109,6 +118,7 @@ async def auto_generate_meta(
     art_style: str,
     websocket: WebSocket | None = None,
     safe_send=None,
+    language: str = "English",
 ) -> None:
     """Background task: generate title + cover after pipeline run, notify frontend via WS."""
     try:
@@ -118,7 +128,7 @@ async def auto_generate_meta(
 
         full_text = "\n\n".join(scene_texts)
         title, cover_url = await asyncio.gather(
-            gen_title(full_text),
+            gen_title(full_text, language=language),
             gen_cover(full_text, art_style, story_id),
         )
 

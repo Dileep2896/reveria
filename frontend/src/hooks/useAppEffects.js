@@ -12,12 +12,13 @@ export default function useAppEffects({
   directorData, ambient,
   location,
 }) {
-  // Sync storyId → URL
+  // Sync storyId → URL (skip for /book/ pages, library, explore)
+  const isBookPage = location.pathname.startsWith('/book/');
   useEffect(() => {
-    if (!storyId || isLibrary || isExplore) return;
+    if (!storyId || isLibrary || isExplore || isBookPage) return;
     if (urlStoryId === storyId) return;
     navigate(`/story/${storyId}`, { replace: true });
-  }, [storyId, urlStoryId, isLibrary, isExplore, navigate]);
+  }, [storyId, urlStoryId, isLibrary, isExplore, isBookPage, navigate]);
 
   // Reset "Saved!" when new generation starts
   useEffect(() => {

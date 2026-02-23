@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   db,
   collection,
@@ -141,6 +142,7 @@ function PublicBookCard({ book, onOpen, onToggleLike, userId }) {
 }
 
 export default function ExplorePage({ user, onOpenBook }) {
+  const navigate = useNavigate();
   const { books, setBooks, loading, error } = usePublicBooks();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recent');
@@ -215,45 +217,9 @@ export default function ExplorePage({ user, onOpenBook }) {
     return result;
   }, [books, searchQuery, sortBy, showLiked, user]);
 
-  const handleOpen = useCallback(async (book) => {
-    try {
-      const storyId = book.id;
-
-      const scenesSnap = await getDocs(collection(db, 'stories', storyId, 'scenes'));
-      const scenes = scenesSnap.docs
-        .map((d) => d.data())
-        .sort((a, b) => a.scene_number - b.scene_number);
-
-      const gensSnap = await getDocs(collection(db, 'stories', storyId, 'generations'));
-      const generations = gensSnap.docs
-        .map((d) => {
-          const data = d.data();
-          return {
-            prompt: data.prompt,
-            directorData: data.director_data || null,
-            sceneNumbers: data.scene_numbers || [],
-          };
-        })
-        .sort((a, b) => {
-          const aFirst = a.sceneNumbers[0] ?? 0;
-          const bFirst = b.sceneNumbers[0] ?? 0;
-          return aFirst - bFirst;
-        });
-
-      onOpenBook({
-        storyId,
-        scenes,
-        generations,
-        readOnly: true,
-        authorUid: book.author_uid,
-        authorName: book.author_name,
-        status: book.status || 'completed',
-        is_public: book.is_public || false,
-      });
-    } catch (err) {
-      console.error('Failed to open public story:', err);
-    }
-  }, [onOpenBook]);
+  const handleOpen = useCallback((book) => {
+    navigate(`/book/${book.id}`, { state: { from: 'explore' } });
+  }, [navigate]);
 
   const stickyHeader = (compact) => (
     <div className={`explore-sticky-header${compact ? ' explore-sticky-header--compact' : ''}`}>
@@ -310,9 +276,11 @@ export default function ExplorePage({ user, onOpenBook }) {
         {stickyHeader(false)}
         <div className="library-grid">
           {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="book-container" style={{ animationDelay: `${i * 0.08}s` }}>
-              <div className="book-3d book-3d--skeleton">
-                <div className="book-3d-cover book-3d-cover--placeholder book-3d-skeleton-shimmer" />
+            <div key={i} className="explore-skeleton-card" style={{ animationDelay: `${i * 0.1}s` }}>
+              <div className="explore-skeleton-cover" />
+              <div className="explore-skeleton-meta">
+                <div className="explore-skeleton-line explore-skeleton-line--title" />
+                <div className="explore-skeleton-line explore-skeleton-line--subtitle" />
               </div>
             </div>
           ))}

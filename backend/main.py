@@ -14,11 +14,11 @@ from services.gemini_client import transcribe_audio, ContentBlockedError
 from services.imagen_client import is_quota_available, get_quota_cooldown_remaining
 from services.firestore_client import persist_story
 from services.auth import verify_token
-from services.content_filter import is_refusal as _is_refusal
+from services.content_filter import is_refusal as _is_refusal, validate_prompt as _validate_prompt
 from services.book_meta import auto_generate_meta as _auto_generate_meta
 from services.portrait_service import generate_portraits as _generate_portraits
 
-from routers import stories, bookmarks, meta
+from routers import stories, bookmarks, meta, book_details, social
 
 from agents.orchestrator import create_story_orchestrator
 from google.adk.sessions import InMemorySessionService  # type: ignore[import-untyped]
@@ -50,6 +50,8 @@ app.add_middleware(
 app.include_router(stories.router)
 app.include_router(bookmarks.router)
 app.include_router(meta.router)
+app.include_router(book_details.router)
+app.include_router(social.router)
 
 
 class ConnectionManager:
@@ -347,6 +349,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _safe_send(websocket, {"type": "status", "content": "done"})
                 continue
 
+            # Pre-filter: reject non-story prompts before expensive pipeline
+            if not await _validate_prompt(user_input):
+                await _safe_send(websocket, {
+                    "type": "error",
+                    "content": "StoryForge is a storytelling app — try describing a story you'd like me to create!",
+                })
+                await _safe_send(websocket, {"type": "status", "content": "done"})
+                continue
+
             pipeline_tasks = []
             current_batch_scenes: list[dict[str, Any]] = []
 
@@ -375,7 +386,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         language=language,
                     )
                     meta_task = asyncio.create_task(
-                        _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send)
+                        _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send, language=language)
                     )
                     pipeline_tasks.append(meta_task)
                 except Exception as e:
