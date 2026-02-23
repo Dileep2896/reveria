@@ -348,6 +348,35 @@ The scene composer prompt now instructs Gemini to explicitly mention distinguish
 
 Title generation was hardcoded to "children's story" and always produced English titles - even for Hindi or Japanese stories. Now `gen_title()` accepts a language parameter, and non-English stories get titles in their native language.
 
+### Subscription Tiers & Pro User Experience
+
+StoryForge supports three subscription tiers - **Free**, **Standard**, and **Pro** - each with different usage limits for daily generations, scene regenerations, and PDF exports.
+
+The interesting UX challenge was making Pro users *feel* premium without being gaudy. We went with subtle visual indicators:
+
+- **Avatar glow**: Pro users get a golden amber ring around their avatar with a gentle pulse animation (`proGlow` keyframe, 2.5s cycle). Standard users get a violet ring. Free users see the default glass border.
+- **Tier pill**: The profile dropdown shows a small amber "PRO" badge with a star icon, or a violet "STANDARD" badge with a bolt icon. Free users see no pill - it's cleaner.
+- **Hidden usage counter**: Pro users don't see the "4/999" counter in the control bar. When your limit is effectively unlimited, showing it is just noise.
+
+The admin dashboard lets us manage tiers - search users, view their usage, and promote/demote between tiers. It's a simple but necessary tool for managing the platform.
+
+### Browser Autoplay Policy: A Subtle Bug
+
+Our ambient music system worked perfectly in development but silently failed in production. The button showed up (unmuted icon), but no sound played. Classic.
+
+The root cause: the `AudioContext` was created inside a `useEffect` (triggered by the Director's mood analysis), which has no user gesture context. Modern browsers suspend AudioContexts created without user interaction.
+
+The fix was elegant: default `muted` to `true` instead of `false`. The button now shows the muted state initially. When the user clicks to unmute, that click provides the gesture the browser needs to resume the AudioContext. Sound works immediately.
+
+### Theme-Aware Shadows
+
+Light mode exposed a sharp, dark shadow under the flipbook that looked wrong against the bright background. There were actually two sources:
+
+1. **CSS box-shadow** on `.stf__wrapper` - hardcoded `rgba(0,0,0,0.55)` values that didn't adapt per theme. Fixed by switching to `var(--book-shadow)` (already soft in light mode).
+2. **react-pageflip's canvas shadow** - the library renders its own shadow via `<canvas>`, completely independent of CSS. The `maxShadowOpacity={0.5}` prop was too aggressive for light mode. Fixed by reading the theme and setting it to `0.12` for light, `0.5` for dark.
+
+The second source was the real culprit - and it wasn't findable via CSS inspection since it's canvas-rendered.
+
 ---
 
 ## Lessons Learned
@@ -403,6 +432,18 @@ A single filter isn't enough. Pre-pipeline validation (Gemini Flash classifier) 
 ### 13. Character Consistency Requires Structural Solutions
 
 You can't prompt-engineer your way to consistent characters with a single Gemini call. The solution is structural: separate character extraction from scene composition, prepend descriptions verbatim (no summarization), add anti-drift anchoring, and use hex color codes instead of subjective color names. Each of these individually helps a little; together they transform consistency.
+
+### 14. Browser APIs Have Silent Requirements
+
+The Web Audio API's autoplay policy is well-documented but easy to miss. An `AudioContext` created outside a user gesture starts suspended - it won't produce sound, but it won't throw errors either. The fix is architectural: design for user-initiated activation rather than trying to work around the restriction.
+
+### 15. Third-Party Libraries Have Hidden Rendering Layers
+
+When debugging visual issues, don't assume everything is CSS. `react-pageflip` renders shadows via `<canvas>` elements with its own opacity parameters - invisible to CSS DevTools inspection. Always check library props before hunting for CSS bugs.
+
+### 16. Premium UX is Subtraction, Not Addition
+
+Making Pro users feel special isn't about adding flashy elements everywhere. It's about removing friction (hiding meaningless usage counters) and adding *subtle* visual touches (a gentle glow, a small badge). The best premium indicators are the ones users notice subconsciously.
 
 ---
 

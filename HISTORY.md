@@ -569,7 +569,46 @@
 
 ---
 
-## Current State (Feb 22, 2026)
+### Day 6 (Feb 23, 2026)
+
+**Session 50: Subscription Tiers & Admin Dashboard**
+
+- Built subscription tier system (free/standard/pro) with per-tier usage limits:
+  - Generations per day, scene regens, PDF exports — all configurable per tier
+  - Backend `services/usage.py` tracks daily usage in Firestore
+  - `routers/usage.py` serves current usage + limits to frontend
+  - `routers/admin.py` exposes admin-only endpoints for viewing users and updating tiers
+- Frontend `SubscriptionPage.jsx` displays current tier, usage stats, and tier comparison
+- Frontend `AdminDashboard.jsx` for admin users to search/view users and change tiers
+- New hooks: `useUsage.js` (usage polling), `useAdminUsers.js` (admin user management)
+- Auth system expanded: email/password sign-up with Firebase email verification (`VerifyEmailScreen`)
+- `AuthContext` now handles `createUserWithEmailAndPassword`, `sendEmailVerification`, `signInWithEmailAndPassword`, `sendPasswordResetEmail`
+
+**Session 51: Pro User Visual Indicators & UX Polish**
+
+- Added tier-based visual indicators in `ProfileMenu.jsx`:
+  - **Header avatar (32px)**: Pro = amber border + `proGlow` pulse animation, Standard = violet border + static glow, Free = default glass border
+  - **Dropdown avatar (40px)**: Same ring color treatment per tier
+  - **Tier pill**: Pro = amber pill with star icon ("PRO"), Standard = violet pill with bolt icon ("STANDARD"), Free = no pill
+- Added `@keyframes proGlow` in `index.css` (subtle amber pulse)
+- `App.jsx` derives `userTier` from `usage?.usage?.tier || 'free'` and passes through `AppHeader` → `ProfileMenu`
+- Hidden usage counter pill in ControlBar for Pro users (999 limit is meaningless)
+
+**Session 52: Ambient Audio, Portrait Gallery & Light Mode Fixes**
+
+- **Ambient audio fix**: Changed `muted`/`mutedRef` defaults from `false` to `true` in `useAmbientAudio.js`
+  - Root cause: Browser autoplay policy blocks AudioContext created from `useEffect` (no user gesture)
+  - Button now shows muted initially; first user click provides gesture to resume AudioContext
+- **Portrait gallery**: Changed from `flexWrap: wrap` grid to horizontal scrolling row (`overflowX: auto`, `flexShrink: 0` on items)
+  - Added `.portrait-scroll` custom scrollbar styles in `index.css`
+- **Light mode book shadow fix**:
+  - `storybook.css`: Replaced hardcoded dark shadow values with CSS variables (`var(--book-shadow)` for depth, `var(--book-edge-shadow)` for gutters)
+  - `StoryCanvas.jsx`: Imported `useTheme`, set `react-pageflip`'s `maxShadowOpacity` to `0.12` in light mode (was hardcoded `0.5`)
+  - Root cause of sharp shadow: react-pageflip renders its own canvas-based shadow independent of CSS
+
+---
+
+## Current State (Feb 23, 2026)
 
 ### What's Working
 - Full text + image generation pipeline: prompt → Gemini 2.0 Flash → streamed scenes → Imagen 3 illustrations → interactive flipbook
@@ -643,6 +682,14 @@
   - Richer art style suffixes (20-25 words with rendering-specific details)
   - Consistency anchors in scene composition (signature items, location names, time-of-day)
   - Language-aware title generation (titles in story's language, not always English)
+- **Subscription tiers** (free/standard/pro) with per-tier usage limits and tracking
+- **Admin dashboard** for user tier management
+- **Email/password auth** with email verification flow
+- **Pro user visual indicators** - tier-based avatar glow, tier pills in profile dropdown
+- **Usage counter** hidden for Pro users (unlimited generation)
+- **Ambient audio** starts muted by default (browser autoplay policy fix)
+- **Portrait gallery** horizontal scrolling layout
+- **Theme-aware book shadows** - light mode uses softer shadows (CSS variables + react-pageflip opacity)
 
 ### What Needs to Be Built
 - **Demo Video** - 4-minute walkthrough for submission

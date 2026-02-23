@@ -23,7 +23,7 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Interactive Flipbook** - Pages flip with realistic animation, keyboard navigation (arrow keys), and dot-based page navigation
 - **Hybrid Character Consistency** - Three-stage image pipeline: character sheet extraction → scene composition (Gemini) → verbatim character descriptions prepended to prompt. Character details reach Imagen without being summarized.
 - **NSFW/Safety Content Filtering** - Refusal detection intercepts AI-generated safety responses before they reach the frontend. Users see a clean error toast instead of garbled refusal text.
-- **Firebase Auth** - Google Sign-In for user accounts
+- **Firebase Auth** - Google Sign-In + email/password sign-up with email verification
 - **Story Persistence** - Cloud Firestore saves stories, scenes, and generations with AI-generated titles and cover images
 - **Art Style Memory** - Selected art style is persisted per story and restored when reopening from Library
 - **Library** - Personal bookshelf with 3D CSS book cards, favorites (heart toggle), status filters (All/Favorites/Saved/Completed), search, and sort (Recent/Title)
@@ -51,6 +51,10 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Scene Delete Confirmation** - Portal-based confirmation dialog with scene title preview, matching Library's glassmorphism design
 - **Smart Regen UX** - Scene regeneration keeps old image visible during generation; failed regen preserves previous image instead of showing error
 - **Writing Skeleton Animation** - Animated skeleton lines with typing cursor glow and shimmer sweep, shown during both initial scene generation and scene rewriting
+- **Subscription Tiers** - Free, Standard, and Pro tiers with per-tier usage limits (generations, scene regens, PDF exports); usage tracking via backend `/api/usage` endpoint
+- **Admin Dashboard** - Admin-only panel for managing user tiers (promote/demote between free/standard/pro)
+- **Pro User Visual Indicators** - Tier-based avatar styling: Pro users get a golden glowing ring (pulse animation) + amber "PRO" pill in profile dropdown; Standard gets violet ring + pill; Free shows default glass border
+- **Theme-Aware Book Shadows** - Light mode uses softer book depth shadows and page gutter shadows via CSS variables; react-pageflip's canvas shadow opacity adapts per theme
 - **Modular Codebase** - 7 monolithic files decomposed into ~22 focused modules (all under 320 lines) for maintainability
 
 ---
@@ -528,7 +532,9 @@ storyforge/
 │   │   │   ├── ExplorePage.jsx        # Public story browser with likes
 │   │   │   ├── ReadingMode.jsx        # Full-screen reading with karaoke narration
 │   │   │   ├── SplashScreen.jsx       # Loading splash with branded animation
-│   │   │   ├── SignInScreen.jsx       # Google sign-in screen
+│   │   │   ├── AuthScreen.jsx         # Sign-in/sign-up with Google + email/password
+│   │   │   ├── AdminDashboard.jsx    # Admin panel for user tier management
+│   │   │   ├── SubscriptionPage.jsx  # Subscription tier display and management
 │   │   │   ├── scene/                 # SceneCard sub-components
 │   │   │   │   ├── SceneComposing.jsx # Skeleton loading state
 │   │   │   │   ├── SceneHeader.jsx    # Badge, title, audio, action buttons
@@ -555,7 +561,9 @@ storyforge/
 │   │   │   ├── useBookSize.js         # Responsive book sizing
 │   │   │   ├── useAppEffects.js       # App-level useEffect hooks
 │   │   │   ├── useVoiceCapture.js     # Web Audio API hook
-│   │   │   ├── useAuth.js             # Firebase Auth hook (Google Sign-In)
+│   │   │   ├── useAuth.js             # Firebase Auth hook (Google + email/password)
+│   │   │   ├── useUsage.js           # Usage tracking hook (generations, regens, exports)
+│   │   │   ├── useAdminUsers.js      # Admin user management hook
 │   │   │   ├── useAmbientAudio.js     # Background ambient music hook
 │   │   │   └── useLiveVoice.js        # Gemini Live voice conversation
 │   │   ├── utils/
@@ -577,12 +585,20 @@ storyforge/
 │   │   ├── narrator.py                # Story text generation agent
 │   │   ├── illustrator.py             # Image generation agent
 │   │   └── director.py                # Creative reasoning agent
+│   ├── routers/
+│   │   ├── admin.py                   # Admin endpoints (user tier management)
+│   │   ├── usage.py                   # Usage tracking endpoints
+│   │   ├── social.py                  # Social endpoints (ratings, comments)
+│   │   ├── stories.py                 # Story CRUD + PDF export endpoints
+│   │   └── book_details.py            # Public book details endpoint
 │   ├── services/
 │   │   ├── gemini_client.py           # Gemini API wrapper (GenAI SDK)
 │   │   ├── imagen_client.py           # Imagen 3 via Vertex AI
 │   │   ├── tts_client.py              # Cloud Text-to-Speech
 │   │   ├── pdf_export.py              # PDF storybook generation (fpdf2)
 │   │   ├── gemini_live.py             # Gemini Live API session management
+│   │   ├── usage.py                   # Per-tier usage limits + tracking
+│   │   ├── auth.py                    # Firebase Auth verification + admin checks
 │   │   └── firestore_client.py        # Firestore persistence utilities
 │   ├── requirements.txt
 │   └── Dockerfile
