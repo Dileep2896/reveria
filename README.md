@@ -198,6 +198,116 @@ flowchart TB
 
 ---
 
+## CI/CD Pipeline & Automated Deployment
+
+StoryForge uses a fully automated CI/CD pipeline via **GitHub Actions** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Every push triggers smoke tests; merges to `main` automatically deploy both the backend and frontend — no manual intervention required.
+
+```mermaid
+flowchart LR
+    subgraph Trigger["Trigger"]
+        PR["Pull Request"]
+        Push["Push to main"]
+    end
+
+    subgraph Tests["Test Jobs (parallel)"]
+        direction TB
+        BT["Backend Tests<br/>──────────────<br/>Python 3.12<br/>pytest (8 tests)<br/>Mock Firebase/Firestore"]
+        FT["Frontend Tests<br/>──────────────<br/>Node 20<br/>ESLint<br/>Vite build<br/>Playwright (3 tests)"]
+    end
+
+    subgraph Deploy["Deploy Jobs (parallel, main only)"]
+        direction TB
+        DB["Deploy Backend<br/>──────────────<br/>gcloud run deploy<br/>--source backend<br/>Cloud Run"]
+        DF["Deploy Frontend<br/>──────────────<br/>npm run build<br/>Firebase Hosting<br/>(production env)"]
+    end
+
+    PR --> Tests
+    Push --> Tests
+    Tests -->|"all pass"| Deploy
+    Push -.->|"gate"| Deploy
+
+    style Trigger fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Tests fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
+    style Deploy fill:#1a1a2e,stroke:#10b981,color:#e2e8f0
+```
+
+### How It Works
+
+| Step | What happens | Infrastructure |
+|------|-------------|----------------|
+| **1. Code pushed** | GitHub Actions workflow triggers on PR or push to `main` | GitHub Actions |
+| **2. Backend tests** | Install deps → `pytest -v` (8 smoke tests with mocked Firebase/Firestore) | Ubuntu runner, Python 3.12 |
+| **3. Frontend tests** | `npm ci` → ESLint → `vite build` (dummy env) → Playwright smoke tests (3 tests) | Ubuntu runner, Node 20, Chromium |
+| **4. Deploy backend** | `gcloud run deploy --source backend` — builds Docker image via Cloud Build, deploys to Cloud Run | GCP Cloud Build → Cloud Run |
+| **5. Deploy frontend** | `npm run build` (production env from GitHub Secrets) → `firebase deploy` to Hosting | Firebase Hosting CDN |
+
+Deploy jobs **only run on `main`** and **only after both test jobs pass**. PRs run tests only.
+
+### Infrastructure as Code
+
+All deployment infrastructure is defined in version-controlled files:
+
+| File | Purpose |
+|------|---------|
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Complete CI/CD pipeline — test, build, and deploy |
+| [`backend/Dockerfile`](backend/Dockerfile) | Backend container definition (Python 3.12 + FastAPI) |
+| [`frontend/firebase.json`](frontend/firebase.json) | Firebase Hosting config (SPA rewrites, cache headers) |
+| [`frontend/.firebaserc`](frontend/.firebaserc) | Firebase project binding |
+| [`backend/pytest.ini`](backend/pytest.ini) | Test runner configuration |
+| [`frontend/playwright.config.js`](frontend/playwright.config.js) | E2E test configuration |
+
+### Secrets Management
+
+Deployment credentials are stored as **GitHub Actions Secrets** (never in code):
+- `GCP_SA_KEY` — Service account for Cloud Run deploys (least-privilege: `run.developer`, `artifactregistry.writer`, `storage.admin`)
+- `FIREBASE_SERVICE_ACCOUNT` — Service account for Firebase Hosting deploys
+- `VITE_FIREBASE_*` / `VITE_WS_URL` — Build-time environment variables injected during production builds
+
+---
+
+## Testing
+
+### Backend (pytest)
+
+8 smoke tests covering health checks, REST route auth enforcement, and Firestore-dependent routes with mocked dependencies:
+
+```bash
+cd backend
+pip install -r requirements-test.txt
+pytest -v
+```
+
+| Test | What it verifies |
+|------|-----------------|
+| `test_health_returns_ok` | `GET /health` → 200, `{status: ok, adk: true}` |
+| `test_public_story_not_found` | `GET /api/public/stories/<id>` → 404 for missing story |
+| `test_social_stats_not_found` | `GET /api/public/stories/<id>/social` → 404 |
+| `test_list_comments_empty` | `GET /api/public/stories/<id>/comments` → empty list |
+| `test_delete_story_no_auth` | `DELETE /api/stories/<id>` without auth → 422 |
+| `test_get_usage_no_auth` | `GET /api/usage` without auth → 422 |
+| `test_bookmark_returns_null_for_missing` | Auth'd bookmark request → `{scene_index: null}` |
+| `test_delete_story_not_found` | Auth'd delete of nonexistent story → 404 |
+
+### Frontend (Playwright)
+
+3 Playwright smoke tests verifying pages load without JS crashes:
+
+```bash
+cd frontend
+npm install
+npm run build  # requires VITE_FIREBASE_* env vars (dummy values ok)
+npx playwright install chromium
+npx playwright test
+```
+
+| Test | What it verifies |
+|------|-----------------|
+| `home page loads` | `/` renders with "StoryForge" title, no crash |
+| `book page renders` | `/book/nonexistent` loads without JS errors |
+| `terms page shows content` | `/terms` renders with "Terms" text visible |
+
+---
+
 ## Agent Architecture (ADK)
 
 StoryForge uses **Google's Agent Development Kit (ADK)** to orchestrate a multi-agent pipeline. Each agent is a `BaseAgent` subclass that runs autonomously, and the pipeline is composed using ADK's built-in `SequentialAgent` and `ParallelAgent` combinators.
@@ -459,6 +569,9 @@ The output *weaves* modalities together, not just appends them sequentially:
 | Hosting | Google Cloud Run | Containerized backend deployment |
 | Static Hosting | Firebase Hosting | Frontend SPA |
 | Container | Docker | Reproducible builds |
+| CI/CD | GitHub Actions | Automated test + deploy pipeline |
+| Backend Tests | pytest + httpx | Smoke tests with mocked Firebase/Firestore |
+| Frontend Tests | Playwright | Browser smoke tests (Chromium) |
 | PDF Generation | fpdf2 | Storybook PDF export with images |
 
 ---
@@ -518,6 +631,10 @@ storyforge/
 │   │   │   └── audioPlayer.js         # Queue and play TTS audio chunks
 │   │   ├── theme.css                  # Centralized glassmorphism theme
 │   │   └── index.css                  # Global styles
+│   ├── tests/
+│   │   └── smoke.spec.js              # Playwright smoke tests (3 tests)
+│   ├── playwright.config.js           # Playwright config (vite preview, chromium)
+│   ├── firebase.json                  # Firebase Hosting config
 │   ├── public/
 │   ├── Dockerfile
 │   └── package.json
@@ -545,8 +662,17 @@ storyforge/
 │   │   ├── usage.py                   # Per-tier usage limits + tracking
 │   │   ├── auth.py                    # Firebase Auth verification + admin checks
 │   │   └── firestore_client.py        # Firestore persistence utilities
+│   ├── tests/
+│   │   ├── conftest.py                # Shared fixtures (mock Firebase, Firestore, auth)
+│   │   ├── test_health.py             # Health endpoint smoke test
+│   │   └── test_routes.py             # REST route smoke tests (7 tests)
 │   ├── requirements.txt
+│   ├── requirements-test.txt          # Test deps (pytest, httpx)
+│   ├── pytest.ini                     # pytest config (asyncio_mode=auto)
 │   └── Dockerfile
+├── .github/
+│   └── workflows/
+│       └── ci.yml                     # CI/CD: test on PR, deploy on merge to main
 ├── docker-compose.yml                 # Local dev environment
 ├── HISTORY.md                         # Detailed development history
 └── README.md
@@ -666,8 +792,10 @@ VITE_WS_URL=ws://localhost:8000/ws
 - Author attribution from Firebase Auth on story creation
 - Regenerate cover/title for failed meta generation
 - **Demo Video** - 4-minute walkthrough for hackathon submission
-- **Firebase Hosting** - Deploy frontend SPA
-- **Cloud Run** - Deploy backend container
+- **Automated CI/CD** - GitHub Actions runs tests on every PR and auto-deploys to Cloud Run + Firebase Hosting on merge to `main`
+- **Backend smoke tests** - 8 pytest tests with mocked Firebase/Firestore
+- **Frontend smoke tests** - 3 Playwright browser tests
+- **Infrastructure as Code** - All deployment config in version-controlled files (Dockerfile, ci.yml, firebase.json)
 
 ---
 
