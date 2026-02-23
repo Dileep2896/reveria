@@ -6,7 +6,7 @@ import DirectorEmptyState from './director/DirectorEmptyState';
 import DirectorAnalyzing from './director/DirectorAnalyzing';
 import DirectorCardList from './director/DirectorCardList';
 
-export default function DirectorPanel({ data, generating, sceneNumbers, sceneTitles, imageTiers, portraits = [], portraitsLoading = false, onGeneratePortraits, language }) {
+export default function DirectorPanel({ data, generating, sceneNumbers, sceneTitles, imageTiers, portraits = [], portraitsLoading = false, language }) {
   const isAnalyzing = generating && !data;
   const [expandedCards, setExpandedCards] = useState({});
   const [helpOpen, setHelpOpen] = useState(false);
@@ -129,7 +129,6 @@ export default function DirectorPanel({ data, generating, sceneNumbers, sceneTit
             imageTiers={imageTiers}
             portraits={portraits}
             portraitsLoading={portraitsLoading}
-            onGeneratePortraits={onGeneratePortraits}
           />
         )}
       </div>

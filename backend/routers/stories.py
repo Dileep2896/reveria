@@ -2,6 +2,7 @@
 
 import asyncio
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import Response
@@ -101,11 +102,19 @@ async def export_story_pdf(
 
     pdf_bytes = generate_story_pdf(title, author, cover_url, scenes)
 
-    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip() or "story"
+    # ASCII-safe filename for Content-Disposition (HTTP headers are Latin-1)
+    ascii_title = "".join(c for c in title if c.isascii() and (c.isalnum() or c in " -_")).strip() or "story"
+    # RFC 5987: filename* with UTF-8 encoding so browsers show the real title
+    utf8_filename = quote(f"{title}.pdf", safe="")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{safe_title}.pdf"'},
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{ascii_title}.pdf"; '
+                f"filename*=UTF-8''{utf8_filename}"
+            )
+        },
     )
 
 

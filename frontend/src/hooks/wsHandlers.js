@@ -9,7 +9,7 @@ export function createWsHandlers({
   setPortraits, setPortraitsLoading, setGenerations,
   generationsRef, currentBatchIndexRef, initialStateRef, hydratedRef,
   addToastRef, quotaImageToastFired, cooldownTimer,
-  liveHandlerRef, storyDeletedRef,
+  liveHandlerRef, storyDeletedRef, setControlBarInput,
 }) {
   return function handleMessage(data) {
     // Route live voice messages to handler
@@ -115,10 +115,8 @@ export function createWsHandlers({
       }
 
       case 'transcription':
-        setUserPrompt(data.content);
-        generationsRef.current.push({ prompt: data.content, directorData: null, sceneNumbers: [] });
-        currentBatchIndexRef.current = generationsRef.current.length - 1;
-        setGenerations([...generationsRef.current]);
+        // Populate the text field so the user can review/edit before sending
+        if (setControlBarInput) setControlBarInput(data.content);
         return true;
 
       case 'quota_exhausted': {
@@ -218,6 +216,10 @@ export function createWsHandlers({
           const withoutOld = prev.filter(p => p.name !== data.name);
           return [...withoutOld, { name: data.name, image_url: data.image_url, error: data.error }];
         });
+        return true;
+
+      case 'portraits_loading':
+        setPortraitsLoading(true);
         return true;
 
       case 'portraits_done':

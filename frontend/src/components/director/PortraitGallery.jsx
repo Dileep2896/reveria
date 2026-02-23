@@ -1,5 +1,5 @@
-export default function PortraitGallery({ portraits = [], portraitsLoading = false, onGeneratePortraits }) {
-  if (portraits.length === 0 && !onGeneratePortraits) return null;
+export default function PortraitGallery({ portraits = [], portraitsLoading = false }) {
+  if (portraits.length === 0 && !portraitsLoading) return null;
 
   return (
     <div
@@ -11,7 +11,7 @@ export default function PortraitGallery({ portraits = [], portraitsLoading = fal
         animation: 'fadeIn 0.4s ease-out',
       }}
     >
-      <div className="flex items-center justify-between" style={{ marginBottom: portraits.length > 0 ? '10px' : 0 }}>
+      <div className="flex items-center justify-between" style={{ marginBottom: portraits.length > 0 || portraitsLoading ? '10px' : 0 }}>
         <div className="flex items-center gap-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -21,21 +21,6 @@ export default function PortraitGallery({ portraits = [], portraitsLoading = fal
             Portraits
           </span>
         </div>
-        {onGeneratePortraits && !portraitsLoading && (
-          <button
-            onClick={onGeneratePortraits}
-            className="text-xs font-medium rounded-full transition-all"
-            style={{
-              padding: '3px 10px',
-              background: 'var(--accent-primary-soft)',
-              color: 'var(--accent-primary)',
-              border: '1px solid var(--glass-border-accent)',
-              cursor: 'pointer',
-            }}
-          >
-            {portraits.length > 0 ? 'Regenerate' : 'Generate'}
-          </button>
-        )}
         {portraitsLoading && (
           <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
             Generating...

@@ -431,34 +431,52 @@
 }
 
 /* ===========================================================
-   SKELETON
+   SKELETON LOADING
    =========================================================== */
-.book-3d--skeleton .book-3d-cover--placeholder {
-  overflow: hidden;
+.library-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  animation: libraryFadeIn 0.4s ease both;
 }
 
-.book-3d-skeleton-shimmer {
-  position: relative;
+.library-skeleton-cover {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 0.75rem;
+  background: var(--glass-bg);
+  animation: libraryShimmer 1.6s ease-in-out infinite;
 }
 
-.book-3d-skeleton-shimmer::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--accent-primary-soft) 40%,
-    var(--accent-primary-glow) 50%,
-    var(--accent-primary-soft) 60%,
-    transparent 100%
-  );
-  animation: skeletonShimmer 1.8s ease-in-out infinite;
+.library-skeleton-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 0.25rem 0;
 }
 
-@keyframes skeletonShimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+.library-skeleton-line {
+  height: 0.65rem;
+  border-radius: 0.35rem;
+  background: var(--glass-bg);
+  animation: libraryShimmer 1.6s ease-in-out infinite;
+}
+
+.library-skeleton-line--title {
+  width: 75%;
+}
+
+.library-skeleton-line--subtitle {
+  width: 50%;
+}
+
+@keyframes libraryShimmer {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes libraryFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .library-search {

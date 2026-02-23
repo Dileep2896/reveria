@@ -376,9 +376,11 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
         {stickyHeader(false)}
         <div className="library-grid">
           {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="book-container" style={{ animationDelay: `${i * 0.08}s` }}>
-              <div className="book-3d book-3d--skeleton">
-                <div className="book-3d-cover book-3d-cover--placeholder book-3d-skeleton-shimmer" />
+            <div key={i} className="library-skeleton-card" style={{ animationDelay: `${i * 0.1}s` }}>
+              <div className="library-skeleton-cover" />
+              <div className="library-skeleton-meta">
+                <div className="library-skeleton-line library-skeleton-line--title" />
+                <div className="library-skeleton-line library-skeleton-line--subtitle" />
               </div>
             </div>
           ))}

@@ -6,7 +6,7 @@ import VisualStyleVisual from './VisualStyleVisual';
 import IllustrationsCard from './IllustrationsCard';
 import PortraitGallery from './PortraitGallery';
 
-export default function DirectorCardList({ data, expandedCards, toggleCard, sceneNumbers, sceneTitles, imageTiers, portraits, portraitsLoading, onGeneratePortraits }) {
+export default function DirectorCardList({ data, expandedCards, toggleCard, sceneNumbers, sceneTitles, imageTiers, portraits, portraitsLoading }) {
   return (
     <>
       <p
@@ -135,7 +135,6 @@ export default function DirectorCardList({ data, expandedCards, toggleCard, scen
       <PortraitGallery
         portraits={portraits}
         portraitsLoading={portraitsLoading}
-        onGeneratePortraits={onGeneratePortraits}
       />
     </>
   );

@@ -172,6 +172,7 @@ body {
 
 /* ---- Control Bar ---- */
 .control-bar {
+  position: relative;
   width: calc(100% - clamp(1.5rem, 4vw, 3rem));
   max-width: 56rem;
   margin: 0 auto;

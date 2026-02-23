@@ -276,7 +276,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 live_session, live_response_task = await handle_live_stop(websocket, live_session, live_response_task)
                 continue
 
-            # Handle voice input
+            # Handle voice input — transcribe and send back to populate text field
             if msg_type == "voice_input":
                 audio_data = message.get("audio_data", "")
                 mime_type = message.get("mime_type", "audio/webm")
@@ -284,12 +284,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     transcription = await transcribe_audio(audio_data, mime_type)
                     if transcription:
                         await _safe_send(websocket, {"type": "transcription", "content": transcription})
-                        message = {"content": transcription, "art_style": "cinematic"}
                     else:
                         await _safe_send(websocket, {"type": "error", "content": "Could not transcribe audio. Please try again."})
-                        continue
-                else:
-                    continue
+                continue
 
             # ── Per-scene actions ──
             # Auto-recover session if needed
@@ -389,6 +386,21 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send, language=language)
                     )
                     pipeline_tasks.append(meta_task)
+
+                    # Auto-generate portraits for newly introduced characters
+                    try:
+                        from services.firestore_client import get_db
+                        _db = get_db()
+                        _doc = await _db.collection("stories").document(active_story_id).get()
+                        _existing_portraits = (_doc.to_dict() or {}).get("portraits", []) if _doc.exists else []
+                        _existing_names = [p["name"] for p in _existing_portraits if p.get("name")]
+                    except Exception:
+                        _existing_names = []
+                    portrait_task = asyncio.create_task(_generate_portraits(
+                        websocket, illustrator, active_story_id,
+                        safe_send=_safe_send, existing_names=_existing_names,
+                    ))
+                    pipeline_tasks.append(portrait_task)
                 except Exception as e:
                     logger.error("Firestore persist error: %s", e)
 

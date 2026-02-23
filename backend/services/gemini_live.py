@@ -61,12 +61,23 @@ class LiveSession:
             )
             # connect() returns an async context manager, not an awaitable
             self._ctx = self._client.aio.live.connect(
-                model="gemini-2.0-flash-live-001",
+                model="gemini-2.0-flash-live-preview-04-09",
                 config=config,
             )
             self._session = await self._ctx.__aenter__()
             self._active = True
-            logger.info("Live session started")
+            logger.info("Live session started successfully")
+            # Send an initial greeting to kick off the conversation
+            await self._session.send(
+                input=types.LiveClientContent(
+                    turns=[types.Content(
+                        role="user",
+                        parts=[types.Part(text="Hello! I want to brainstorm a story idea.")]
+                    )],
+                    turn_complete=True,
+                )
+            )
+            logger.info("Sent initial greeting to Live session")
             return True
         except Exception as e:
             logger.error("Failed to start live session: %s", e)
@@ -78,6 +89,7 @@ class LiveSession:
         if not self._session or not self._active:
             return
         try:
+            logger.debug("Sending audio chunk: %d bytes, mime=%s", len(audio_data), mime_type)
             await self._session.send(
                 input=types.LiveClientRealtimeInput(
                     media_chunks=[
@@ -113,21 +125,26 @@ class LiveSession:
             async for response in self._session.receive():
                 if not self._active:
                     break
+                logger.info("Live response: %s", type(response).__name__)
                 # Extract text from server content
                 if hasattr(response, 'server_content') and response.server_content:
-                    parts = response.server_content.model_turn
-                    if parts and parts.parts:
-                        for part in parts.parts:
+                    sc = response.server_content
+                    logger.info("server_content: model_turn=%s, turn_complete=%s", sc.model_turn, sc.turn_complete)
+                    if sc.model_turn and sc.model_turn.parts:
+                        for part in sc.model_turn.parts:
                             if part.text:
                                 text = part.text.strip()
+                                logger.info("Live text: %s", text[:100])
                                 if "[STORY_PROMPT]" in text:
                                     prompt = text.split("[STORY_PROMPT]", 1)[1].strip()
                                     yield {"type": "live_prompt_ready", "prompt": prompt}
                                 else:
                                     yield {"type": "live_response", "text": text}
-                    # Check turn_complete
-                    if response.server_content.turn_complete:
+                    if sc.turn_complete:
                         yield {"type": "live_turn_complete"}
+                else:
+                    # Log unexpected response types for debugging
+                    logger.info("Live non-content response: %s", response)
         except Exception as e:
             if self._active:
                 logger.error("Live receive error: %s", e)

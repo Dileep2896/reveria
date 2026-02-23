@@ -13,19 +13,55 @@ logger = logging.getLogger("storyforge.pdf")
 PAGE_W = 210  # A4 width in mm
 PAGE_H = 297  # A4 height in mm
 
+# Unicode font search paths (first match wins)
+_UNICODE_FONT_CANDIDATES = [
+    # macOS
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    # Linux (apt install fonts-noto)
+    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    # Linux CJK (apt install fonts-noto-cjk)
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    # Common Linux fallback
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+]
+
+
+def _find_unicode_font() -> str | None:
+    """Find a Unicode TTF font on the system."""
+    for path in _UNICODE_FONT_CANDIDATES:
+        if os.path.exists(path):
+            return path
+    return None
+
 
 class _StoryPDF(FPDF):
-    """FPDF subclass with automatic page numbering on scene pages."""
+    """FPDF subclass with automatic page numbering and Unicode font support."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._footer_enabled = False
+        self._fn = "Times"  # font family name — overridden if Unicode font found
+
+    def setup_fonts(self) -> None:
+        """Register a Unicode font if available, else fall back to Times."""
+        font_path = _find_unicode_font()
+        if font_path:
+            # Register the same file for all styles (fake bold/italic — glyphs are
+            # identical but text won't crash on non-Latin characters)
+            self.add_font("UniFont", "", font_path)
+            self.add_font("UniFont", "B", font_path)
+            self.add_font("UniFont", "I", font_path)
+            self.add_font("UniFont", "BI", font_path)
+            self._fn = "UniFont"
+            logger.info("PDF using Unicode font: %s", font_path)
+        else:
+            logger.warning("No Unicode font found — PDF will only support Latin text")
 
     def footer(self):
         if not self._footer_enabled:
             return
         self.set_y(-14)
-        self.set_font("Times", "I", 8)
+        self.set_font(self._fn, "I", 8)
         self.set_text_color(165, 155, 140)
         # Page number (subtract 1 to skip cover page)
         self.cell(0, 10, str(self.page_no() - 1), align="C")
@@ -72,6 +108,8 @@ def generate_story_pdf(
     temp_files: list[str] = []
 
     pdf = _StoryPDF(orientation="P", unit="mm", format="A4")
+    pdf.setup_fonts()
+    fn = pdf._fn  # shorthand for font family name
     pdf.set_auto_page_break(auto=True, margin=25)
 
     # ================================================================
@@ -106,12 +144,12 @@ def generate_story_pdf(
 
             # Title
             pdf.set_y(band_y + 14)
-            pdf.set_font("Times", "B", 30)
+            pdf.set_font(fn, "B", 30)
             pdf.set_text_color(248, 242, 228)
             pdf.multi_cell(0, 13, title, align="C", new_x="LMARGIN", new_y="NEXT")
 
             # Author
-            pdf.set_font("Times", "I", 13)
+            pdf.set_font(fn, "I", 13)
             pdf.set_text_color(195, 180, 155)
             pdf.cell(0, 8, f"by {author}", align="C")
             cover_ok = True
@@ -132,7 +170,7 @@ def generate_story_pdf(
 
         # Title
         pdf.set_y(110)
-        pdf.set_font("Times", "B", 34)
+        pdf.set_font(fn, "B", 34)
         pdf.set_text_color(242, 232, 218)
         pdf.multi_cell(0, 15, title, align="C")
 
@@ -146,7 +184,7 @@ def generate_story_pdf(
         pdf.ln(10)
 
         # Author
-        pdf.set_font("Times", "I", 15)
+        pdf.set_font(fn, "I", 15)
         pdf.set_text_color(190, 175, 148)
         pdf.cell(0, 10, f"by {author}", align="C")
 
@@ -186,14 +224,14 @@ def generate_story_pdf(
             pdf.ln(10)
 
         # -- Chapter number --
-        pdf.set_font("Times", "I", 9)
+        pdf.set_font(fn, "I", 9)
         pdf.set_text_color(165, 148, 118)
         pdf.cell(0, 4, f"~  {scene_num}  ~", align="C",
                  new_x="LMARGIN", new_y="NEXT")
         pdf.ln(1)
 
         # -- Scene title --
-        pdf.set_font("Times", "B", 17)
+        pdf.set_font(fn, "B", 17)
         pdf.set_text_color(48, 40, 34)
         pdf.cell(0, 9, scene_title, align="C",
                  new_x="LMARGIN", new_y="NEXT")
@@ -220,7 +258,7 @@ def generate_story_pdf(
             pdf.set_left_margin(25)
             pdf.set_right_margin(25)
             pdf.set_x(25)
-            pdf.set_font("Times", "", 11.5)
+            pdf.set_font(fn, "", 11.5)
             pdf.set_text_color(55, 48, 42)
             pdf.multi_cell(0, 6.5, text, align="J")
             # Reset margins
@@ -247,13 +285,13 @@ def generate_story_pdf(
     pdf.line(cx - 15, y, cx + 15, y)
     pdf.ln(10)
 
-    pdf.set_font("Times", "I", 11)
+    pdf.set_font(fn, "I", 11)
     pdf.set_text_color(160, 150, 138)
     pdf.cell(0, 7, "This story was imagined and illustrated with",
              align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
 
-    pdf.set_font("Times", "B", 24)
+    pdf.set_font(fn, "B", 24)
     pdf.set_text_color(78, 68, 58)
     pdf.cell(0, 12, "StoryForge", align="C",
              new_x="LMARGIN", new_y="NEXT")
@@ -264,7 +302,7 @@ def generate_story_pdf(
     pdf.line(cx - 15, y, cx + 15, y)
     pdf.ln(10)
 
-    pdf.set_font("Times", "I", 9)
+    pdf.set_font(fn, "I", 9)
     pdf.set_text_color(178, 168, 155)
     pdf.cell(0, 5, "Powered by Gemini  \u00b7  AI storytelling",
              align="C")

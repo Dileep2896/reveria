@@ -306,15 +306,28 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
       </form>
 
       {/* Live conversation transcript overlay */}
-      {live?.isLive && live.transcript.length > 0 && (
+      {live?.isLive && (
         <div style={{
           position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-          width: '90%', maxWidth: '600px', maxHeight: '200px', overflowY: 'auto',
+          width: '90%', maxWidth: '600px', maxHeight: '240px', overflowY: 'auto',
           marginBottom: '8px', borderRadius: '12px',
           background: 'var(--glass-bg-strong)', border: '1px solid var(--glass-border)',
           backdropFilter: 'var(--glass-blur)', padding: '12px',
           display: 'flex', flexDirection: 'column', gap: '6px',
         }}>
+          {live.transcript.length === 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              fontSize: '0.8rem', color: 'var(--accent-primary)',
+            }}>
+              <span style={{ display: 'inline-flex', gap: '3px', alignItems: 'center' }}>
+                <span className="live-dot" style={{ animationDelay: '0s' }} />
+                <span className="live-dot" style={{ animationDelay: '0.2s' }} />
+                <span className="live-dot" style={{ animationDelay: '0.4s' }} />
+              </span>
+              Listening — describe a story idea...
+            </div>
+          )}
           {live.transcript.slice(-6).map((msg, i) => (
             <div key={i} style={{
               fontSize: '0.8rem', lineHeight: 1.5,
@@ -358,6 +371,15 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
       )}
 
       <style>{`
+        .live-dot {
+          width: 5px; height: 5px; border-radius: 50%;
+          background: var(--accent-primary);
+          animation: liveBounce 1.2s ease-in-out infinite;
+        }
+        @keyframes liveBounce {
+          0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+          40% { opacity: 1; transform: scale(1.2); }
+        }
         @keyframes micPulse {
           0%, 100% { box-shadow: 0 0 8px var(--accent-primary); }
           50% { box-shadow: 0 0 20px var(--accent-primary); }

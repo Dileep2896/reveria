@@ -28,6 +28,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
 
   const liveHandlerRef = useRef(null);
   const storyDeletedRef = useRef(null);
+  const controlBarInputRef = useRef(null);
 
   const idTokenRef = useRef(idToken);
   idTokenRef.current = idToken;
@@ -54,7 +55,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
       setPortraits, setPortraitsLoading, setGenerations,
       generationsRef, currentBatchIndexRef, initialStateRef, hydratedRef,
       addToastRef, quotaImageToastFired, cooldownTimer,
-      liveHandlerRef, storyDeletedRef,
+      liveHandlerRef, storyDeletedRef, setControlBarInput: (v) => controlBarInputRef.current?.(v),
     });
   }
 
@@ -180,14 +181,6 @@ export default function useWebSocket(idToken, initialState, addToast) {
     }
   }, []);
 
-  const sendPortraitRequest = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      setPortraits([]);
-      setPortraitsLoading(true);
-      wsRef.current.send(JSON.stringify({ type: 'generate_portraits' }));
-    }
-  }, []);
-
   const reset = useCallback(() => {
     setScenes([]);
     setUserPrompt(null);
@@ -228,6 +221,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
 
   const setLiveHandler = useCallback((handler) => { liveHandlerRef.current = handler; }, []);
   const setStoryDeletedHandler = useCallback((handler) => { storyDeletedRef.current = handler; }, []);
+  const setControlBarInputHandler = useCallback((handler) => { controlBarInputRef.current = handler; }, []);
 
-  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, send, sendAudio, sendSceneAction, sendPortraitRequest, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler };
+  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, send, sendAudio, sendSceneAction, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler, setControlBarInputHandler };
 }
