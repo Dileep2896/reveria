@@ -108,7 +108,7 @@ async def export_story_pdf(
     author = data.get("author_name", "Anonymous")
     cover_url = data.get("cover_image_url")
 
-    pdf_bytes = generate_story_pdf(title, author, cover_url, scenes)
+    pdf_bytes = await asyncio.to_thread(generate_story_pdf, title, author, cover_url, scenes)
 
     # Increment PDF export usage
     await increment_usage(uid, "pdf_export")

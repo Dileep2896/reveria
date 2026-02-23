@@ -117,8 +117,8 @@ async def delete_story(story_id: str, uid: str) -> dict[str, Any] | None:
         logger.warning("UID mismatch on delete for story %s", story_id)
         return None
 
-    # Delete subcollections: scenes, generations
-    for sub in ("scenes", "generations"):
+    # Delete subcollections: scenes, generations, comments, ratings
+    for sub in ("scenes", "generations", "comments", "ratings"):
         sub_ref = story_ref.collection(sub)
         async for sub_doc in sub_ref.stream():
             await sub_doc.reference.delete()

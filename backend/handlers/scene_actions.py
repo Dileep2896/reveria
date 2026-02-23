@@ -203,6 +203,7 @@ async def handle_delete_scene(
                 remaining_count = 0
                 async for _ in scene_docs.stream():
                     remaining_count += 1
+                ret_total = remaining_count
                 story_ref = db.collection("stories").document(active_story_id)
                 await story_ref.update({"total_scene_count": remaining_count})
                 narrator.history.append(types.Content(

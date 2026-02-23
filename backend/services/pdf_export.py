@@ -307,6 +307,8 @@ def generate_story_pdf(
     pdf.cell(0, 5, "Powered by Gemini  \u00b7  AI storytelling",
              align="C")
 
-    result = bytes(pdf.output())
-    _cleanup(temp_files)
+    try:
+        result = bytes(pdf.output())
+    finally:
+        _cleanup(temp_files)
     return result

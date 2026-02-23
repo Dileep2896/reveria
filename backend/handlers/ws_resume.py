@@ -103,8 +103,8 @@ def handle_reset(
     illustrator: Illustrator,
     director: Director,
     pipeline_tasks: list,
-) -> tuple[Any, Any]:
-    """Handle reset message. Returns (orchestrator, shared_state)."""
+) -> tuple[Any, Any, Illustrator, Director]:
+    """Handle reset message. Returns (orchestrator, shared_state, new_illustrator, new_director)."""
     narrator.reset()
     new_illustrator = Illustrator()
     new_director = Director()

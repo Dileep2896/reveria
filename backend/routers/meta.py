@@ -42,9 +42,10 @@ async def generate_book_meta(
     # Load character sheet from persisted illustrator state for visual consistency
     character_sheet = (story_data.get("illustrator_state") or {}).get("character_sheet", "")
 
+    language = story_data.get("language", "English")
     full_text = "\n\n".join(body.scene_texts)
     title, cover_url = await asyncio.gather(
-        gen_title(full_text),
+        gen_title(full_text, language=language),
         gen_cover(full_text, body.art_style, body.story_id, character_sheet=character_sheet),
     )
 
@@ -72,8 +73,10 @@ async def regenerate_meta(
         raise HTTPException(status_code=403, detail="Not your story")
 
     # Load scenes
-    scenes_snap = await story_ref.collection("scenes").get()
-    scene_texts = [s.to_dict().get("text", "") for s in scenes_snap if s.to_dict().get("text")]
+    scene_docs = []
+    async for s in story_ref.collection("scenes").order_by("scene_number").stream():
+        scene_docs.append(s)
+    scene_texts = [s.to_dict().get("text", "") for s in scene_docs if s.to_dict().get("text")]
     if not scene_texts:
         raise HTTPException(status_code=400, detail="No scene text to generate from")
 
@@ -89,7 +92,7 @@ async def regenerate_meta(
 
     # Fall back to first scene image
     if not cover_url:
-        for s in scenes_snap:
+        for s in scene_docs:
             url = s.to_dict().get("image_url")
             if url and not url.startswith("data:"):
                 cover_url = url

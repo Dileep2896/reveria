@@ -76,7 +76,7 @@ async def synthesize_speech(
             request=tts.SynthesizeSpeechRequest(
                 input=tts.SynthesisInput(ssml=ssml),
                 voice=tts.VoiceSelectionParams(
-                    language_code=voice_name[:5],
+                    language_code="-".join(voice_name.split("-")[:2]),
                     name=voice_name,
                 ),
                 audio_config=tts.AudioConfig(

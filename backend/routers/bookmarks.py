@@ -1,11 +1,16 @@
 """Reading bookmark endpoints."""
 
 from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel, Field
 
 from services.auth import verify_token
 from services.firestore_client import get_db
 
 router = APIRouter()
+
+
+class BookmarkBody(BaseModel):
+    scene_index: int = Field(default=0, ge=0)
 
 
 @router.get("/api/stories/{story_id}/bookmark")
@@ -23,7 +28,7 @@ async def get_bookmark(story_id: str, authorization: str = Header(...)):
 
 
 @router.put("/api/stories/{story_id}/bookmark")
-async def save_bookmark(story_id: str, body: dict, authorization: str = Header(...)):
+async def save_bookmark(story_id: str, body: BookmarkBody, authorization: str = Header(...)):
     """Save the user's reading bookmark for a story."""
     token = authorization.removeprefix("Bearer ").strip()
     uid = await verify_token(token)
@@ -33,7 +38,7 @@ async def save_bookmark(story_id: str, body: dict, authorization: str = Header(.
     await db.collection("bookmarks").document(f"{uid}_{story_id}").set({
         "uid": uid,
         "story_id": story_id,
-        "scene_index": body.get("scene_index", 0),
+        "scene_index": body.scene_index,
     })
     return {"ok": True}
 

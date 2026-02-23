@@ -39,9 +39,22 @@ logger.info("ADK orchestration enabled")
 
 app = FastAPI(title="StoryForge API")
 
+import os as _os
+
+_CORS_ORIGINS = [
+    o.strip()
+    for o in _os.getenv("CORS_ORIGINS", "").split(",")
+    if o.strip()
+] or [
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "https://storyforge-hackathon-1beac.web.app",
+    "https://storyforge-hackathon-1beac.firebaseapp.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -293,10 +306,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if msg_type == "generate_portraits":
                 logger.info("generate_portraits request for story %s", active_story_id)
                 if active_story_id:
-                    asyncio.create_task(_generate_portraits(
+                    portrait_task = asyncio.create_task(_generate_portraits(
                         websocket, illustrator, active_story_id,
                         safe_send=_safe_send,
                     ))
+                    pipeline_tasks.append(portrait_task)
                 else:
                     await _safe_send(websocket, {"type": "error", "content": "No story available yet. Generate a story first."})
                     await _safe_send(websocket, {"type": "portraits_done"})
@@ -311,11 +325,18 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             if msg_type == "delete_scene":
-                ret_sid, _, _, _ = await handle_delete_scene(websocket, message, active_story_id, uid, narrator, illustrator)
+                ret_sid, ret_total, _, _ = await handle_delete_scene(websocket, message, active_story_id, uid, narrator, illustrator)
                 active_story_id = ret_sid
                 if ret_sid is None:
                     total_scene_count = 0
                     batch_index = 0
+                else:
+                    total_scene_count = ret_total
+                continue
+
+            # Only treat as story generation if type is "generate" or absent
+            if msg_type is not None and msg_type != "generate":
+                logger.warning("Unknown message type: %s", msg_type)
                 continue
 
             user_input = message.get("content", "")
@@ -323,7 +344,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             art_style = message.get("art_style", "cinematic")
-            scene_count = max(1, min(2, int(message.get("scene_count", 2))))
+            try:
+                scene_count = max(1, min(2, int(message.get("scene_count", 2))))
+            except (ValueError, TypeError):
+                scene_count = 2
             language = message.get("language", "English")
 
             if not active_story_id:
@@ -427,7 +451,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _safe_send(websocket, {"type": "error", "content": "Your prompt was blocked by our safety filters. Please try a different story idea."})
             except Exception as e:
                 logger.error("Pipeline error: %s", e)
-                await _safe_send(websocket, {"type": "error", "content": f"Something went wrong: {type(e).__name__}"})
+                await _safe_send(websocket, {"type": "error", "content": "Something went wrong. Please try again."})
 
             await _safe_send(websocket, {"type": "status", "content": "done"})
 

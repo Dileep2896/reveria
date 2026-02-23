@@ -1,11 +1,9 @@
 """Social endpoints - ratings and comments for published stories."""
 
-import asyncio
 import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Header, HTTPException
-from firebase_admin import auth as fb_auth
 from pydantic import BaseModel, Field
 
 from services.auth import verify_token
@@ -99,12 +97,7 @@ async def get_social_stats(
     rating_count = data.get("rating_count", 0) or 0
     rating_avg = round(rating_sum / rating_count, 1) if rating_count > 0 else 0
 
-    # Count comments
-    comments_ref = story_ref.collection("comments")
-    comment_docs = []
-    async for d in comments_ref.stream():
-        comment_docs.append(d)
-    comment_count = len(comment_docs)
+    comment_count = data.get("comment_count", 0) or 0
 
     result: dict[str, Any] = {
         "rating_avg": rating_avg,
@@ -136,9 +129,10 @@ async def post_comment(
 ) -> dict[str, Any]:
     """Create a comment on a story."""
     token = authorization.removeprefix("Bearer ").strip()
-    uid = await verify_token(token)
-    if not uid:
+    decoded = await verify_token(token, full=True)
+    if not decoded:
         raise HTTPException(status_code=401, detail="Invalid auth token")
+    uid = decoded["uid"]
 
     db = get_db()
     story_ref = db.collection("stories").document(story_id)
@@ -146,14 +140,8 @@ async def post_comment(
     if not snap.exists:
         raise HTTPException(status_code=404, detail="Story not found")
 
-    # Decode token to get commenter's display name and photo
-    try:
-        decoded = await asyncio.to_thread(fb_auth.verify_id_token, token)
-        author_name = decoded.get("name", "Anonymous")
-        author_photo_url = decoded.get("picture")
-    except Exception:
-        author_name = "Anonymous"
-        author_photo_url = None
+    author_name = decoded.get("name") or "Anonymous"
+    author_photo_url = decoded.get("picture")
 
     comments_ref = story_ref.collection("comments")
     comment_data = {
