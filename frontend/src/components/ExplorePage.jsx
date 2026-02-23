@@ -154,7 +154,7 @@ export default function ExplorePage({ user, onOpenBook }) {
     const el = containerRef.current;
     if (!el) return;
     const onScroll = () => {
-      // Hysteresis: enter compact at 60px, exit at 10px — prevents flicker
+      // Hysteresis: enter compact at 60px, exit at 10px - prevents flicker
       setScrolled((prev) => (prev ? el.scrollTop > 10 : el.scrollTop > 60));
     };
     el.addEventListener('scroll', onScroll, { passive: true });

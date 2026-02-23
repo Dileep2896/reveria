@@ -14,6 +14,7 @@ from services.storage_client import upload_media
 from services.firestore_client import get_db, delete_story
 from services.storage_client import delete_story_media
 from services.scene_rewrite import rewrite_scene_text as _rewrite_scene_text
+from services.usage import check_limit, increment_usage, build_usage_message
 
 logger = logging.getLogger("storyforge")
 
@@ -31,10 +32,20 @@ async def handle_regen_image(
     message: dict[str, Any],
     active_story_id: str | None,
     illustrator: Illustrator,
+    *,
+    uid: str | None = None,
 ) -> None:
     scene_num = int(message.get("scene_number", 0))
     scene_text = message.get("scene_text", "")
     logger.info("regen_image request: scene=%d, text_len=%d, story=%s", scene_num, len(scene_text), active_story_id)
+
+    # Check regen limit
+    if uid:
+        allowed, reason, _ = await check_limit(uid, "regen")
+        if not allowed:
+            await _safe_send(websocket, {"type": "error", "content": "Scene regeneration is a Standard/Pro feature - upgrade to unlock"})
+            return
+
     if scene_num and scene_text and active_story_id:
         try:
             await _safe_send(websocket, {"type": "regen_start", "scene_number": scene_num})
@@ -50,12 +61,19 @@ async def handle_regen_image(
             else:
                 await _safe_send(websocket, {"type": "image_error", "scene_number": scene_num, "reason": error_reason or "generation_failed"})
             await _safe_send(websocket, {"type": "regen_done", "scene_number": scene_num})
+            # Increment regen usage
+            if uid:
+                try:
+                    updated = await increment_usage(uid, "regen")
+                    await _safe_send(websocket, build_usage_message(updated))
+                except Exception:
+                    pass
         except Exception as e:
             logger.error("regen_image error for scene %d: %s", scene_num, e)
             await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": str(e)})
     else:
-        logger.warning("regen_image skipped — guard failed: scene_num=%s, text=%s, story=%s", scene_num, bool(scene_text), active_story_id)
-        await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": "Session not ready — please retry"})
+        logger.warning("regen_image skipped - guard failed: scene_num=%s, text=%s, story=%s", scene_num, bool(scene_text), active_story_id)
+        await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": "Session not ready - please retry"})
 
 
 async def handle_regen_scene(
@@ -64,12 +82,22 @@ async def handle_regen_scene(
     active_story_id: str | None,
     illustrator: Illustrator,
     narrator: Narrator,
+    *,
+    uid: str | None = None,
 ) -> None:
     scene_num = int(message.get("scene_number", 0))
     scene_text = message.get("scene_text", "")
     all_scenes_data: list[dict[str, Any]] = message.get("all_scenes", [])
     language = message.get("language", "English")
     logger.info("regen_scene request: scene=%d, story=%s, lang=%s", scene_num, active_story_id, language)
+
+    # Check regen limit
+    if uid:
+        allowed, reason, _ = await check_limit(uid, "regen")
+        if not allowed:
+            await _safe_send(websocket, {"type": "error", "content": "Scene regeneration is a Standard/Pro feature - upgrade to unlock"})
+            return
+
     if scene_num and scene_text and active_story_id:
         try:
             await _safe_send(websocket, {"type": "regen_start", "scene_number": scene_num})
@@ -119,6 +147,13 @@ async def handle_regen_scene(
                 parts=[types.Part(text=new_text)],
             ))
 
+            # Increment regen usage
+            if uid:
+                try:
+                    updated = await increment_usage(uid, "regen")
+                    await _safe_send(websocket, build_usage_message(updated))
+                except Exception:
+                    pass
             await _safe_send(websocket, {"type": "regen_done", "scene_number": scene_num})
         except Exception as e:
             logger.error("regen_scene error for scene %d: %s", scene_num, e)

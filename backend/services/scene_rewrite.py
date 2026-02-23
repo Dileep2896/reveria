@@ -1,4 +1,4 @@
-"""Scene rewriting service — regenerates a single scene with Gemini."""
+"""Scene rewriting service - regenerates a single scene with Gemini."""
 
 import logging
 from typing import Any

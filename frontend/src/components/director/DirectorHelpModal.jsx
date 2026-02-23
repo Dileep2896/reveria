@@ -7,11 +7,11 @@ export default function DirectorHelpModal({ onClose }) {
         <>
           <p>Tracks where your story sits on a classic 5-stage arc:</p>
           <ul>
-            <li><strong>Exposition</strong> — Setting the scene, introducing characters</li>
-            <li><strong>Rising Action</strong> — Conflict develops, stakes increase</li>
-            <li><strong>Climax</strong> — Peak tension, the turning point</li>
-            <li><strong>Falling Action</strong> — Consequences unfold</li>
-            <li><strong>Resolution</strong> — Story wraps up</li>
+            <li><strong>Exposition</strong> - Setting the scene, introducing characters</li>
+            <li><strong>Rising Action</strong> - Conflict develops, stakes increase</li>
+            <li><strong>Climax</strong> - Peak tension, the turning point</li>
+            <li><strong>Falling Action</strong> - Consequences unfold</li>
+            <li><strong>Resolution</strong> - Story wraps up</li>
           </ul>
           <p>The <strong>mini arc curve</strong> shows your position visually. The <strong>pacing pill</strong> indicates tempo:</p>
           <div className="dh-inline-pills">
@@ -32,8 +32,8 @@ export default function DirectorHelpModal({ onClose }) {
         <>
           <p>Character pills show each character extracted from your story. Each pill displays:</p>
           <ul>
-            <li><strong>Name</strong> — the character's name</li>
-            <li><strong>Role</strong> — their story function (protagonist, antagonist, mentor, etc.)</li>
+            <li><strong>Name</strong> - the character's name</li>
+            <li><strong>Role</strong> - their story function (protagonist, antagonist, mentor, etc.)</li>
           </ul>
           <p>Hover a pill to see the character's key trait.</p>
         </>
@@ -66,8 +66,8 @@ export default function DirectorHelpModal({ onClose }) {
         <>
           <p>Reflects the art direction of your story's illustrations.</p>
           <ul>
-            <li><strong>Mood</strong> — emotional atmosphere (peaceful, mysterious, tense…)</li>
-            <li><strong>Style tags</strong> — artistic descriptors guiding visual generation</li>
+            <li><strong>Mood</strong> - emotional atmosphere (peaceful, mysterious, tense…)</li>
+            <li><strong>Style tags</strong> - artistic descriptors guiding visual generation</li>
           </ul>
         </>
       ),

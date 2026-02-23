@@ -49,7 +49,7 @@ export default function useStoryActions({
   }, [idToken]);
 
   // Auto-save current story as 'saved' (used when switching away from a draft)
-  // NEVER calls generateBookMeta — always fast (~200ms)
+  // NEVER calls generateBookMeta - always fast (~200ms)
   const autoSaveCurrent = useCallback(async () => {
     if (!storyId || scenes.length === 0 || storyStatus === 'completed') return;
     try {
@@ -79,12 +79,11 @@ export default function useStoryActions({
         return;
       }
 
-      // Tier 3: use prompt title + first scene image (no API call)
-      // title_generated stays false so background task or explicit Save can upgrade later
+      // Tier 3: save status only — don't write title/cover to avoid racing
+      // with auto_generate_meta background task. title_generated stays false
+      // so the background task or explicit Save can set the AI title later.
       await updateDoc(storyRef, {
         status: 'saved',
-        title: (generations[0]?.prompt || 'Untitled Story').slice(0, 60),
-        cover_image_url: findFallbackCover(scenes),
         updated_at: new Date(),
       });
     } catch (err) {
@@ -108,7 +107,7 @@ export default function useStoryActions({
       }
       const alreadyGenerated = dbData.title_generated;
 
-      // Tier 1: already has AI title + cover — just update status (instant)
+      // Tier 1: already has AI title + cover - just update status (instant)
       if (alreadyGenerated) {
         setSaving(true);
         await updateDoc(storyRef, { status: 'saved', updated_at: new Date() });
@@ -119,7 +118,7 @@ export default function useStoryActions({
         return;
       }
 
-      // Tier 2: bookMeta available from WS — write it + set flag (instant)
+      // Tier 2: bookMeta available from WS - write it + set flag (instant)
       if (bookMeta) {
         setSaving(true);
         await updateDoc(storyRef, {
@@ -150,7 +149,7 @@ export default function useStoryActions({
         title = meta.title || title;
         coverUrl = meta.cover_image_url || coverUrl;
         if (!meta.cover_image_url && meta.title) {
-          addToast('Cover generation blocked — using scene image', 'warning');
+          addToast('Cover generation blocked - using scene image', 'warning');
         }
       }
 
@@ -187,7 +186,7 @@ export default function useStoryActions({
       const snap = await getDoc(storyRef);
       const alreadyGenerated = snap.exists() && snap.data().title_generated;
 
-      // Tier 1: already has AI title + cover — just complete
+      // Tier 1: already has AI title + cover - just complete
       if (alreadyGenerated) {
         await updateDoc(storyRef, { status: 'completed', updated_at: new Date() });
         if (storyId === capturedStoryId) setStoryStatus('completed');
@@ -196,7 +195,7 @@ export default function useStoryActions({
         return;
       }
 
-      // Tier 2: bookMeta available from WS — write it + complete
+      // Tier 2: bookMeta available from WS - write it + complete
       if (bookMeta) {
         await updateDoc(storyRef, {
           title: bookMeta.title || (generations[0]?.prompt || 'Untitled Story').slice(0, 60),
@@ -249,12 +248,22 @@ export default function useStoryActions({
     if (!storyId || publishing) return;
     setPublishing(true);
     try {
-      await updateDoc(doc(db, 'stories', storyId), {
-        is_public: true,
-        published_at: new Date(),
-        author_name: user?.displayName || 'Anonymous',
-        author_photo_url: user?.photoURL || null,
+      const res = await fetch(`${API_URL}/api/stories/${storyId}/publish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          author_name: user?.displayName || 'Anonymous',
+          author_photo_url: user?.photoURL || null,
+        }),
       });
+      if (res.status === 429) {
+        addToast('Publish limit reached - upgrade to Pro for unlimited publishing', 'error');
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setIsPublished(true);
       setShowPublishDialog(false);
       addToast('Story published to Explore!', 'success');
@@ -264,7 +273,7 @@ export default function useStoryActions({
     } finally {
       setPublishing(false);
     }
-  }, [storyId, publishing, user, addToast]);
+  }, [storyId, publishing, user, idToken, addToast]);
 
   // Convenience: reset saved flag (called by parent when generating changes)
   const resetSaved = useCallback(() => setSaved(false), []);

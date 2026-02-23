@@ -25,7 +25,7 @@ export default function useActiveStory(user, urlStoryId) {
       return;
     }
 
-    // Only load once per user session — subsequent navigation uses handleOpenBook/load
+    // Only load once per user session - subsequent navigation uses handleOpenBook/load
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 

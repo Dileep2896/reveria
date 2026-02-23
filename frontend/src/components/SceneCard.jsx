@@ -12,7 +12,7 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
   const { sceneBusy } = useSceneActions();
   const isBusy = sceneBusy.has(scene.scene_number);
 
-  // Track "waiting for rewritten text" — set on regen-scene click, cleared when new text arrives
+  // Track "waiting for rewritten text" - set on regen-scene click, cleared when new text arrives
   const [awaitingTextRegen, setAwaitingTextRegen] = useState(false);
 
   const isError = scene.image_url === 'error';
@@ -75,7 +75,7 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
     if (scene.text && scene.text !== prevText.current && prevText.current) {
       textWasRegenerated.current = true;
       setTextRegenKey((k) => k + 1);
-      setAwaitingTextRegen(false); // New text arrived — hide writing overlay
+      setAwaitingTextRegen(false); // New text arrived - hide writing overlay
     }
     prevText.current = scene.text;
   }, [scene.text]);

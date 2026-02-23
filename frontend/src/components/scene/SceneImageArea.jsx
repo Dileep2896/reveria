@@ -2,7 +2,7 @@ import { useSceneActions } from '../../contexts/SceneActionsContext';
 import IconBtn from '../IconBtn';
 
 export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, imageFailed, isBusy, showError, preloaded, skip, wasRegenerated }) {
-  const { regenImage, isReadOnly } = useSceneActions();
+  const { regenImage, isReadOnly, canRegen } = useSceneActions();
   const isError = scene.image_url === 'error';
 
   // Collapsed error / no-image indicator
@@ -139,7 +139,7 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
         )}
       </>
 
-      {/* Busy overlay — shimmer + icon */}
+      {/* Busy overlay - shimmer + icon */}
       {isBusy && (
         <div
           style={{
@@ -208,8 +208,8 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
         </div>
       )}
 
-      {/* Regen Image button — stays on image (only affects image) */}
-      {!isReadOnly && !isBusy && (
+      {/* Regen Image button - stays on image (only affects image) */}
+      {!isReadOnly && !isBusy && canRegen && (
         <div
           className="scene-action-bar"
           style={{

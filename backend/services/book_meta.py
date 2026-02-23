@@ -1,4 +1,4 @@
-"""Book meta generation — title + cover image."""
+"""Book meta generation - title + cover image."""
 
 import asyncio
 import logging
@@ -51,8 +51,15 @@ async def gen_title(full_text: str, language: str = "English") -> str:
     return "Untitled"
 
 
-async def gen_cover(full_text: str, art_style: str, story_id: str) -> str | None:
-    """Generate a portrait book cover and upload to GCS."""
+async def gen_cover(
+    full_text: str, art_style: str, story_id: str,
+    character_sheet: str = "",
+) -> str | None:
+    """Generate a portrait book cover using the hybrid prompt architecture.
+
+    Uses the same character-consistent approach as scene images:
+    character descriptions prepended verbatim + scene composition from Gemini.
+    """
     from agents.illustrator import ART_STYLES as ILLUSTRATOR_ART_STYLES
     art_style_suffix = ILLUSTRATOR_ART_STYLES.get(art_style, ILLUSTRATOR_ART_STYLES["cinematic"])
 
@@ -65,28 +72,47 @@ async def gen_cover(full_text: str, art_style: str, story_id: str) -> str | None
 
         client = get_gemini_client()
         model = get_gemini_model()
+
+        # Gemini writes ONLY the cover composition — no character appearance
         response = await client.aio.models.generate_content(
             model=model,
             contents=types.Content(
                 role="user",
                 parts=[types.Part(text=(
                     f"Here is a story:\n\n{full_text}\n\n"
-                    f"Generate a single detailed image prompt for a book cover illustration.\n"
-                    f"The cover should capture the essence and key characters of the story.\n"
-                    f"The image MUST match this art style: {art_style_suffix}.\n"
-                    f"End the prompt with: {art_style_suffix}\n"
+                    f"Generate a single image prompt for a book cover illustration.\n"
+                    f"Describe ONLY: setting, environment, character poses/actions, "
+                    f"lighting, mood, atmosphere, camera angle, and composition.\n"
+                    f"Do NOT describe any character's appearance (hair, clothes, skin, "
+                    f"age, build, etc.) — character details are handled separately.\n"
+                    f"Reference characters by name only (e.g., 'Elara stands in the doorway').\n"
+                    f"Keep it under 100 words.\n"
+                    f"End with: {art_style_suffix}\n"
                     f"Do NOT include any text, titles, words, or lettering in the image.\n"
                     f"Output only the image prompt, nothing else."
                 ))],
             ),
             config=types.GenerateContentConfig(
-                temperature=0.7,
+                temperature=0.3,
                 max_output_tokens=200,
             ),
         )
-        cover_prompt = response.text.strip() if response.text else None
-        if not cover_prompt:
+        scene_composition = response.text.strip() if response.text else None
+        if not scene_composition:
             return None
+
+        # Build hybrid prompt: character DNA + anti-drift + scene composition
+        if character_sheet:
+            anti_drift = (
+                "IMPORTANT: Render each character EXACTLY as described above - "
+                "same colors, same outfit, same signature items. "
+                "Do not alter, omit, or reinterpret any character detail."
+            )
+            cover_prompt = f"{character_sheet}\n\n{anti_drift}\n\n{scene_composition}"
+        else:
+            cover_prompt = scene_composition
+
+        logger.info("Cover prompt: %s...", cover_prompt[:200])
 
         cover_data = None
         for attempt in range(3):
@@ -94,7 +120,7 @@ async def gen_cover(full_text: str, art_style: str, story_id: str) -> str | None
             if cover_data:
                 break
             if err == "safety_filter":
-                return None  # terminal — re-prompting won't help
+                return None  # terminal - re-prompting won't help
             # Wait for quota cooldown on exhaustion, short delay otherwise
             if err == "quota_exhausted":
                 wait = get_quota_cooldown_remaining() + 2
@@ -119,6 +145,7 @@ async def auto_generate_meta(
     websocket: WebSocket | None = None,
     safe_send=None,
     language: str = "English",
+    character_sheet: str = "",
 ) -> None:
     """Background task: generate title + cover after pipeline run, notify frontend via WS."""
     try:
@@ -129,7 +156,7 @@ async def auto_generate_meta(
         full_text = "\n\n".join(scene_texts)
         title, cover_url = await asyncio.gather(
             gen_title(full_text, language=language),
-            gen_cover(full_text, art_style, story_id),
+            gen_cover(full_text, art_style, story_id, character_sheet=character_sheet),
         )
 
         # Fall back to first scene image if cover generation failed

@@ -10,6 +10,7 @@ export function createWsHandlers({
   generationsRef, currentBatchIndexRef, initialStateRef, hydratedRef,
   addToastRef, quotaImageToastFired, cooldownTimer,
   liveHandlerRef, storyDeletedRef, setControlBarInput,
+  setUsage,
 }) {
   return function handleMessage(data) {
     // Route live voice messages to handler
@@ -100,7 +101,7 @@ export function createWsHandlers({
         );
         if (data.reason === 'quota_exhausted' && !quotaImageToastFired.current) {
           quotaImageToastFired.current = true;
-          addToastRef.current?.('Image skipped — quota exhausted', 'warning');
+          addToastRef.current?.('Image skipped - quota exhausted', 'warning');
         }
         return true;
 
@@ -122,7 +123,7 @@ export function createWsHandlers({
       case 'quota_exhausted': {
         const seconds = data.retry_after || 60;
         setQuotaCooldown(seconds);
-        addToastRef.current?.(`Image quota exhausted — retry in ${seconds}s`, 'warning', 6000);
+        addToastRef.current?.(`Image quota exhausted - retry in ${seconds}s`, 'warning', 6000);
         clearInterval(cooldownTimer.current);
         cooldownTimer.current = setInterval(() => {
           setQuotaCooldown((prev) => {
@@ -158,8 +159,8 @@ export function createWsHandlers({
         }, 500);
         addToastRef.current?.(
           data.reason === 'quota_exhausted'
-            ? 'Scene skipped — image quota exhausted'
-            : 'Scene skipped — image generation failed',
+            ? 'Scene skipped - image quota exhausted'
+            : 'Scene skipped - image generation failed',
           'warning',
         );
         return true;
@@ -224,6 +225,10 @@ export function createWsHandlers({
 
       case 'portraits_done':
         setPortraitsLoading(false);
+        return true;
+
+      case 'usage_update':
+        if (setUsage) setUsage({ usage: data.usage, limits: data.limits });
         return true;
 
       case 'error':

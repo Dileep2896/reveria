@@ -1,4 +1,4 @@
-"""Book details generation — synopsis, genre, themes, characters, etc."""
+"""Book details generation - synopsis, genre, themes, characters, etc."""
 
 import json
 import logging

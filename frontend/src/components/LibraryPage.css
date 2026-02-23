@@ -6,7 +6,7 @@
 }
 
 /* ===========================================================
-   STICKY HEADER — title + search on row 1, filters on row 2
+   STICKY HEADER - title + search on row 1, filters on row 2
    =========================================================== */
 .library-sticky-header {
   position: sticky;
@@ -112,7 +112,7 @@
 }
 
 /* ===========================================================
-   3D BOOK — Based on Sebastien Castiel's CSS 3D Book technique
+   3D BOOK - Based on Sebastien Castiel's CSS 3D Book technique
    Uses ::before for page edges (spine side) and ::after for
    back cover, both positioned in true 3D space.
    =========================================================== */
@@ -648,7 +648,7 @@
 }
 
 /* ===========================================================
-   NEW STORY CARD — dashed CTA at end of grid
+   NEW STORY CARD - dashed CTA at end of grid
    =========================================================== */
 .book-new-card {
   perspective: none;
@@ -829,7 +829,7 @@
    RESPONSIVE
    =========================================================== */
 
-/* Small phones (≤ 480px) — 2 columns, compact */
+/* Small phones (≤ 480px) - 2 columns, compact */
 @media (max-width: 480px) {
   .library-container {
     padding: 0 0.75rem 1.5rem;
@@ -899,9 +899,9 @@
   }
 }
 
-/* Standard laptops (769px – 1280px) — default styles apply */
+/* Standard laptops (769px – 1280px) - default styles apply */
 
-/* Large screens (1281px – 1920px) — wider grid, more space */
+/* Large screens (1281px – 1920px) - wider grid, more space */
 @media (min-width: 1281px) {
   .library-grid {
     max-width: 1600px;
@@ -911,7 +911,7 @@
   }
 }
 
-/* Ultrawide / 4K (> 1920px) — expand to fill, larger books */
+/* Ultrawide / 4K (> 1920px) - expand to fill, larger books */
 @media (min-width: 1921px) {
   .library-container {
     padding: 3rem;
@@ -1042,6 +1042,7 @@
   text-transform: uppercase;
   cursor: pointer;
   transition: all 0.2s ease;
+  min-width: 120px;
 }
 
 .library-delete-btn--cancel {
@@ -1072,8 +1073,16 @@
 }
 
 .library-delete-btn--confirm:disabled {
-  opacity: 0.7;
+  opacity: 0.85;
   background: var(--status-error);
+  box-shadow: none;
+  outline: none;
+}
+
+.library-delete-btn:focus,
+.library-delete-btn:focus-visible,
+.library-delete-btn:active {
+  outline: none;
   box-shadow: none;
 }
 
@@ -1082,13 +1091,15 @@
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
+  position: relative;
 }
 
-.library-delete-spinner {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+.library-delete-btn--confirm:disabled::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid rgba(255, 255, 255, 0.35);
   border-top-color: #fff;
   border-radius: 50%;
   animation: deleteSpinner 0.6s linear infinite;

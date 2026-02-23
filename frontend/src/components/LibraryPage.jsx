@@ -298,7 +298,7 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
   }, [deleteTarget, deleting, idToken, refresh, addToast, activeStoryId, onActiveStoryDeleted]);
 
   const handleToggleFavorite = useCallback(async (bookId, newValue) => {
-    // Optimistic update — no reload/skeleton
+    // Optimistic update - no reload/skeleton
     setBooks((prev) => prev.map((b) => b.id === bookId ? { ...b, is_favorite: newValue } : b));
     try {
       await updateDoc(doc(db, 'stories', bookId), { is_favorite: newValue });
@@ -504,12 +504,7 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
                 onClick={handleDeleteConfirm}
                 disabled={deleting}
               >
-                {deleting ? (
-                  <>
-                    <span className="library-delete-spinner" />
-                    Deleting…
-                  </>
-                ) : 'Delete'}
+                {deleting ? '\u00A0' : 'Delete'}
               </button>
             </div>
           </div>

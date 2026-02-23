@@ -59,7 +59,7 @@ export function ToastProvider({ children }) {
 
     setToasts((prev) => {
       const next = [...prev, { id, message, type, duration, exiting: false, paused: false }];
-      // Enforce max — remove oldest (trigger exit animation)
+      // Enforce max - remove oldest (trigger exit animation)
       if (next.length > MAX_TOASTS) {
         const oldest = next[0];
         clearTimeout(timersRef.current[oldest.id]);

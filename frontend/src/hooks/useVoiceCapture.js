@@ -59,7 +59,7 @@ export default function useVoiceCapture({ onAudioCaptured }) {
       recorder.onstop = () => {
         const elapsed = Date.now() - startTimeRef.current;
 
-        // Discard audio that's too short — likely accidental tap
+        // Discard audio that's too short - likely accidental tap
         if (elapsed < MIN_RECORDING_MS) {
           cleanup();
           return;
@@ -108,7 +108,7 @@ export default function useVoiceCapture({ onAudioCaptured }) {
       mediaRecorderRef.current.stop();
       setRecording(false);
     } else {
-      // Recorder might not have started yet — clean up just in case
+      // Recorder might not have started yet - clean up just in case
       cleanup();
     }
   }, [cleanup]);

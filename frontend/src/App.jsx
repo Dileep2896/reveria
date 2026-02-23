@@ -24,12 +24,15 @@ import LibraryPage from './components/LibraryPage';
 import ExplorePage from './components/ExplorePage';
 import ReadingMode from './components/ReadingMode';
 import SplashScreen from './components/SplashScreen';
-import SignInScreen from './components/SignInScreen';
+import AuthScreen, { VerifyEmailScreen } from './components/AuthScreen';
+import SubscriptionPage from './components/SubscriptionPage';
+import AdminDashboard from './components/AdminDashboard';
+import TermsPage from './components/TermsPage';
 
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, idToken, loading: authLoading, signInWithGoogle, signOut } = useAuth();
+  const { user, idToken, loading: authLoading, isAdmin, emailVerified, signInWithGoogle, signUpWithEmail, signInWithEmail, resetPassword, resendVerification, reloadUser, signOut } = useAuth();
 
   const urlStoryMatch = location.pathname.match(/^\/story\/(.+?)(?:\/|$)/);
   const urlStoryId = urlStoryMatch ? urlStoryMatch[1] : null;
@@ -38,7 +41,7 @@ export default function App() {
 
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId);
   const { addToast } = useToast();
-  const { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, send, sendAudio, sendSceneAction, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler, setControlBarInputHandler } = useWebSocket(idToken, initialState, addToast);
+  const { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendAudio, sendSceneAction, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler, setControlBarInputHandler } = useWebSocket(idToken, initialState, addToast);
   const { theme, toggleTheme } = useTheme();
   const [directorOpen, setDirectorOpen] = useState(true);
   const [controlBarInput, setControlBarInput] = useState('');
@@ -64,6 +67,7 @@ export default function App() {
 
   const isLibrary = location.pathname === '/library';
   const isExplore = location.pathname === '/explore';
+  const isSubscription = location.pathname === '/subscription';
   const isBookPage = location.pathname.startsWith('/book/');
   const [viewingReadOnly, setViewingReadOnly] = useState(false);
 
@@ -84,13 +88,15 @@ export default function App() {
     sendSceneAction('delete_scene', { scene_number: sceneNumber, story_id: storyId });
   }, [storyId, generating, sendSceneAction]);
 
+  const canRegen = usage?.limits?.scene_regens_today > 0;
   const sceneActionsValue = useMemo(() => ({
     regenImage: handleRegenImage,
     regenScene: handleRegenScene,
     deleteScene: handleDeleteScene,
     sceneBusy,
     isReadOnly: viewingReadOnly || storyStatus === 'completed',
-  }), [handleRegenImage, handleRegenScene, handleDeleteScene, sceneBusy, viewingReadOnly, storyStatus]);
+    canRegen,
+  }), [handleRegenImage, handleRegenScene, handleDeleteScene, sceneBusy, viewingReadOnly, storyStatus, canRegen]);
 
   // Track whether scenes were ever populated (hydration completed at least once)
   const [hasBeenPopulated, setHasBeenPopulated] = useState(false);
@@ -168,9 +174,9 @@ export default function App() {
     return <SplashScreen message={splashMessage} />;
   }
 
-  // Not signed in — show public story, book details, or sign-in screen
+  // Not signed in - show public story, book details, or sign-in screen
   if (!user) {
-    // Guest viewing a book details page — no login required
+    // Guest viewing a book details page - no login required
     if (isBookRoute) {
       return (
         <div className="h-screen flex flex-col relative overflow-hidden">
@@ -184,7 +190,7 @@ export default function App() {
               <Logo size="compact" />
             </div>
             <div className="flex items-center header-actions">
-              <button onClick={signInWithGoogle} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
+              <button onClick={() => navigate('/')} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
                 Sign in to create
               </button>
             </div>
@@ -218,7 +224,7 @@ export default function App() {
                   Read
                 </button>
               )}
-              <button onClick={signInWithGoogle} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
+              <button onClick={() => navigate('/')} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
                 Sign in to create
               </button>
             </div>
@@ -234,7 +240,38 @@ export default function App() {
         </div>
       );
     }
-    return <SignInScreen onSignIn={signInWithGoogle} />;
+    // Terms page accessible without login
+    if (location.pathname === '/terms') {
+      return <TermsPage />;
+    }
+
+    return <AuthScreen onSignInWithGoogle={signInWithGoogle} onSignInWithEmail={signInWithEmail} onSignUpWithEmail={signUpWithEmail} onResetPassword={resetPassword} />;
+  }
+
+  // Email not verified - show verification screen
+  if (!emailVerified) {
+    return <VerifyEmailScreen email={user.email} onResend={resendVerification} onReload={reloadUser} onSignOut={signOut} />;
+  }
+
+  // Admin-only: show just the admin dashboard
+  if (isAdmin) {
+    return (
+      <div className="h-screen flex flex-col relative overflow-hidden">
+        <div className="fixed inset-0 -z-10" style={{ background: 'var(--bg-gradient)' }}>
+          <div className="absolute inset-0" style={{ background: 'var(--orb-1)' }} />
+          <div className="absolute inset-0" style={{ background: 'var(--orb-2)' }} />
+          <div className="absolute inset-0" style={{ background: 'var(--orb-3)' }} />
+        </div>
+        <AppHeader
+          navigate={navigate} theme={theme} toggleTheme={toggleTheme}
+          user={user} signOut={signOut} isAdmin={isAdmin}
+          userTier={usage?.usage?.tier || 'free'}
+        />
+        <div className="flex flex-1 overflow-hidden relative z-10">
+          <AdminDashboard idToken={idToken} addToast={addToast} />
+        </div>
+      </div>
+    );
   }
 
   // Derive per-scene director data
@@ -301,6 +338,8 @@ export default function App() {
         ambient={ambient}
         theme={theme} toggleTheme={toggleTheme}
         user={user} signOut={signOut}
+        isAdmin={isAdmin}
+        userTier={usage?.usage?.tier || 'free'}
       />
 
       <Routes>
@@ -328,6 +367,31 @@ export default function App() {
             </div>
           }
         />
+        <Route
+          path="/subscription"
+          element={
+            <div className="flex flex-1 overflow-hidden relative z-10">
+              <SubscriptionPage idToken={idToken} addToast={addToast} />
+            </div>
+          }
+        />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route
+          path="/admin"
+          element={
+            isAdmin ? (
+              <div className="flex flex-1 overflow-hidden relative z-10">
+                <AdminDashboard idToken={idToken} addToast={addToast} />
+              </div>
+            ) : (
+              <div className="flex flex-1 overflow-hidden relative z-10">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--text-muted)' }}>
+                  Access denied
+                </div>
+              </div>
+            )
+          }
+        />
         {['/story/:storyId', '*'].map((path) => (
           <Route
             key={path}
@@ -338,7 +402,7 @@ export default function App() {
                   <div className="flex-1 relative flex flex-col">
                     <StoryCanvas key={storyId || 'new'} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={viewingReadOnly ? null : displayPrompt} spreadPrompts={viewingReadOnly ? null : spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} />
                     {!viewingReadOnly && storyStatus !== 'completed' && (
-                      <ControlBar onSend={(text, opts) => { if (scenes.length === 0) addToast(`Language set to ${language} — can't be changed for this story`, 'info'); send(text, opts); }} onSendAudio={(b64, mime) => { if (scenes.length === 0) addToast(`Language set to ${language} — can't be changed for this story`, 'info'); sendAudio(b64, mime); }} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} setLanguage={setLanguage} languageLocked={scenes.length > 0} />
+                      <ControlBar onSend={(text, opts) => { if (scenes.length === 0) addToast(`Language set to ${language} - can't be changed for this story`, 'info'); send(text, opts); }} onSendAudio={(b64, mime) => { if (scenes.length === 0) addToast(`Language set to ${language} - can't be changed for this story`, 'info'); sendAudio(b64, mime); }} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} setLanguage={setLanguage} languageLocked={scenes.length > 0} usage={usage} />
                     )}
                   </div>
                   {directorOpen && !viewingReadOnly && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} sceneTitles={activeBatchSceneTitles} imageTiers={imageTiers} portraits={portraits} portraitsLoading={portraitsLoading} language={language} />}

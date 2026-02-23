@@ -1,15 +1,18 @@
-"""Story endpoints — public story view, PDF export, delete."""
+"""Story endpoints - public story view, PDF export, delete, publish."""
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from services.auth import verify_token
 from services.firestore_client import get_db, delete_story
 from services.storage_client import delete_story_media
+from services.usage import check_limit, increment_usage, decrement_usage
 
 router = APIRouter()
 
@@ -80,6 +83,11 @@ async def export_story_pdf(
     if not uid:
         raise HTTPException(status_code=401, detail="Invalid auth token")
 
+    # Check PDF export limit
+    allowed, reason, _ = await check_limit(uid, "pdf_export")
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Daily PDF export limit reached - upgrade to Pro for unlimited exports")
+
     db = get_db()
     story_ref = db.collection("stories").document(story_id)
     snap = await story_ref.get()
@@ -101,6 +109,9 @@ async def export_story_pdf(
     cover_url = data.get("cover_image_url")
 
     pdf_bytes = generate_story_pdf(title, author, cover_url, scenes)
+
+    # Increment PDF export usage
+    await increment_usage(uid, "pdf_export")
 
     # ASCII-safe filename for Content-Disposition (HTTP headers are Latin-1)
     ascii_title = "".join(c for c in title if c.isascii() and (c.isalnum() or c in " -_")).strip() or "story"
@@ -129,11 +140,62 @@ async def delete_story_endpoint(
     if not uid:
         raise HTTPException(status_code=401, detail="Invalid auth token")
 
-    deleted = await delete_story(story_id, uid)
-    if not deleted:
+    story_data = await delete_story(story_id, uid)
+    if not story_data:
         raise HTTPException(status_code=404, detail="Story not found or access denied")
 
     # Clean up GCS media in background (don't block the response)
     asyncio.create_task(delete_story_media(story_id))
 
+    # Decrement usage counters
+    await decrement_usage(uid, "create_story")
+    if story_data.get("is_public"):
+        await decrement_usage(uid, "publish")
+
     return {"deleted": True, "story_id": story_id}
+
+
+class PublishBody(BaseModel):
+    author_name: str = "Anonymous"
+    author_photo_url: str | None = None
+
+
+@router.post("/api/stories/{story_id}/publish")
+async def publish_story(
+    story_id: str,
+    body: PublishBody,
+    authorization: str = Header(...),
+) -> dict[str, Any]:
+    """Publish a story (make it public). Enforces publish limit."""
+    token = authorization.removeprefix("Bearer ").strip()
+    uid = await verify_token(token)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    db = get_db()
+    story_ref = db.collection("stories").document(story_id)
+    snap = await story_ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Story not found")
+    data = snap.to_dict()
+    if data.get("uid") != uid:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Already published - no-op
+    if data.get("is_public"):
+        return {"ok": True, "already_public": True}
+
+    # Check publish limit
+    allowed, reason, _ = await check_limit(uid, "publish")
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Publish limit reached - upgrade to Pro for unlimited publishing")
+
+    await story_ref.update({
+        "is_public": True,
+        "published_at": datetime.now(timezone.utc),
+        "author_name": body.author_name,
+        "author_photo_url": body.author_photo_url,
+    })
+
+    await increment_usage(uid, "publish")
+    return {"ok": True}

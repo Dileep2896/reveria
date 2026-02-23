@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, memo } from 'react';
 import HTMLFlipBook from 'react-pageflip';
+import { useTheme } from '../contexts/ThemeContext';
 import './storybook.css';
 import SceneCard from './SceneCard';
 import { GENRE_KEYS, getLangData } from '../data/languages';
@@ -33,6 +34,7 @@ const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWit
 const PAGE_SLOTS = 21;
 
 function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English' }) {
+  const { theme } = useTheme();
   const lang = getLangData(language);
   const bookRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -52,11 +54,11 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
   const [entranceReady, setEntranceReady] = useState(false);
   const entranceTriggered = useRef(false);
   useEffect(() => {
-    if (scenes.length > 0 && !entranceTriggered.current) {
+    if ((scenes.length > 0 || generating) && !entranceTriggered.current) {
       entranceTriggered.current = true;
       requestAnimationFrame(() => setEntranceReady(true));
     }
-  }, [scenes.length]);
+  }, [scenes.length, generating]);
 
   /* ── Auto-advance during generation ── */
   const lastFlipTarget = useRef(-1);
@@ -265,7 +267,7 @@ function StoryCanvas({ scenes, generating, userPrompt, error, onGenreClick, onPa
             showCover={true}
             startPage={initialPageRef.current}
             drawShadow={true}
-            maxShadowOpacity={0.5}
+            maxShadowOpacity={theme === 'light' ? 0.12 : 0.5}
             flippingTime={800}
             usePortrait={false}
             startZIndex={0}

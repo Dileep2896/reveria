@@ -33,13 +33,19 @@ async def generate_book_meta(
     # Verify story ownership before generating (cover uploads to GCS under story_id)
     story_ref = get_db().collection("stories").document(body.story_id)
     snap = await story_ref.get()
-    if snap.exists and snap.to_dict().get("uid") != uid:
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Story not found")
+    story_data = snap.to_dict()
+    if story_data.get("uid") != uid:
         raise HTTPException(status_code=403, detail="Not your story")
+
+    # Load character sheet from persisted illustrator state for visual consistency
+    character_sheet = (story_data.get("illustrator_state") or {}).get("character_sheet", "")
 
     full_text = "\n\n".join(body.scene_texts)
     title, cover_url = await asyncio.gather(
         gen_title(full_text),
-        gen_cover(full_text, body.art_style, body.story_id),
+        gen_cover(full_text, body.art_style, body.story_id, character_sheet=character_sheet),
     )
 
     return {"title": title, "cover_image_url": cover_url}

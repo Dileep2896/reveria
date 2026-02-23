@@ -1,4 +1,4 @@
-"""Social endpoints — ratings and comments for published stories."""
+"""Social endpoints - ratings and comments for published stories."""
 
 import asyncio
 import time

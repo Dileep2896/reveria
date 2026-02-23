@@ -6,8 +6,9 @@ from google.genai import types
 logger = logging.getLogger("storyforge.illustrator")
 
 SCENE_COMPOSER_INSTRUCTION = """You are an image prompt engineer for a storytelling app.
-Write a scene composition for an illustration. Character descriptions are handled
-separately — do NOT describe any characters' appearance.
+Write a scene composition for an illustration. Character descriptions and art style
+are handled separately - do NOT describe any characters' appearance and do NOT
+include any art style or rendering instructions.
 
 RULES:
 - Output ONLY the scene composition, nothing else
@@ -17,13 +18,13 @@ RULES:
 - Do NOT describe character appearance (hair, clothes, age, skin, build, etc.)
 - Do NOT include text, labels, words, or watermarks
 - Do NOT describe dialogue or thoughts
+- Do NOT include art style, rendering style, or medium descriptions
 - Describe ONLY what a camera would capture in a single frame
 
 CONSISTENCY ANCHORS (important for visual continuity):
 - Mention distinguishing accessories, props, or signature items by name (e.g., "Luna's red scarf", "Kai's wooden staff")
 - Reference the same location names across scenes (e.g., "the old oak tree", "the crystal cave")
 - Use consistent time-of-day and weather cues
-- End with the ART STYLE SUFFIX provided below
 """
 
 CHARACTER_IDENTIFIER_INSTRUCTION = """Given a scene and a list of character names,
@@ -117,7 +118,7 @@ class Illustrator:
         # Use the accumulated cross-batch story instead of just this batch
         story_text = self._accumulated_story or full_story_text
 
-        # Build the user prompt — if we already have a sheet, ask for a merge
+        # Build the user prompt - if we already have a sheet, ask for a merge
         if self._character_sheet:
             user_text = (
                 f"EXISTING CHARACTER REFERENCE SHEET:\n{self._character_sheet}\n\n"
@@ -142,7 +143,7 @@ class Illustrator:
             "- Include hex color codes for ALL colors (skin, hair, eyes, clothing)\n"
             "- Be VERY specific about gender (man/woman/boy/girl)\n"
             "- Always include at least one signature item or distinguishing feature per character\n"
-            "- These descriptions will be passed VERBATIM to an image generator — be precise and visual\n"
+            "- These descriptions will be passed VERBATIM to an image generator - be precise and visual\n"
             "- If the story implies details, fill them in consistently and inventively\n"
             "- Use concrete visual descriptors, not abstract ones (e.g. 'freckled cheeks' not 'friendly face')\n"
         )
@@ -192,7 +193,7 @@ class Illustrator:
             if data:
                 return data, None, 1
             if err and err != "safety_filter":
-                return None, err, 1  # quota/timeout — retrying won't help
+                return None, err, 1  # quota/timeout - retrying won't help
 
         # Attempt 2: simplified scene-only prompt (no characters, just setting + mood)
         safe_prompt = await self._create_safe_prompt(scene_text)
@@ -226,14 +227,18 @@ class Illustrator:
                         "You are an image prompt engineer. Read this scene and write a SAFE image prompt "
                         "that captures the SETTING and MOOD only. Do NOT include any people, characters, "
                         "faces, or figures. Focus on: landscape, architecture, weather, lighting, objects, "
-                        "atmosphere. Keep it under 60 words. Output only the prompt.\n"
-                        f"ART STYLE SUFFIX: {self.art_style_suffix}"
+                        "atmosphere. Do NOT include any art style or rendering instructions. "
+                        "Keep it under 60 words. Output only the prompt."
                     ),
                     temperature=0.3,
                     max_output_tokens=150,
                 ),
             )
-            return response.text.strip() if response.text else None
+            composition = response.text.strip() if response.text else None
+            if not composition:
+                return None
+            # Always append art style suffix programmatically
+            return f"{composition}\n\n{self.art_style_suffix}"
         except Exception as e:
             logger.error("Safe prompt generation failed: %s", e)
             return None
@@ -300,7 +305,7 @@ class Illustrator:
         return "\n".join(descriptions)
 
     async def _create_image_prompt(self, scene_text: str) -> str | None:
-        """Build a hybrid image prompt: verbatim character descriptions + Gemini scene composition."""
+        """Build a hybrid image prompt: verbatim character descriptions + Gemini scene composition + art style suffix."""
         client = get_client()
         model = get_model()
 
@@ -308,7 +313,7 @@ class Illustrator:
         scene_characters = await self._identify_scene_characters(scene_text)
         char_block = self._filter_character_descriptions(scene_characters)
 
-        # Step 2: Ask Gemini for scene composition only (no character descriptions)
+        # Step 2: Ask Gemini for scene composition only (no character descriptions, no style)
         try:
             response = await client.aio.models.generate_content(
                 model=model,
@@ -317,10 +322,7 @@ class Illustrator:
                     parts=[types.Part(text=f"SCENE TO ILLUSTRATE:\n{scene_text}")],
                 ),
                 config=types.GenerateContentConfig(
-                    system_instruction=(
-                        SCENE_COMPOSER_INSTRUCTION
-                        + f"\nART STYLE SUFFIX: {self.art_style_suffix}"
-                    ),
+                    system_instruction=SCENE_COMPOSER_INSTRUCTION,
                     temperature=0.3,
                     max_output_tokens=250,
                 ),
@@ -333,15 +335,17 @@ class Illustrator:
         if not scene_composition:
             return None
 
-        # Step 3: Concatenate character descriptions + scene composition with anti-drift anchors
+        # Step 3: Concatenate character descriptions + scene composition + art style
+        # Art style suffix is ALWAYS appended programmatically (never rely on Gemini to include it)
+        parts: list[str] = []
         if char_block:
-            anti_drift = (
-                "IMPORTANT: Render each character EXACTLY as described above — "
+            parts.append(char_block)
+            parts.append(
+                "IMPORTANT: Render each character EXACTLY as described above - "
                 "same colors, same outfit, same signature items. "
                 "Do not alter, omit, or reinterpret any character detail."
             )
-            final_prompt = f"{char_block}\n\n{anti_drift}\n\n{scene_composition}"
-        else:
-            final_prompt = scene_composition
+        parts.append(scene_composition)
+        parts.append(self.art_style_suffix)
 
-        return final_prompt
+        return "\n\n".join(parts)

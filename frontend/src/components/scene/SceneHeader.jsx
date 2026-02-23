@@ -4,7 +4,7 @@ import { useSceneActions } from '../../contexts/SceneActionsContext';
 import IconBtn from '../IconBtn';
 
 export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, isBusy, audio, onRegenSceneStart }) {
-  const { regenScene, deleteScene, isReadOnly } = useSceneActions();
+  const { regenScene, deleteScene, isReadOnly, canRegen } = useSceneActions();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
@@ -81,7 +81,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
             )}
           </button>
         )}
-        {/* Scene actions — in header row, right-aligned */}
+        {/* Scene actions - in header row, right-aligned */}
         {!isReadOnly && !isBusy && (
           <div
             className="scene-external-actions"
@@ -92,17 +92,19 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
               alignItems: 'center',
             }}
           >
-            <IconBtn
-              label="Regenerate scene"
-              size={18 * scale}
-              onPointerDown={(e) => { e.stopPropagation(); }}
-              onClick={(e) => { e.stopPropagation(); onRegenSceneStart?.(); regenScene?.(scene.scene_number, scene.text); }}
-            >
-              <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-            </IconBtn>
+            {canRegen && (
+              <IconBtn
+                label="Regenerate scene"
+                size={18 * scale}
+                onPointerDown={(e) => { e.stopPropagation(); }}
+                onClick={(e) => { e.stopPropagation(); onRegenSceneStart?.(); regenScene?.(scene.scene_number, scene.text); }}
+              >
+                <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+              </IconBtn>
+            )}
             <IconBtn
               label="Delete scene"
               size={18 * scale}
@@ -133,7 +135,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
           {scene.scene_title}
         </div>
       )}
-      {/* Audio progress bar — shown when playing */}
+      {/* Audio progress bar - shown when playing */}
       {audio.playing && (
         <div
           style={{
@@ -208,7 +210,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
             color: 'var(--text-secondary)', margin: '0 0 0.5rem', fontStyle: 'italic',
           }}>
             Scene {displayIndex ?? scene.scene_number}
-            {scene.scene_title ? ` — ${scene.scene_title}` : ''}
+            {scene.scene_title ? ` - ${scene.scene_title}` : ''}
           </p>
 
           <p style={{

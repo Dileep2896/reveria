@@ -2,9 +2,9 @@
 
 **An interactive multimodal story engine powered by Google Gemini**
 
-StoryForge is an interactive multimodal story engine. Users describe a scenario via voice or text — a mystery, a children's bedtime story, a historical event — and the agent builds it live. It generates scene illustrations, narrative text, narrated voiceover, and an interactive storyboard, all streaming as interleaved output. Users can interrupt and steer the narrative in real-time ("make the villain scarier," "add a plot twist"), and the story dynamically reshapes.
+StoryForge is an interactive multimodal story engine. Users describe a scenario via voice or text - a mystery, a children's bedtime story, a historical event - and the agent builds it live. It generates scene illustrations, narrative text, narrated voiceover, and an interactive storyboard, all streaming as interleaved output. Users can interrupt and steer the narrative in real-time ("make the villain scarier," "add a plot twist"), and the story dynamically reshapes.
 
-**Killer Feature — Director Mode:** A split-screen view where the left panel shows the final story output and the right panel reveals the agent's creative reasoning — why it chose certain imagery, narrative structure decisions, tension arcs, and character development logic. This makes the agent architecture *visible* to judges.
+**Killer Feature - Director Mode:** A split-screen view where the left panel shows the final story output and the right panel reveals the agent's creative reasoning - why it chose certain imagery, narrative structure decisions, tension arcs, and character development logic. This makes the agent architecture *visible* to judges.
 
 Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Storyteller Track).
 
@@ -12,46 +12,46 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 ## Features
 
-- **Multimodal Storytelling** — Text, images, and audio stream together in real-time as an interactive flipbook
-- **Voice Input** — Hold-to-talk voice capture using Web Audio API for hands-free story steering
-- **Audio Narration** — Google Cloud Text-to-Speech narrates each scene with distinct character voices
-- **Art Style Selection** — Choose from 6 visual styles: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, Pencil Sketch
-- **Genre Quick-Start** — Click a genre pill (Mystery, Fantasy, Sci-Fi, Horror, Children's) to populate a starter prompt
-- **Story Continuation & Steering** — Send follow-up prompts to continue, redirect, or reshape the story mid-flow
-- **Director Mode** — A sidebar panel revealing the agent's creative reasoning: narrative structure, tension arcs, character development, and visual decisions
-- **Tension Arc Visualization** — Live graph showing narrative tension across scenes
-- **Interactive Flipbook** — Pages flip with realistic animation, keyboard navigation (arrow keys), and dot-based page navigation
-- **Hybrid Character Consistency** — Three-stage image pipeline: character sheet extraction → scene composition (Gemini) → verbatim character descriptions prepended to prompt. Character details reach Imagen without being summarized.
-- **NSFW/Safety Content Filtering** — Refusal detection intercepts AI-generated safety responses before they reach the frontend. Users see a clean error toast instead of garbled refusal text.
-- **Firebase Auth** — Google Sign-In for user accounts
-- **Story Persistence** — Cloud Firestore saves stories, scenes, and generations with AI-generated titles and cover images
-- **Art Style Memory** — Selected art style is persisted per story and restored when reopening from Library
-- **Library** — Personal bookshelf with 3D CSS book cards, favorites (heart toggle), status filters (All/Favorites/Saved/Completed), search, and sort (Recent/Title)
-  - **Cover Generation State** — Books awaiting AI covers show a blurred, desaturated placeholder with animated "Painting cover..." overlay that auto-refreshes when complete
-  - **Delete with Active Story Cleanup** — Deleting the currently active story properly clears WebSocket state and URL
-- **Explore** — Browse publicly published stories with likes, liked filter, search, and sort (Recent/Title/Author)
-- **Save & Complete Flow** — Save stories to Library, mark as Complete (locks editing), publish to Explore for others to read
-- **Completed Book Protection** — Completed books are read-only regardless of entry point (Library or Explore)
-- **URL Routing** — Deep-linkable story URLs (`/story/:id?page=N`) with auto-resume on page reload
-- **Image Loading States** — "Painting scene" shimmer placeholder while Imagen generates; graceful fallbacks with specific user messages for quota, safety filter, timeout errors
-- **Cover Art Style Matching** — AI-generated book covers use the same art style suffix as scene illustrations
-- **Glassmorphism UI** — Frosted glass panels with dark/light theme support
-- **Toast Notifications** — Global notification system (success/error/warning/info) with auto-dismiss, progress bars, and glassmorphism styling
-- **New Story** — Start fresh at any time with the New Story button — resets both frontend and backend state
-- **Multi-Language Stories** — Generate stories in 8 languages (English, Spanish, French, German, Japanese, Hindi, Portuguese, Chinese) with automatic TTS voice selection per language
-- **Animated Book Entrance** — Smooth entrance animation when the storybook first appears on canvas
-- **Share Link** — Copy a public URL for published stories; unauthenticated users can view shared stories with a "Sign in to create" CTA
-- **PDF Export** — Download any saved story as a polished PDF storybook with cover page, scene illustrations, decorative typography, and page numbering
-- **Reading Mode** — Full-screen immersive experience with karaoke-style word-by-word narration highlighting, auto-advance between scenes, bookmarking, and keyboard controls
-- **Background Ambient Music** — 7 mood-mapped ambient tracks (peaceful, mysterious, tense, chaotic, melancholic, joyful, epic) that auto-crossfade when Director analysis detects mood changes
-- **Character Portrait Gallery** — Generate character face portraits from the Illustrator's character sheet; displayed as circular thumbnails in the Director Panel
-- **Gemini Live Voice** — Real-time voice conversation with Gemini for brainstorming story ideas; detected prompts auto-fill the story input
-- **Complete & Publish Flow** — Confirmation dialogs for completing and publishing stories; publishing is permanent and creates a shareable public link
-- **Portal-Based Tooltips** — Custom glassmorphism tooltips using React `createPortal` that escape overflow:hidden containers
-- **Scene Delete Confirmation** — Portal-based confirmation dialog with scene title preview, matching Library's glassmorphism design
-- **Smart Regen UX** — Scene regeneration keeps old image visible during generation; failed regen preserves previous image instead of showing error
-- **Writing Skeleton Animation** — Animated skeleton lines with typing cursor glow and shimmer sweep, shown during both initial scene generation and scene rewriting
-- **Modular Codebase** — 7 monolithic files decomposed into ~22 focused modules (all under 320 lines) for maintainability
+- **Multimodal Storytelling** - Text, images, and audio stream together in real-time as an interactive flipbook
+- **Voice Input** - Hold-to-talk voice capture using Web Audio API for hands-free story steering
+- **Audio Narration** - Google Cloud Text-to-Speech narrates each scene with distinct character voices
+- **Art Style Selection** - Choose from 6 visual styles: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, Pencil Sketch
+- **Genre Quick-Start** - Click a genre pill (Mystery, Fantasy, Sci-Fi, Horror, Children's) to populate a starter prompt
+- **Story Continuation & Steering** - Send follow-up prompts to continue, redirect, or reshape the story mid-flow
+- **Director Mode** - A sidebar panel revealing the agent's creative reasoning: narrative structure, tension arcs, character development, and visual decisions
+- **Tension Arc Visualization** - Live graph showing narrative tension across scenes
+- **Interactive Flipbook** - Pages flip with realistic animation, keyboard navigation (arrow keys), and dot-based page navigation
+- **Hybrid Character Consistency** - Three-stage image pipeline: character sheet extraction → scene composition (Gemini) → verbatim character descriptions prepended to prompt. Character details reach Imagen without being summarized.
+- **NSFW/Safety Content Filtering** - Refusal detection intercepts AI-generated safety responses before they reach the frontend. Users see a clean error toast instead of garbled refusal text.
+- **Firebase Auth** - Google Sign-In for user accounts
+- **Story Persistence** - Cloud Firestore saves stories, scenes, and generations with AI-generated titles and cover images
+- **Art Style Memory** - Selected art style is persisted per story and restored when reopening from Library
+- **Library** - Personal bookshelf with 3D CSS book cards, favorites (heart toggle), status filters (All/Favorites/Saved/Completed), search, and sort (Recent/Title)
+  - **Cover Generation State** - Books awaiting AI covers show a blurred, desaturated placeholder with animated "Painting cover..." overlay that auto-refreshes when complete
+  - **Delete with Active Story Cleanup** - Deleting the currently active story properly clears WebSocket state and URL
+- **Explore** - Browse publicly published stories with likes, liked filter, search, and sort (Recent/Title/Author)
+- **Save & Complete Flow** - Save stories to Library, mark as Complete (locks editing), publish to Explore for others to read
+- **Completed Book Protection** - Completed books are read-only regardless of entry point (Library or Explore)
+- **URL Routing** - Deep-linkable story URLs (`/story/:id?page=N`) with auto-resume on page reload
+- **Image Loading States** - "Painting scene" shimmer placeholder while Imagen generates; graceful fallbacks with specific user messages for quota, safety filter, timeout errors
+- **Cover Art Style Matching** - AI-generated book covers use the same art style suffix as scene illustrations
+- **Glassmorphism UI** - Frosted glass panels with dark/light theme support
+- **Toast Notifications** - Global notification system (success/error/warning/info) with auto-dismiss, progress bars, and glassmorphism styling
+- **New Story** - Start fresh at any time with the New Story button - resets both frontend and backend state
+- **Multi-Language Stories** - Generate stories in 8 languages (English, Spanish, French, German, Japanese, Hindi, Portuguese, Chinese) with automatic TTS voice selection per language
+- **Animated Book Entrance** - Smooth entrance animation when the storybook first appears on canvas
+- **Share Link** - Copy a public URL for published stories; unauthenticated users can view shared stories with a "Sign in to create" CTA
+- **PDF Export** - Download any saved story as a polished PDF storybook with cover page, scene illustrations, decorative typography, and page numbering
+- **Reading Mode** - Full-screen immersive experience with karaoke-style word-by-word narration highlighting, auto-advance between scenes, bookmarking, and keyboard controls
+- **Background Ambient Music** - 7 mood-mapped ambient tracks (peaceful, mysterious, tense, chaotic, melancholic, joyful, epic) that auto-crossfade when Director analysis detects mood changes
+- **Character Portrait Gallery** - Generate character face portraits from the Illustrator's character sheet; displayed as circular thumbnails in the Director Panel
+- **Gemini Live Voice** - Real-time voice conversation with Gemini for brainstorming story ideas; detected prompts auto-fill the story input
+- **Complete & Publish Flow** - Confirmation dialogs for completing and publishing stories; publishing is permanent and creates a shareable public link
+- **Portal-Based Tooltips** - Custom glassmorphism tooltips using React `createPortal` that escape overflow:hidden containers
+- **Scene Delete Confirmation** - Portal-based confirmation dialog with scene title preview, matching Library's glassmorphism design
+- **Smart Regen UX** - Scene regeneration keeps old image visible during generation; failed regen preserves previous image instead of showing error
+- **Writing Skeleton Animation** - Animated skeleton lines with typing cursor glow and shimmer sweep, shown during both initial scene generation and scene rewriting
+- **Modular Codebase** - 7 monolithic files decomposed into ~22 focused modules (all under 320 lines) for maintainability
 
 ---
 
@@ -59,7 +59,7 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 ```mermaid
 flowchart TB
-    subgraph Frontend["Frontend — React + Vite"]
+    subgraph Frontend["Frontend - React + Vite"]
         direction TB
         Auth["Firebase Auth<br/>(Google Sign-In)"]
         subgraph Views["Application Views"]
@@ -85,7 +85,7 @@ flowchart TB
         FSClient["Firestore Client SDK<br/>(Library / Explore queries)"]
     end
 
-    subgraph Backend["Backend — Python FastAPI"]
+    subgraph Backend["Backend - Python FastAPI"]
         WS["WebSocket Handler<br/>Session Management"]
         AuthMW["Auth Middleware<br/>(Firebase Admin SDK)"]
 
@@ -157,14 +157,14 @@ flowchart TB
         Browser["Browser Client<br/>(React SPA)"]
     end
 
-    subgraph Firebase["Firebase Project — storyforge-hackathon-1beac"]
+    subgraph Firebase["Firebase Project - storyforge-hackathon-1beac"]
         direction TB
         FBAuth["Firebase Authentication<br/>Google Sign-In Provider"]
         FBHosting["Firebase Hosting<br/>Static SPA (frontend build)"]
         FBFirestore[("Cloud Firestore<br/>──────────────────<br/>stories/{storyId}<br/>  ├─ scenes/{sceneNum}<br/>  ├─ generations/{genId}<br/>  ├─ liked_by[ ]<br/>  └─ is_favorite, status,<br/>     title, cover_image_url")]
     end
 
-    subgraph GCP["GCP Project — storyforge-hackathon"]
+    subgraph GCP["GCP Project - storyforge-hackathon"]
         direction TB
         CloudRun["Cloud Run<br/>Backend Container<br/>(FastAPI + Uvicorn)"]
 
@@ -218,7 +218,7 @@ The Narrator must complete before the parallel phase begins, because Illustrator
 
 ### Shared State Pattern
 
-ADK session state returns copies (not references), so agents can't communicate through it. Instead, we use a **`SharedPipelineState`** — a mutable Python object passed by reference to every agent:
+ADK session state returns copies (not references), so agents can't communicate through it. Instead, we use a **`SharedPipelineState`** - a mutable Python object passed by reference to every agent:
 
 ```python
 class SharedPipelineState:
@@ -249,9 +249,9 @@ The Narrator is the story engine. It takes user prompts and generates structured
 
 **How it works:**
 1. The system prompt instructs Gemini to write in present tense, third person, with `[SCENE]` markers between scenes
-2. Text is **streamed** chunk-by-chunk — the ADK agent buffers chunks and splits on `[SCENE]` markers as they arrive
+2. Text is **streamed** chunk-by-chunk - the ADK agent buffers chunks and splits on `[SCENE]` markers as they arrive
 3. Each completed scene is immediately sent to the frontend via WebSocket (the user sees text appear in real-time)
-4. Conversation history is maintained across prompts, enabling **story steering** — users can say "make it scarier" or "add a plot twist" and the Narrator seamlessly weaves it into the next scene
+4. Conversation history is maintained across prompts, enabling **story steering** - users can say "make it scarier" or "add a plot twist" and the Narrator seamlessly weaves it into the next scene
 5. History is trimmed to a sliding window of 10 turns (20 entries) to stay within context limits
 
 #### 2. Illustrator Agent
@@ -281,7 +281,7 @@ Step 3: Image Generation (Imagen 3)
 
 #### 3. Director Agent
 
-The Director provides **meta-commentary** on the creative process — the "why" behind story decisions. This powers the Director Mode sidebar visible to users (and judges).
+The Director provides **meta-commentary** on the creative process - the "why" behind story decisions. This powers the Director Mode sidebar visible to users (and judges).
 
 | Aspect | Detail |
 |--------|--------|
@@ -332,14 +332,14 @@ The agents are backed by three service modules:
 | Service | Role | Key Details |
 |---------|------|-------------|
 | `gemini_client.py` | Gemini API wrapper | Singleton client, streaming generation, audio transcription for voice input |
-| `imagen_client.py` | Imagen 3 wrapper | **Circuit breaker pattern** — after 3 failed retries (429 rate limits with exponential backoff at 10s/20s/40s), trips a 60-second cooldown that skips all calls. Resets on next success. |
+| `imagen_client.py` | Imagen 3 wrapper | **Circuit breaker pattern** - after 3 failed retries (429 rate limits with exponential backoff at 10s/20s/40s), trips a 60-second cooldown that skips all calls. Resets on next success. |
 | `tts_client.py` | Cloud TTS wrapper | MP3 output, configurable voice name, async client |
 
 ### Resilience Patterns
 
 - **Circuit breaker** (Imagen): After 3 consecutive 429 errors, the circuit breaker trips for 60 seconds. During this window, all image generation calls return immediately with `quota_exhausted` instead of making API calls. The breaker resets on the first successful generation.
 - **Graceful image fallback**: When image generation fails (quota, safety filter, timeout), the frontend shows the scene text immediately instead of waiting. Error-specific messages tell users what happened.
-- **Connection-aware abort**: The WebSocket handler tracks `connection_alive` — if the client disconnects mid-generation, the pipeline aborts early to save API budget.
+- **Connection-aware abort**: The WebSocket handler tracks `connection_alive` - if the client disconnects mid-generation, the pipeline aborts early to save API budget.
 - **Character sheet preservation**: On extraction failure or NONE result, the existing character sheet is preserved (not cleared), because previous characters still exist in the story.
 
 ### Orchestration Flow
@@ -478,10 +478,10 @@ The output *weaves* modalities together, not just appends them sequentially:
 [AUDIO]    → narration of the text with gravelly voice
 [DIRECTOR] → "Opening with sensory detail (sound) to build tension. Noir palette chosen to match mystery genre."
 
-[TEXT]      "Inside, the room was chaos — papers scattered, a chair overturned..."
+[TEXT]      "Inside, the room was chaos - papers scattered, a chair overturned..."
 [IMAGE]    → generated: ransacked office interior
 [AUDIO]    → narration continues, tone shifts to urgency
-[DIRECTOR] → "Escalating visual disorder signals rising stakes. No body yet — withholding the payoff."
+[DIRECTOR] → "Escalating visual disorder signals rising stakes. No body yet - withholding the payoff."
 ```
 
 ---
@@ -515,7 +515,7 @@ The output *weaves* modalities together, not just appends them sequentially:
 storyforge/
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx                    # Main app — routing, header, save/complete/publish flows
+│   │   ├── App.jsx                    # Main app - routing, header, save/complete/publish flows
 │   │   ├── firebase.js                # Firebase config and Firestore exports
 │   │   ├── components/
 │   │   │   ├── Logo.jsx + Logo.css    # Animated StoryForge logo
@@ -573,7 +573,7 @@ storyforge/
 │   │   ├── live_session.py            # Gemini Live start/stop/audio/text
 │   │   └── ws_resume.py              # Resume, auto-recover, reset
 │   ├── agents/
-│   │   ├── orchestrator.py            # ADK root agent — coordinates all agents
+│   │   ├── orchestrator.py            # ADK root agent - coordinates all agents
 │   │   ├── narrator.py                # Story text generation agent
 │   │   ├── illustrator.py             # Image generation agent
 │   │   └── director.py                # Creative reasoning agent
@@ -701,9 +701,9 @@ VITE_WS_URL=ws://localhost:8000/ws
 
 ## What's Next
 
-- **Demo Video** — 4-minute walkthrough for hackathon submission
-- **Firebase Hosting** — Deploy frontend SPA
-- **Cloud Run** — Deploy backend container
+- **Demo Video** - 4-minute walkthrough for hackathon submission
+- **Firebase Hosting** - Deploy frontend SPA
+- **Cloud Run** - Deploy backend container
 
 ---
 

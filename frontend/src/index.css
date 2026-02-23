@@ -41,7 +41,7 @@ body {
 }
 
 /* ============================================
-   RESPONSIVE LAYOUT — Header, ControlBar, Director
+   RESPONSIVE LAYOUT - Header, ControlBar, Director
    ============================================ */
 
 /* ---- Header ---- */
@@ -376,6 +376,17 @@ body {
   width: clamp(12px, 1.2vw, 16px);
   height: clamp(12px, 1.2vw, 16px);
 }
+
+/* ---- Pro user avatar glow ---- */
+@keyframes proGlow {
+  0%, 100% { box-shadow: 0 0 6px rgba(245,158,11,0.25); }
+  50% { box-shadow: 0 0 14px rgba(245,158,11,0.5); }
+}
+
+/* ---- Portrait gallery horizontal scroll ---- */
+.portrait-scroll::-webkit-scrollbar { height: 3px; }
+.portrait-scroll::-webkit-scrollbar-track { background: transparent; }
+.portrait-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
 /* ---- Small screens: hide Director, compact layout ---- */
 @media (max-width: 768px) {

@@ -32,7 +32,7 @@
   - Character sheet extraction from full story text (Gemini, temperature 0.1) for visual consistency
   - Image prompt engineering (Gemini, temperature 0.3) with character sheet enforcement
   - Imagen 3 generation at 16:9 aspect ratio with safety filters
-- Concurrent image generation with `asyncio.gather` — all scenes in a batch generate in parallel
+- Concurrent image generation with `asyncio.gather` - all scenes in a batch generate in parallel
 - Built interactive flipbook using `react-pageflip` with 22 fixed page slots (1 cover + 21 content)
 - Created `SceneCard` component with dual states:
   - `SceneComposing`: shimmer skeleton with gradient animation and "Painting scene" icon
@@ -49,10 +49,10 @@
 **Session 4: Story Flow & Word Limits**
 
 - Added word limit to Narrator (300 words per scene) to keep content focused
-- Added art style selection — pills in ControlBar send style to backend, appended to Imagen prompts
+- Added art style selection - pills in ControlBar send style to backend, appended to Imagen prompts
 - Genre quick-start pills populate the input field with genre-appropriate starter prompts
-- Story continuation — follow-up prompts continue the narrative with new scenes
-- New Story button — resets frontend state and backend session (cancels in-flight tasks, clears Narrator history, recreates Illustrator)
+- Story continuation - follow-up prompts continue the narrative with new scenes
+- New Story button - resets frontend state and backend session (cancels in-flight tasks, clears Narrator history, recreates Illustrator)
 - Reset protocol over WebSocket: client sends `{"type": "reset"}`, server acknowledges
 
 **Session 5: Audit & Cleanup**
@@ -81,7 +81,7 @@
 **Session 6: Responsive UI**
 
 - Made entire UI responsive using CSS `clamp()` for fluid scaling:
-  - **Header**: padding, pill sizes, button sizes, theme toggle — all scale with viewport
+  - **Header**: padding, pill sizes, button sizes, theme toggle - all scale with viewport
   - **Director Panel**: width `clamp(220px, 22vw, 320px)`, responsive padding
   - **Control Bar**: all padding, font-sizes, border-radius, icon sizes use `clamp()`
   - **SVG Icons**: replaced hardcoded `width="14" height="14"` with `control-icon` CSS class using `clamp(11px, 1.2vw, 14px)`
@@ -95,8 +95,8 @@
 - Added book depth shadow on `.stf__wrapper` for a realistic 3D effect
 - Added page gutter shadows (inset box-shadows) simulating binding darkness on left/right pages
 - Added `book-page-left` and `book-page-right` CSS classes based on page number
-- Attempted spine shadow overlay — removed because it stayed visible during page flips
-- Attempted page edge thickness layers — reverted per user feedback
+- Attempted spine shadow overlay - removed because it stayed visible during page flips
+- Attempted page edge thickness layers - reverted per user feedback
 - Fixed image edge alignment:
   - Moved `rounded-lg` + `overflow: hidden` to container div instead of `<img>`
   - Removed glass border and box-shadow from images
@@ -104,7 +104,7 @@
   - Added `transform: scale(1.04)` to crop out Imagen's baked-in black letterboxing edges
   - Added `display: block` to eliminate inline image gap
 
-**Session 8: Layout Optimization — More Space for the Book**
+**Session 8: Layout Optimization - More Space for the Book**
 
 - Compacted control bar to reclaim vertical space for the flipbook:
   - Reduced all vertical padding, gaps, and margins in control bar, style pills, input wrap, and send button
@@ -122,7 +122,7 @@
 
 ### Day 2 (Feb 19, 2026)
 
-**Session 9: Director Panel — Structured Data & Collapsible Cards**
+**Session 9: Director Panel - Structured Data & Collapsible Cards**
 
 - Rewrote Director backend prompt (`director.py`) to request structured JSON objects instead of plain strings:
   - `narrative_arc`: summary, stage (exposition/rising_action/climax/falling_action/resolution), pacing (slow/moderate/fast), detail
@@ -146,16 +146,16 @@
 **Session 10: Image Continuity & Pageflip Fix**
 
 - Fixed image continuity breaking across story continuations:
-  - Added `_accumulated_story` to Illustrator — appends each batch's text with `---` separators so `extract_characters()` sees the full cross-batch narrative
-  - `extract_characters()` now merges with existing character sheet instead of rebuilding from scratch — sends existing sheet in the prompt with instructions to preserve entries and only add new characters
+  - Added `_accumulated_story` to Illustrator - appends each batch's text with `---` separators so `extract_characters()` sees the full cross-batch narrative
+  - `extract_characters()` now merges with existing character sheet instead of rebuilding from scratch - sends existing sheet in the prompt with instructions to preserve entries and only add new characters
   - On NONE result or error, existing character sheet is preserved instead of cleared (previous characters still exist in the story)
   - Added `accumulate_story()` calls in both manual pipeline (`main.py`) and ADK pipeline (`orchestrator.py`) before `extract_characters()`
   - Reset naturally clears accumulated state since `Illustrator()` is re-created on "New Story"
 - Fixed pageflip empty-page bounce animation:
-  - Replaced `flip()` with `turnToPage()` in `onFlip` bounce-back handler — `turnToPage` is instant (no 800ms flip animation)
+  - Replaced `flip()` with `turnToPage()` in `onFlip` bounce-back handler - `turnToPage` is instant (no 800ms flip animation)
   - Reduced `setTimeout` delay from 50ms to 0ms for earliest safe execution
   - Touch swipes past content now snap back instantly instead of showing a visible flip-back animation
-- Removed scene count of 4 — hardcoded to 2 scenes per generation:
+- Removed scene count of 4 - hardcoded to 2 scenes per generation:
   - Removed `scene_count` parsing/validation from `main.py` (was allowing 2 or 4)
   - Removed `scene_count` from WebSocket message payload (`useWebSocket.js`)
 
@@ -203,7 +203,7 @@
 
 - Added favorite toggle (heart button) on each Library book card
   - Standalone `.book-3d-fav` positioned outside action buttons, always visible when favorited
-  - Optimistic Firestore update (`is_favorite` field) — no loading skeleton on toggle
+  - Optimistic Firestore update (`is_favorite` field) - no loading skeleton on toggle
   - `translateZ(2px)` fix for click events inside `preserve-3d` containers
 - Added filter pills toolbar: All | Favorites | Saved | Completed
 - Replaced redundant "Status" sort option with explicit filter pills
@@ -235,17 +235,17 @@
 - Fixed ExplorePage not passing `status`/`is_public` in `onOpenBook` payload
   - Was causing own completed books opened from Explore to default to 'draft' status
 
-**Session 18: Per-Scene Actions — Regen Image, Regen Scene, Delete**
+**Session 18: Per-Scene Actions - Regen Image, Regen Scene, Delete**
 
 - Implemented three new scene-level editing operations via WebSocket:
   - **Regen Image**: regenerates only the illustration for a scene (keeps text)
   - **Regen Scene**: rewrites scene text via Gemini + regenerates image + audio in parallel
   - **Delete Scene**: removes scene from Firestore with narrator history tracking
-- New backend helper `_rewrite_scene_text()` — uses Gemini with full story context for coherent rewrites
+- New backend helper `_rewrite_scene_text()` - uses Gemini with full story context for coherent rewrites
 - New WS message types: `regen_start`, `regen_done`, `regen_error`, `scene_deleted`
 - Auto-session recovery: scene actions auto-load story from Firestore if WS session was lost
 - Narrator history updated on regen/delete to maintain continuity (`[Scene X was rewritten/removed]`)
-- `total_scene_count` kept as high-water mark — deleted scene numbers never reused
+- `total_scene_count` kept as high-water mark - deleted scene numbers never reused
 - Frontend `SceneActionsContext` provides `regenImage`, `regenScene`, `deleteScene` to SceneCard
 - `sceneBusy` Set tracks which scenes are actively processing
 - SceneCard hover reveals action buttons; busy state shows shimmer overlay with "Regenerating..." label
@@ -307,7 +307,7 @@
 
 **Session 24: Bug Fixes**
 
-- Fixed Library "New Story" button — now properly auto-saves current story + resets state (was just navigating to `/`)
+- Fixed Library "New Story" button - now properly auto-saves current story + resets state (was just navigating to `/`)
   - `LibraryPage` accepts `onNewStory` prop instead of using `useNavigate`
   - Both empty-state CTA and "+" card use `onNewStory`
 - Page clamping: prevents viewing beyond available scenes on stale URLs or after deletions
@@ -319,36 +319,36 @@
 
 ### Day 4 (Feb 21, 2026)
 
-**Session 25: Cross-Scene Image Consistency — Hybrid Prompt Architecture**
+**Session 25: Cross-Scene Image Consistency - Hybrid Prompt Architecture**
 
 - Rewrote the Illustrator's image prompt pipeline to solve character inconsistency across scenes:
   - **Root cause**: `_create_image_prompt()` asked Gemini to synthesize a full prompt under 100 words. Gemini dropped character details (age, eye color, skin tone, clothing) to fit the limit. Imagen received "woman in dark dress" instead of the full description.
-  - **Solution**: Hybrid prompt construction — split into two stages:
-    1. `_identify_scene_characters()` — new Gemini call (temp 0.0, ~50 tokens) identifies which characters appear in each scene
-    2. `_create_image_prompt()` rewritten — Gemini writes scene composition only (setting, lighting, mood, camera angle), then character descriptions are **prepended verbatim** from the reference sheet
-  - New `SCENE_COMPOSER_INSTRUCTION` replaces `PROMPT_ENGINEER_INSTRUCTION` — explicitly tells Gemini "do NOT describe character appearance"
-  - New `CHARACTER_IDENTIFIER_INSTRUCTION` — identifies characters present in a scene
-  - New `_filter_character_descriptions()` — extracts relevant character blocks from the full reference sheet
-  - Final prompt: `character descriptions + scene composition + art style suffix` — 100% of character visual details reach Imagen
+  - **Solution**: Hybrid prompt construction - split into two stages:
+    1. `_identify_scene_characters()` - new Gemini call (temp 0.0, ~50 tokens) identifies which characters appear in each scene
+    2. `_create_image_prompt()` rewritten - Gemini writes scene composition only (setting, lighting, mood, camera angle), then character descriptions are **prepended verbatim** from the reference sheet
+  - New `SCENE_COMPOSER_INSTRUCTION` replaces `PROMPT_ENGINEER_INSTRUCTION` - explicitly tells Gemini "do NOT describe character appearance"
+  - New `CHARACTER_IDENTIFIER_INSTRUCTION` - identifies characters present in a scene
+  - New `_filter_character_descriptions()` - extracts relevant character blocks from the full reference sheet
+  - Final prompt: `character descriptions + scene composition + art style suffix` - 100% of character visual details reach Imagen
 - Enhanced `extract_characters()` prompt with distinguishing features and color palettes
 - Bumped `max_output_tokens` from 400 → 600 for character extraction
 
 **Session 26: Page Auto-Advance Fix**
 
 - Fixed bug where book doesn't turn to next page on story continuation when current pages are full
-- **Root cause**: Clamp effect (`maxValid = scenes.length`) was fighting the auto-advance effect — when auto-advance flipped to page 3, clamp saw `currentPage(3) > scenes.length(2)` and yanked it back
+- **Root cause**: Clamp effect (`maxValid = scenes.length`) was fighting the auto-advance effect - when auto-advance flipped to page 3, clamp saw `currentPage(3) > scenes.length(2)` and yanked it back
 - **Fix**: Added `if (generating) return;` to clamp effect to skip during generation, plus `generating` in dependency array
 
 **Session 27: Image Loading Shimmer Placeholder**
 
 - Enhanced bare shimmer in SceneCard with "Painting scene" icon and label (matching SceneComposing style)
-- Guarded `<img>` render with `scene.image_url && scene.image_url !== 'error'` — only mounts when URL exists
+- Guarded `<img>` render with `scene.image_url && scene.image_url !== 'error'` - only mounts when URL exists
 - Removed stray `)}` text node that was rendering visibly when image wasn't loaded (exposed by the `<img>` guard change)
 
 **Session 28: Art Style Persistence**
 
 - Fixed art style dropdown resetting to "cinematic" after generation
-- **Root cause**: `artStyle` was local state in ControlBar (`useState('cinematic')`) — route switch from `*` to `/story/:storyId` caused remount, resetting state
+- **Root cause**: `artStyle` was local state in ControlBar (`useState('cinematic')`) - route switch from `*` to `/story/:storyId` caused remount, resetting state
 - **Fix**: Lifted `artStyle` state to App.jsx (same pattern as `controlBarInput`), passed as props to ControlBar
 - Added art style restore on story load:
   - `art_style` stored on Firestore story document (not scene documents)
@@ -379,7 +379,7 @@
   - Both buttons disabled during deletion (already existed)
   - Overlay click-to-close blocked during deletion (already existed)
 
-**Session 31: Library UX — Cover Generation State & Delete Cleanup**
+**Session 31: Library UX - Cover Generation State & Delete Cleanup**
 
 - Added loading state for book covers still being generated in Library:
   - Books with `title_generated=false` show blur+grayscale+dim on cover image (`book-3d-cover--generating` class)
@@ -423,19 +423,19 @@
 
 - Added entrance animation when book first appears on StoryCanvas
 - `entranceReady` state transitions from hidden to visible after scene hydration
-- CSS: `bookEntrance` keyframe — `translateY(30px) scale(0.95)` → `translateY(0) scale(1)` with cubic-bezier easing
+- CSS: `bookEntrance` keyframe - `translateY(30px) scale(0.95)` → `translateY(0) scale(1)` with cubic-bezier easing
 - Preloaded scenes (from Library) get a subtle `fadeIn 0.4s` instead of full reveal animation
 
 **Session 36: Share Link for Published Stories**
 
-- New REST endpoint `GET /api/public/stories/{story_id}` — no auth required, checks `is_public`, returns sanitized story data
+- New REST endpoint `GET /api/public/stories/{story_id}` - no auth required, checks `is_public`, returns sanitized story data
 - Frontend: Share button in header copies public URL to clipboard (visible when published + storyId exists)
 - Unauthenticated story viewing: when `!user && urlStoryId`, fetch public story and render StoryCanvas in read-only mode with "Sign in to create" CTA
 - Fixed timing: added `!authLoading` guard to prevent premature public fetch during Firebase auth resolution
 
 **Session 37: Story Export to PDF**
 
-- New backend service `pdf_export.py` using `fpdf2` — generates polished storybook PDF
+- New backend service `pdf_export.py` using `fpdf2` - generates polished storybook PDF
 - Cover page with image/dark background, scene pages with illustrations + text, decorative separators, page numbering, colophon
 - Endpoint `GET /api/stories/{story_id}/pdf` with auth (owner or public story)
 - Frontend: PDF download button in header, fetches with auth token, creates blob → download
@@ -443,7 +443,7 @@
 
 **Session 38: Reading Mode (Published Books Only)**
 
-- New component `ReadingMode.jsx` — full-screen immersive overlay
+- New component `ReadingMode.jsx` - full-screen immersive overlay
 - Word-by-word narration highlighting (karaoke-style sync with audio)
 - Pause/play controls, bookmarking (Firestore for authenticated, sessionStorage for guests)
 - Segmented progress bar showing scene-by-scene progress
@@ -453,7 +453,7 @@
 
 **Session 39: Background Music / Ambience**
 
-- New hook `useAmbientAudio.js` — Web Audio API with `AudioContext` + `GainNode`
+- New hook `useAmbientAudio.js` - Web Audio API with `AudioContext` + `GainNode`
 - 7 mood-mapped ambient tracks in `/public/ambient/`: peaceful, mysterious, tense, chaotic, melancholic, joyful, epic
 - Crossfade between moods (1s fade-out, 2s fade-in), ambient volume 15%
 - Music toggle button in header (speaker icon)
@@ -466,7 +466,7 @@
 - Auto-extracts characters from story if `_character_sheet` is empty (fallback for stories where `extract_characters` returned NONE)
 - All error paths send `portraits_done` so frontend loading never gets stuck
 - WS handler: `generate_portraits` message type; relaxed guard (no longer requires pre-existing character sheet)
-- Frontend: `PortraitGalleryCard` in DirectorPanel — circular thumbnails (56px) with name labels, "Generate Portraits" button
+- Frontend: `PortraitGalleryCard` in DirectorPanel - circular thumbnails (56px) with name labels, "Generate Portraits" button
 - Portraits persisted to Firestore and restored from Library (fixed: LibraryPage now includes `portraits` + `language` in `onOpenBook`)
 - Portrait generation hidden for completed/published books
 
@@ -481,7 +481,7 @@
 **Session 42: Complete/Publish Flow & Bug Fixes**
 
 - Added confirmation dialogs for Complete and Publish actions
-- Publishing is now permanent (can't unpublish) — button becomes non-interactive "Published" badge
+- Publishing is now permanent (can't unpublish) - button becomes non-interactive "Published" badge
 - Delete all scenes → auto-delete entire book from Firestore + GCS, send `story_deleted` WS message
 - Fixed stuck splash screen after deleting all scenes (`hasBeenPopulatedRef` prevents re-triggering `isHydrating`)
 - Language lock warning in Director empty state: "Language will be locked once you start generating"
@@ -498,7 +498,7 @@
 - Added `sceneTitles` prop to DirectorPanel → TensionVisual → TensionBars for scene title labels
 - Fixed React hooks order violation: converted `activeBatchSceneTitles` from `useMemo` to plain IIFE (was after early return)
 - Reorganized scene action buttons: "Regenerate image" stays on image overlay, "Regenerate scene" + "Delete scene" moved to scene header row (right-aligned, appear on page hover)
-- Replaced `ActionBtn` tooltip with portal-based fixed-position tooltip using `createPortal` + `getBoundingClientRect()` — escapes all `overflow:hidden` ancestors
+- Replaced `ActionBtn` tooltip with portal-based fixed-position tooltip using `createPortal` + `getBoundingClientRect()` - escapes all `overflow:hidden` ancestors
 - Removed Fork Story feature entirely (frontend SceneCard, App.jsx, SceneActionsContext; backend fork endpoint + ForkRequest model)
 
 **Session 44: Deep Decomposition (Round 2)**
@@ -514,28 +514,28 @@
 
 **Session 45: Scene Deletion, Regen & UX Bug Fixes**
 
-- **Director updates on scene delete**: Removed deleted scene number from `generations[].sceneNumbers` AND spliced corresponding `tension.levels` entry — Director panel now re-renders with correct data
+- **Director updates on scene delete**: Removed deleted scene number from `generations[].sceneNumbers` AND spliced corresponding `tension.levels` entry - Director panel now re-renders with correct data
 - **Library updates on scene delete**: Backend now counts remaining scenes and updates Firestore `total_scene_count` after deletion
 - **Delete scene confirmation dialog**: Added portal-based confirmation dialog (matching Library's style) with scene title, warning, Cancel/Delete buttons
-- **Regen scene preserves old image**: `is_regen` text handler no longer clears `image_url` — old image stays visible with busy overlay while new one generates
+- **Regen scene preserves old image**: `is_regen` text handler no longer clears `image_url` - old image stays visible with busy overlay while new one generates
 - **Regen image error preserves old image**: If regen fails but scene already has an image, old image is kept (no "Illustration unavailable")
 - **Regen scene language fix**: Frontend now sends `language` in regen_scene WS message; `scene_rewrite.py` includes "Write entirely in {language}" instruction; TTS receives correct language for voice selection
 - **Writing skeleton animation**: New `WritingSkeleton` component with animated drop-cap block, 8 staggered skeleton lines with shimmer sweep + typing cursor glow, used in both `SceneComposing` (initial generation) and `SceneTextArea` (regen overlay)
 
 ---
 
-**Session 46: Social Features — Likes, Ratings & Comments**
+**Session 46: Social Features - Likes, Ratings & Comments**
 
 - Built full social interaction system on BookDetailsPage (`/book/:storyId`):
   - **Likes**: Reused existing `liked_by` array on story docs, optimistic toggle with `arrayUnion`/`arrayRemove`
   - **Star Ratings (1-5)**: New subcollection `stories/{id}/ratings/{uid}`, denormalized `rating_sum`/`rating_count` on story doc for instant display
   - **Comments**: New subcollection `stories/{id}/comments/{autoId}`, denormalized `comment_count` on story doc
 - New backend router `routers/social.py` with 5 endpoints:
-  - `POST /api/stories/{id}/rate` — upsert rating with atomic `Increment` updates
-  - `GET /api/public/stories/{id}/social` — returns avg rating, count, user rating, comment count
-  - `POST /api/stories/{id}/comments` — create comment (author info from Firebase token)
-  - `GET /api/public/stories/{id}/comments` — list comments (newest first, limit 50)
-  - `DELETE /api/stories/{id}/comments/{cid}` — delete own comment or any comment on own story
+  - `POST /api/stories/{id}/rate` - upsert rating with atomic `Increment` updates
+  - `GET /api/public/stories/{id}/social` - returns avg rating, count, user rating, comment count
+  - `POST /api/stories/{id}/comments` - create comment (author info from Firebase token)
+  - `GET /api/public/stories/{id}/comments` - list comments (newest first, limit 50)
+  - `DELETE /api/stories/{id}/comments/{cid}` - delete own comment or any comment on own story
 - Updated `book_details.py` to include `rating_avg`, `rating_count`, `comment_count` in public response
 - Frontend: social stats row (heart+count, stars+avg, comment icon+count), inline star rating with hover preview, comment form + list with delete button
 - **Pre-populated data**: Rating avg/count/commentCount loaded from initial story fetch (no delayed pop-in)
@@ -548,21 +548,21 @@
 - Gentle opacity shimmer animation with staggered fade-in per card
 - Removed shadow artifacts from loading state
 
-**Session 48: Content Filtering — Multilingual Pre-Pipeline Validation**
+**Session 48: Content Filtering - Multilingual Pre-Pipeline Validation**
 
 - Fixed issue where narrator produced refusal text as scene content (with images) for off-topic/non-story prompts
 - Added `validate_prompt()` pre-filter using Gemini Flash for fast multilingual classification (STORY/REJECT)
 - Expanded `is_refusal()` patterns to cover Hindi, Spanish, French, German, Japanese refusal phrases
-- Pre-filter runs BEFORE expensive pipeline — rejects coding questions, homework, recipes, etc.
+- Pre-filter runs BEFORE expensive pipeline - rejects coding questions, homework, recipes, etc.
 - Fails open on errors (allows prompt through) to avoid blocking legitimate requests
 
-**Session 49: Prompt Engineering — Character Consistency & Quality Improvements**
+**Session 49: Prompt Engineering - Character Consistency & Quality Improvements**
 
-- **Enhanced character sheet format** — extraction prompt now requests hex color codes for all colors, face shape + features, detailed outfit with colors, signature items/accessories, and dominant color palette per character
-- **Anti-drift language** — explicit instruction block between character descriptions and scene composition in image prompts: "Render each character EXACTLY as described above — same colors, same outfit, same signature items"
-- **Richer art style suffixes** — expanded from 5-8 words to 20-25 words per style with rendering-specific details (volumetric lighting, paper texture, cel shading, impasto brushstrokes, cross-hatching, etc.)
-- **Consistency anchors in scene composition** — new CONSISTENCY ANCHORS section in scene composer prompt instructs Gemini to mention signature accessories by name, reference same location names, and use consistent time-of-day cues
-- **Language-aware title generation** — `gen_title()` now accepts language parameter; non-English stories get "The title MUST be in {language}" instruction; removed "children's story" hardcode; language flows from WS message through `auto_generate_meta()` to `gen_title()`
+- **Enhanced character sheet format** - extraction prompt now requests hex color codes for all colors, face shape + features, detailed outfit with colors, signature items/accessories, and dominant color palette per character
+- **Anti-drift language** - explicit instruction block between character descriptions and scene composition in image prompts: "Render each character EXACTLY as described above - same colors, same outfit, same signature items"
+- **Richer art style suffixes** - expanded from 5-8 words to 20-25 words per style with rendering-specific details (volumetric lighting, paper texture, cel shading, impasto brushstrokes, cross-hatching, etc.)
+- **Consistency anchors in scene composition** - new CONSISTENCY ANCHORS section in scene composer prompt instructs Gemini to mention signature accessories by name, reference same location names, and use consistent time-of-day cues
+- **Language-aware title generation** - `gen_title()` now accepts language parameter; non-English stories get "The title MUST be in {language}" instruction; removed "children's story" hardcode; language flows from WS message through `auto_generate_meta()` to `gen_title()`
 - Bumped scene composition word limit from 80 → 100 words for richer descriptions
 - Bumped character extraction `max_output_tokens` from 600 → 1000 for detailed format
 - Bumped title `max_output_tokens` from 20 → 30 and word limit from 4 → 6 for non-Latin scripts
@@ -574,9 +574,9 @@
 ### What's Working
 - Full text + image generation pipeline: prompt → Gemini 2.0 Flash → streamed scenes → Imagen 3 illustrations → interactive flipbook
 - Conversation continuity (story steering/continuation across multiple prompts)
-- **Hybrid image prompt architecture** — character descriptions reach Imagen verbatim (not summarized by Gemini)
+- **Hybrid image prompt architecture** - character descriptions reach Imagen verbatim (not summarized by Gemini)
 - Cross-batch character visual consistency via accumulated story text and character sheet merging
-- 6 art styles with custom glassmorphism dropdown — **persisted per story** and restored on load
+- 6 art styles with custom glassmorphism dropdown - **persisted per story** and restored on load
 - Genre quick-start from cover page
 - New Story reset (frontend + backend)
 - Dark/light glassmorphism theme
@@ -587,22 +587,22 @@
 - Production-ready Docker setup
 - Voice input via MediaRecorder (`useVoiceCapture.js`) with Gemini transcription
 - Cloud TTS narration per scene with compact inline audio player
-- Director Agent with structured JSON analysis — narrative arc, characters, tension, visual style
-- ADK orchestration pipeline (single pipeline, manual removed) — SequentialAgent → ParallelAgent (Illustrator + Director + TTS)
+- Director Agent with structured JSON analysis - narrative arc, characters, tension, visual style
+- ADK orchestration pipeline (single pipeline, manual removed) - SequentialAgent → ParallelAgent (Illustrator + Director + TTS)
 - Director Panel with glanceable visual summaries and collapsible detail text
 - Tension bar chart visualization with per-scene bars and trend indicators
-- Per-batch director data tracking — director analysis follows scene pagination
+- Per-batch director data tracking - director analysis follows scene pagination
 - Firebase Auth (Google Sign-In) and Firestore persistence (stories, scenes, generations)
 - Save flow with 3-tier optimization (instant when metadata available, API call only on first save)
-- Background book meta generation via WebSocket (`book_meta` message) — auto-persisted to Firestore
-- **NSFW/safety content filtering** — refusal detection intercepts harmful content before reaching frontend
+- Background book meta generation via WebSocket (`book_meta` message) - auto-persisted to Firestore
+- **NSFW/safety content filtering** - refusal detection intercepts harmful content before reaching frontend
 - Library page with 3D book cards, favorites, status filters, search, sort
   - **Cover generation state**: blur+shimmer overlay with paintbrush icon while cover generates
   - **Auto-refresh**: Library updates when bookMeta arrives via WebSocket
   - **Delete dialog**: spinner on confirm button with loading state
   - **Active story delete**: clears WS state + navigates to clean URL
 - Explore page with public story browsing, like system, liked filter, search, sort
-- Completed book protection — read-only regardless of entry point
+- Completed book protection - read-only regardless of entry point
 - URL-based routing with story resume on page reload
 - Image error handling with per-reason user messages
 - **Image loading shimmer**: "Painting scene" icon + shimmer while Imagen generates
@@ -613,13 +613,13 @@
 - Header button hover effects (glow lift, shimmer sweep, rotation, press feedback)
 - **Header button guards**: New Story, Save, Complete Book disabled during cover generation
 - Auto-session recovery for scene actions when WS session is lost
-- **Cover art style matching** — book covers use the same art style suffix as scene images
-- Page auto-advance fix — clamp effect generation-aware to prevent fighting auto-flip
+- **Cover art style matching** - book covers use the same art style suffix as scene images
+- Page auto-advance fix - clamp effect generation-aware to prevent fighting auto-flip
 - Multi-language story generation (8 languages) with language-specific TTS voices
 - Animated book entrance transitions
 - Share link for published stories (public URL, unauthenticated viewing)
 - PDF export with cover page, scene images, and polished typography
-- Reading Mode — full-screen immersive with karaoke-style narration sync
+- Reading Mode - full-screen immersive with karaoke-style narration sync
 - Background ambient music with mood-based crossfade (7 mood tracks)
 - Character portrait gallery with auto-extraction fallback
 - Gemini Live Voice conversation for brainstorming story ideas
@@ -628,15 +628,15 @@
 - Portal-based tooltips for scene action buttons
 - **Scene delete confirmation dialog** with portal overlay matching Library design
 - **Scene regen preserves old image** during regeneration (no flash of "unavailable")
-- **Scene regen respects language** — rewritten text and TTS use story's language
-- **Writing skeleton animation** — animated typing cursor + skeleton lines during text generation
-- **Director auto-updates on scene deletion** — tension bars and scene numbers stay accurate
-- **Library scene count updates on deletion** — Firestore `total_scene_count` synced
-- **Social features on BookDetailsPage** — likes, 1-5 star ratings, comments with optimistic UI
+- **Scene regen respects language** - rewritten text and TTS use story's language
+- **Writing skeleton animation** - animated typing cursor + skeleton lines during text generation
+- **Director auto-updates on scene deletion** - tension bars and scene numbers stay accurate
+- **Library scene count updates on deletion** - Firestore `total_scene_count` synced
+- **Social features on BookDetailsPage** - likes, 1-5 star ratings, comments with optimistic UI
   - Denormalized counts on story doc (rating_sum, rating_count, comment_count) for instant display
   - Story author can delete any comment; commenters can delete own
   - Pre-populated social stats from initial story fetch (no delayed pop-in)
-- **Content filtering** — multilingual pre-pipeline validation via Gemini Flash + expanded refusal patterns
+- **Content filtering** - multilingual pre-pipeline validation via Gemini Flash + expanded refusal patterns
 - **Enhanced prompt engineering** for character consistency:
   - Character sheets with hex color codes, face details, signature items, dominant color palette
   - Anti-drift language in image prompts ("Render EXACTLY as described")
@@ -645,4 +645,4 @@
   - Language-aware title generation (titles in story's language, not always English)
 
 ### What Needs to Be Built
-- **Demo Video** — 4-minute walkthrough for submission
+- **Demo Video** - 4-minute walkthrough for submission

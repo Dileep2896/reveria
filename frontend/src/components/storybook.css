@@ -1,5 +1,5 @@
 /* ============================================
-   StoryForge — Storybook Styles
+   StoryForge - Storybook Styles
    (react-pageflip handles all flip animation)
    ============================================ */
 
@@ -163,15 +163,13 @@
 
 /* Book depth shadow */
 .storybook-container .stf__wrapper {
-  box-shadow:
-    0 18px 60px -15px rgba(0, 0, 0, 0.55),
-    0 6px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--book-shadow);
 }
 
 
 
 /* ============================================
-   PAGES — shared base
+   PAGES - shared base
    ============================================ */
 .book-page {
   background: var(--book-page-bg);
@@ -202,11 +200,11 @@
 
 /* ---- Page gutter shadows (darken toward spine) ---- */
 .book-page-left {
-  box-shadow: inset -40px 0 40px -25px rgba(0, 0, 0, 0.3);
+  box-shadow: inset -40px 0 40px -25px var(--book-edge-shadow);
 }
 
 .book-page-right {
-  box-shadow: inset 40px 0 40px -25px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 40px 0 40px -25px var(--book-edge-shadow);
 }
 
 /* ---- Scene Page Content ---- */
@@ -221,10 +219,10 @@
   padding-bottom: calc(24px * var(--page-scale, 1));
 }
 
-/* Page numbers removed — scene badge provides identification */
+/* Page numbers removed - scene badge provides identification */
 
 /* ============================================
-   IDLE STATE — closed book + hint
+   IDLE STATE - closed book + hint
    ============================================ */
 .book-idle {
   display: flex;
@@ -450,7 +448,7 @@
   animation: bounce 1s ease-in-out infinite;
 }
 
-/* Empty pre-allocated slots — completely invisible */
+/* Empty pre-allocated slots - completely invisible */
 .book-page-slot {
   background: transparent !important;
   pointer-events: none;
@@ -604,7 +602,7 @@
   pointer-events: none;
 }
 
-/* Scene header actions (regen/delete) — hidden until page hovered */
+/* Scene header actions (regen/delete) - hidden until page hovered */
 .scene-external-actions {
   opacity: 0;
   transition: opacity 0.15s ease;

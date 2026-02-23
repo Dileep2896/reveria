@@ -7,7 +7,7 @@ from services.gemini_client import get_client, get_model
 
 logger = logging.getLogger("storyforge.director")
 
-DIRECTOR_SYSTEM_PROMPT = """You are the Director of StoryForge — an expert narrative analyst.
+DIRECTOR_SYSTEM_PROMPT = """You are the Director of StoryForge - an expert narrative analyst.
 Analyze the story and return a JSON object with exactly these 4 keys.
 Each key maps to a structured object as described below.
 

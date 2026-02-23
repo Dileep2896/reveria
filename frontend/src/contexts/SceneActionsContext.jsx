@@ -6,6 +6,7 @@ export const SceneActionsContext = createContext({
   deleteScene: null,
   sceneBusy: new Set(),
   isReadOnly: false,
+  canRegen: true,
 });
 
 export function useSceneActions() {

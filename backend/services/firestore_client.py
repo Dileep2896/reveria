@@ -47,7 +47,7 @@ async def persist_story(
             "created_at": datetime.now(timezone.utc),
         })
 
-    # Merge mutable fields — never touches status, title, cover_image_url, is_public
+    # Merge mutable fields - never touches status, title, cover_image_url, is_public
     await story_ref.set(
         {
             "uid": uid,
@@ -92,19 +92,23 @@ async def persist_story(
     logger.info("Persisted story %s (batch %d, %d scenes)", story_id, batch_index, len(scenes))
 
 
-async def delete_story(story_id: str, uid: str) -> bool:
-    """Delete a story document and all subcollections. Returns True if deleted."""
+async def delete_story(story_id: str, uid: str) -> dict[str, Any] | None:
+    """Delete a story document and all subcollections.
+
+    Returns the story data dict on success (so callers can inspect fields
+    like ``is_public``), or ``None`` on failure.
+    """
     db = get_db()
     story_ref = db.collection("stories").document(story_id)
     doc = await story_ref.get()
 
     if not doc.exists:
-        return False
+        return None
 
     data = doc.to_dict()
     if data.get("uid") != uid:
         logger.warning("UID mismatch on delete for story %s", story_id)
-        return False
+        return None
 
     # Delete subcollections: scenes, generations
     for sub in ("scenes", "generations"):
@@ -115,7 +119,7 @@ async def delete_story(story_id: str, uid: str) -> bool:
     # Delete the story document itself
     await story_ref.delete()
     logger.info("Deleted story %s and subcollections", story_id)
-    return True
+    return data
 
 
 async def load_story(story_id: str, uid: str) -> dict[str, Any] | None:

@@ -28,9 +28,9 @@ export default function PortraitGallery({ portraits = [], portraitsLoading = fal
         )}
       </div>
       {portraits.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px' }} className="portrait-scroll">
           {portraits.map((p, i) => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
               {p.image_url ? (
                 <img
                   src={p.image_url}

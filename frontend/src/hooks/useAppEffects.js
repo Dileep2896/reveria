@@ -12,13 +12,16 @@ export default function useAppEffects({
   directorData, ambient,
   location,
 }) {
-  // Sync storyId → URL (skip for /book/ pages, library, explore)
+  // Sync storyId → URL (skip for /book/ pages, library, explore, subscription, admin)
   const isBookPage = location.pathname.startsWith('/book/');
+  const isSubscription = location.pathname === '/subscription';
+  const isAdminPage = location.pathname === '/admin';
+  const isTermsPage = location.pathname === '/terms';
   useEffect(() => {
-    if (!storyId || isLibrary || isExplore || isBookPage) return;
+    if (!storyId || isLibrary || isExplore || isBookPage || isSubscription || isAdminPage || isTermsPage) return;
     if (urlStoryId === storyId) return;
     navigate(`/story/${storyId}`, { replace: true });
-  }, [storyId, urlStoryId, isLibrary, isExplore, isBookPage, navigate]);
+  }, [storyId, urlStoryId, isLibrary, isExplore, isBookPage, isSubscription, isAdminPage, isTermsPage, navigate]);
 
   // Reset "Saved!" when new generation starts
   useEffect(() => {
@@ -94,7 +97,7 @@ export default function useAppEffects({
       setLanguage('English');
       setBookmarkedSceneIndex(null);
       navigate('/');
-      addToast('Story deleted — all scenes were removed', 'info');
+      addToast('Story deleted - all scenes were removed', 'info');
     });
   }, [setStoryDeletedHandler, clearState, navigate, addToast, setStoryStatus, setIsPublished, setLanguage, setArtStyle, setBookmarkedSceneIndex]);
 

@@ -1,4 +1,4 @@
-/* Registered custom property — enables smooth gradient animation */
+/* Registered custom property - enables smooth gradient animation */
 @property --sweep {
   syntax: '<percentage>';
   inherits: false;
@@ -67,7 +67,7 @@
   position: relative; z-index: 5;
 }
 
-/* Contained image — 60% of body height */
+/* Contained image - 60% of body height */
 .rm-img-wrap {
   flex: 0 0 60%;
   display: flex; align-items: center; justify-content: center;
@@ -107,7 +107,7 @@
   100% { transform: scale(1.04) translate(0.3%, 0.3%); }
 }
 
-/* Text area — fills remaining ~40%, vertically centers content */
+/* Text area - fills remaining ~40%, vertically centers content */
 .rm-text-area {
   flex: 1 1 0; min-height: 0; overflow: hidden;
   display: flex; flex-direction: column; justify-content: center;
@@ -150,12 +150,12 @@
   transition: --sweep 0.55s ease-out;
 }
 
-/* Already spoken — fully lit */
+/* Already spoken - fully lit */
 .rm-w.rm-past {
   --sweep: 100%;
 }
 
-/* Current word — sweep animates 0% → 100%, soft glow via filter */
+/* Current word - sweep animates 0% → 100%, soft glow via filter */
 .rm-w.rm-now {
   --sweep: 100%;
   filter: drop-shadow(0 0 6px rgba(255,255,255,0.18));

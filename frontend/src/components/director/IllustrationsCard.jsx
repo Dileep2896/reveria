@@ -53,7 +53,7 @@ export default function IllustrationsCard({ imageTiers }) {
         />
       </div>
 
-      {/* Summary — always visible */}
+      {/* Summary - always visible */}
       <p style={{
         fontSize: '10px',
         color: fallbackCount === 0 ? '#22c55e' : 'var(--text-muted)',
@@ -63,7 +63,7 @@ export default function IllustrationsCard({ imageTiers }) {
         {summary}
       </p>
 
-      {/* Per-scene rows — collapsible */}
+      {/* Per-scene rows - collapsible */}
       {expanded && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '8px', animation: 'fadeIn 0.3s ease' }}>
           {imageTiers.map(({ scene, tier }) => {

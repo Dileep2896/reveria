@@ -4,6 +4,11 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
+  sendEmailVerification,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -36,6 +41,11 @@ export {
   signInWithPopup,
   GoogleAuthProvider,
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
+  sendEmailVerification,
   collection,
   query,
   where,

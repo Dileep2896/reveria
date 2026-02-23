@@ -4,7 +4,7 @@ import useVoiceCapture from '../hooks/useVoiceCapture';
 import { ART_STYLES } from '../data/artStyles';
 import { LANGUAGES, PLACEHOLDERS } from '../data/languages';
 
-export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, setLanguage, languageLocked, live }) {
+export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, setLanguage, languageLocked, live, usage }) {
   const [focused, setFocused] = useState(false);
   const [sceneCount, setSceneCount] = useState(2);
   const [styleOpen, setStyleOpen] = useState(false);
@@ -155,7 +155,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
             ))}
           </div>
 
-          {/* Language dropdown — only for new books before first generation */}
+          {/* Language dropdown - only for new books before first generation */}
           {!languageLocked && (
           <div className="control-style-dropdown">
             <button
@@ -192,6 +192,28 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
           </div>
           )}
 
+          {/* Usage counter pill — hidden for pro (limit is effectively unlimited) */}
+          {usage && usage.limits?.generations_today > 0 && usage.usage?.tier !== 'pro' && (
+            <div
+              style={{
+                padding: '2px 8px',
+                borderRadius: '999px',
+                fontSize: '0.65rem',
+                fontWeight: 600,
+                color: (usage.usage?.generations_today || 0) >= usage.limits.generations_today * 0.9
+                  ? 'var(--status-error, #ef4444)'
+                  : 'var(--text-muted)',
+                background: 'var(--glass-bg-strong)',
+                border: '1px solid var(--glass-border)',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+              title="Generations used today"
+            >
+              {usage.usage?.generations_today || 0}/{usage.limits.generations_today}
+            </div>
+          )}
+
           <div className="control-input-divider" />
 
           <textarea
@@ -205,7 +227,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 handleSubmit(e);
               }
             }}
-            placeholder={recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted — retry in ${quotaCooldown}s` : generating ? 'Story is being crafted...' : (PLACEHOLDERS[language] || PLACEHOLDERS.English)}
+            placeholder={recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : generating ? 'Story is being crafted...' : (PLACEHOLDERS[language] || PLACEHOLDERS.English)}
             disabled={isDisabled}
             className="flex-1 bg-transparent outline-none control-input"
             style={{ color: 'var(--text-primary)', resize: 'none' }}
@@ -279,7 +301,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
           )}
         </div>
 
-        {/* Live toggle button — inline in form */}
+        {/* Live toggle button - inline in form */}
         {live && (
           <button
             type="button"
@@ -325,7 +347,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 <span className="live-dot" style={{ animationDelay: '0.2s' }} />
                 <span className="live-dot" style={{ animationDelay: '0.4s' }} />
               </span>
-              Listening — describe a story idea...
+              Listening - describe a story idea...
             </div>
           )}
           {live.transcript.slice(-6).map((msg, i) => (

@@ -1,4 +1,4 @@
-"""Book details endpoints — generate, update, public view."""
+"""Book details endpoints - generate, update, public view."""
 
 import time
 from typing import Any

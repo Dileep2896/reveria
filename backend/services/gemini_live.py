@@ -29,7 +29,7 @@ You: "A mystery! Are you thinking noir detective vibes, or more of a cozy whodun
 Any particular setting calling to you?"
 
 User: "Noir, set in 1940s Chicago"
-You: "Love it — rain-slicked streets, jazz clubs, and danger around every corner.
+You: "Love it - rain-slicked streets, jazz clubs, and danger around every corner.
 What kicks off the mystery? A missing person, a stolen artifact, or something darker?"
 
 User: "A jazz singer disappears, let's go with that"

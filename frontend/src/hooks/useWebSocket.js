@@ -25,6 +25,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const [bookMeta, setBookMeta] = useState(null);
   const [portraits, setPortraits] = useState([]);
   const [portraitsLoading, setPortraitsLoading] = useState(false);
+  const [usage, setUsage] = useState(null);
 
   const liveHandlerRef = useRef(null);
   const storyDeletedRef = useRef(null);
@@ -46,7 +47,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
 
   const storyResolved = initialState !== undefined;
 
-  // Build message handler (stable — all refs)
+  // Build message handler (stable - all refs)
   const handleMessage = useRef(null);
   if (!handleMessage.current) {
     handleMessage.current = createWsHandlers({
@@ -56,6 +57,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
       generationsRef, currentBatchIndexRef, initialStateRef, hydratedRef,
       addToastRef, quotaImageToastFired, cooldownTimer,
       liveHandlerRef, storyDeletedRef, setControlBarInput: (v) => controlBarInputRef.current?.(v),
+      setUsage,
     });
   }
 
@@ -190,6 +192,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
     setBookMeta(null);
     setPortraits([]);
     setPortraitsLoading(false);
+    setUsage(null);
     quotaImageToastFired.current = false;
     setStoryId(null);
     storyIdRef.current = null;
@@ -223,5 +226,5 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const setStoryDeletedHandler = useCallback((handler) => { storyDeletedRef.current = handler; }, []);
   const setControlBarInputHandler = useCallback((handler) => { controlBarInputRef.current = handler; }, []);
 
-  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, send, sendAudio, sendSceneAction, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler, setControlBarInputHandler };
+  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendAudio, sendSceneAction, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler, setControlBarInputHandler };
 }

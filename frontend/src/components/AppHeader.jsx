@@ -18,9 +18,64 @@ export default function AppHeader({
   ambient,
   theme, toggleTheme,
   user, signOut,
+  isAdmin,
+  userTier,
 }) {
   // On /book/ pages, hide all story-specific action buttons
   const isNonStoryPage = isLibrary || isExplore || isBookPage;
+
+  // Admin-only header: just logo, theme toggle, profile menu
+  if (isAdmin) {
+    return (
+      <header
+        className="relative z-20 flex items-center justify-between header-bar"
+        style={{
+          background: 'var(--glass-bg-strong)',
+          backdropFilter: 'var(--glass-blur)',
+          WebkitBackdropFilter: 'var(--glass-blur)',
+          borderBottom: '1px solid var(--glass-border)',
+          boxShadow: 'var(--shadow-glass)',
+        }}
+      >
+        <div onClick={() => navigate('/admin')} style={{ cursor: 'pointer' }}>
+          <Logo size="compact" />
+        </div>
+        <div className="flex items-center header-actions">
+          <button
+            onClick={toggleTheme}
+            className="rounded-full flex items-center justify-center transition-all header-theme-btn"
+            style={{
+              background: 'var(--glass-bg)',
+              border: '1px solid var(--glass-border)',
+              color: 'var(--text-secondary)',
+              backdropFilter: 'var(--glass-blur)',
+            }}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
+          </button>
+          <ProfileMenu user={user} onSignOut={signOut} onNavigate={navigate} isAdmin={isAdmin} userTier={userTier} />
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header
       className="relative z-20 flex items-center justify-between header-bar"
@@ -65,7 +120,7 @@ export default function AppHeader({
           </span>
         </div>
 
-        {/* New Story — only visible when there's content in story view */}
+        {/* New Story - only visible when there's content in story view */}
         {!isNonStoryPage && !viewingReadOnly && scenes.length > 0 && !generating && (
           <button
             onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate('/'); }}
@@ -84,7 +139,7 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* Save to Library — visible when story has 2+ scenes and not generating */}
+        {/* Save to Library - visible when story has 2+ scenes and not generating */}
         {!isNonStoryPage && !viewingReadOnly && storyStatus !== 'completed' && scenes.length >= 2 && !generating && storyId && (
           <button
             onClick={handleSave}
@@ -104,7 +159,7 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* Complete Book — visible when story is saved */}
+        {/* Complete Book - visible when story is saved */}
         {!isNonStoryPage && !viewingReadOnly && storyStatus === 'saved' && scenes.length >= 2 && !generating && storyId && (
           <button
             onClick={() => setShowCompleteDialog(true)}
@@ -123,7 +178,7 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* Publish — navigates to Book Details pre-publish page */}
+        {/* Publish - navigates to Book Details pre-publish page */}
         {!isNonStoryPage && !viewingReadOnly && storyStatus === 'completed' && storyId && !isPublished && (
           <button
             onClick={() => navigate(`/book/${storyId}`, { state: { prepublish: true } })}
@@ -138,7 +193,7 @@ export default function AppHeader({
             Publish
           </button>
         )}
-        {/* Published — "Book Page" button to navigate to /book/:storyId */}
+        {/* Published - "Book Page" button to navigate to /book/:storyId */}
         {!isNonStoryPage && !viewingReadOnly && storyStatus === 'completed' && storyId && isPublished && (
           <button
             onClick={() => navigate(`/book/${storyId}`)}
@@ -155,7 +210,7 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* Reading Mode — visible for read-only stories (from Explore) */}
+        {/* Reading Mode - visible for read-only stories (from Explore) */}
         {!isNonStoryPage && viewingReadOnly && scenes.length > 0 && !generating && (
           <button
             onClick={() => setReadingMode(true)}
@@ -171,7 +226,7 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* PDF Export — visible only for completed stories */}
+        {/* PDF Export - visible only for completed stories */}
         {!isNonStoryPage && !viewingReadOnly && storyId && scenes.length >= 2 && !generating && storyStatus === 'completed' && !isPublished && (
           <button
             onClick={async () => {
@@ -179,6 +234,7 @@ export default function AppHeader({
               try {
                 const token = idToken;
                 const res = await fetch(`${API_URL}/api/stories/${storyId}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+                if (res.status === 429) { addToast('Daily PDF export limit reached - upgrade to Pro', 'error'); return; }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
@@ -231,7 +287,7 @@ export default function AppHeader({
           </button>
         </div>
 
-        {/* Director toggle — glass pill (hidden on non-story pages and read-only views) */}
+        {/* Director toggle - glass pill (hidden on non-story pages and read-only views) */}
         {!isNonStoryPage && !viewingReadOnly && (
           <button
             onClick={() => setDirectorOpen(!directorOpen)}
@@ -277,7 +333,7 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* Theme toggle — glass circle */}
+        {/* Theme toggle - glass circle */}
         <button
           onClick={toggleTheme}
           className="rounded-full flex items-center justify-center transition-all header-theme-btn"
@@ -309,7 +365,7 @@ export default function AppHeader({
         </button>
 
         {/* Profile menu */}
-        <ProfileMenu user={user} onSignOut={signOut} />
+        <ProfileMenu user={user} onSignOut={signOut} onNavigate={navigate} isAdmin={isAdmin} userTier={userTier} />
       </div>
     </header>
   );

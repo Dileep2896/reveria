@@ -48,7 +48,7 @@ export default function SceneTextArea({ scene, scale, showText, skip, animateTex
         />
       </div>
 
-      {/* Story text — fills remaining space, overflow hidden with fade */}
+      {/* Story text - fills remaining space, overflow hidden with fade */}
       <div
         className="scene-text-area"
         style={{

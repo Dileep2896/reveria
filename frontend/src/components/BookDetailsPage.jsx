@@ -50,12 +50,12 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
   const [loadedScenes, setLoadedScenes] = useState(null);
   const [loadingScenes, setLoadingScenes] = useState(false);
 
-  // Social state — ratings
+  // Social state - ratings
   const [ratingData, setRatingData] = useState({ avg: 0, count: 0, userRating: null, commentCount: 0 });
   const [hoverRating, setHoverRating] = useState(0);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
 
-  // Social state — comments
+  // Social state - comments
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentText, setCommentText] = useState('');
@@ -70,7 +70,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
       setStoryLoading(true);
       try {
         if (!user) {
-          // Guest — use public API (no auth required)
+          // Guest - use public API (no auth required)
           const res = await fetch(`${API_URL}/api/public/stories/${storyId}/details`);
           if (cancelled) return;
           if (!res.ok) { setStoryLoading(false); return; }
@@ -100,7 +100,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
           setIsOwner(false);
           if (data.book_details) setDetails(data.book_details);
         } else {
-          // Auth'd user — read from Firestore directly
+          // Auth'd user - read from Firestore directly
           const storyRef = doc(db, 'stories', storyId);
           const snap = await getDoc(storyRef);
           if (cancelled) return;
@@ -263,7 +263,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
     }
   }, [storyId, idToken, addToast]);
 
-  // Read This Story — load scenes and open Reading Mode
+  // Read This Story - load scenes and open Reading Mode
   const handleReadStory = useCallback(async () => {
     if (loadedScenes) {
       setReadingMode(true);
@@ -273,13 +273,13 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
     try {
       let scenes;
       if (!user) {
-        // Guest — load via public API
+        // Guest - load via public API
         const res = await fetch(`${API_URL}/api/public/stories/${storyId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         scenes = data.scenes || [];
       } else {
-        // Auth'd — load from Firestore
+        // Auth'd - load from Firestore
         const scenesSnap = await getDocs(collection(db, 'stories', storyId, 'scenes'));
         scenes = scenesSnap.docs
           .map((d) => d.data())
@@ -299,7 +299,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
     }
   }, [storyId, user, loadedScenes, addToast]);
 
-  // Browse Story — load into WS state and navigate to /story/
+  // Browse Story - load into WS state and navigate to /story/
   const [browsingStory, setBrowsingStory] = useState(false);
   const handleBrowseStory = useCallback(async () => {
     if (browsingStory) return;
@@ -946,7 +946,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
         </div>
       </div>
 
-      {/* Comments section — only for published stories */}
+      {/* Comments section - only for published stories */}
       {isPublished && (
         <div className="book-details-comments">
           <h3 className="book-details-section-title">Comments</h3>
@@ -1030,7 +1030,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
         </div>
       )}
 
-      {/* Reading Mode overlay — portal to body to escape overflow:hidden ancestors */}
+      {/* Reading Mode overlay - portal to body to escape overflow:hidden ancestors */}
       {readingMode && loadedScenes && loadedScenes.length > 0 && createPortal(
         <ReadingMode
           scenes={loadedScenes}

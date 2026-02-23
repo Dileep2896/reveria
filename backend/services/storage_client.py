@@ -1,4 +1,4 @@
-"""GCS media upload — decode base64 data URLs and upload to Cloud Storage."""
+"""GCS media upload - decode base64 data URLs and upload to Cloud Storage."""
 
 import asyncio
 import base64

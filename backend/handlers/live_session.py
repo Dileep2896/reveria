@@ -4,6 +4,8 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from services.usage import check_limit, increment_usage, build_usage_message
+
 logger = logging.getLogger("storyforge")
 
 
@@ -19,9 +21,18 @@ async def handle_live_start(
     websocket: WebSocket,
     live_session,
     live_response_task: asyncio.Task | None,
+    *,
+    uid: str | None = None,
 ) -> tuple[Any, asyncio.Task | None]:
     """Start a Gemini Live session. Returns (live_session, live_response_task)."""
     from services.gemini_live import LiveSession
+
+    # Check live session limit
+    if uid:
+        allowed, reason, _ = await check_limit(uid, "live_session")
+        if not allowed:
+            await _safe_send(websocket, {"type": "error", "content": "Daily live session limit reached - upgrade to Pro for unlimited sessions"})
+            return live_session, live_response_task
 
     if live_session and live_session.is_active:
         await live_session.close()
@@ -42,6 +53,13 @@ async def handle_live_start(
                 logger.error("Live response loop error: %s", e)
         live_response_task = asyncio.create_task(_live_response_loop())
         await _safe_send(websocket, {"type": "live_started"})
+        # Increment live session usage
+        if uid:
+            try:
+                updated = await increment_usage(uid, "live_session")
+                await _safe_send(websocket, build_usage_message(updated))
+            except Exception:
+                pass
     else:
         await _safe_send(websocket, {"type": "error", "content": "Failed to start live session"})
     return live_session, live_response_task

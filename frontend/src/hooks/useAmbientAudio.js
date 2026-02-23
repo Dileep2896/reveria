@@ -40,8 +40,8 @@ export default function useAmbientAudio() {
   const bufferCache = useRef({});
   const currentMood = useRef(null);
   const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const mutedRef = useRef(false);
+  const [muted, setMuted] = useState(true);
+  const mutedRef = useRef(true);
 
   const getContext = useCallback(() => {
     if (!ctxRef.current) {

@@ -52,7 +52,7 @@ export default function useBookManager({
         navigate(`/story/${bookData.storyId}`);
       }, 50);
     } else if (bookData.status === 'completed') {
-      // Own completed book — view only, no WS resume
+      // Own completed book - view only, no WS resume
       reset();
       setStoryStatus('completed');
       setIsPublished(bookData.is_public || false);

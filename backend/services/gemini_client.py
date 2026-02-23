@@ -89,7 +89,7 @@ async def generate_stream(
         raise
 
     if not yielded_any:
-        logger.warning("generate_stream produced no text — possible silent safety block")
+        logger.warning("generate_stream produced no text - possible silent safety block")
         raise ContentBlockedError("Content blocked by safety filters.")
 
 

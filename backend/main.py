@@ -17,8 +17,9 @@ from services.auth import verify_token
 from services.content_filter import is_refusal as _is_refusal, validate_prompt as _validate_prompt
 from services.book_meta import auto_generate_meta as _auto_generate_meta
 from services.portrait_service import generate_portraits as _generate_portraits
+from services.usage import get_usage, check_limit, increment_usage, build_usage_message
 
-from routers import stories, bookmarks, meta, book_details, social
+from routers import stories, bookmarks, meta, book_details, social, usage, admin
 
 from agents.orchestrator import create_story_orchestrator
 from google.adk.sessions import InMemorySessionService  # type: ignore[import-untyped]
@@ -52,6 +53,8 @@ app.include_router(bookmarks.router)
 app.include_router(meta.router)
 app.include_router(book_details.router)
 app.include_router(social.router)
+app.include_router(usage.router)
+app.include_router(admin.router)
 
 
 class ConnectionManager:
@@ -139,7 +142,7 @@ async def _run_adk_pipeline(
             if refusal_kind:
                 refusal_detected = True
                 if refusal_kind == "offtopic":
-                    msg = "StoryForge is a storytelling app — try describing a story you'd like me to create!"
+                    msg = "StoryForge is a storytelling app - try describing a story you'd like me to create!"
                 else:
                     msg = "Your prompt was blocked by our safety filters. Please try a different story idea."
                 logger.warning("ADK narrator produced %s refusal, aborting batch", refusal_kind)
@@ -209,6 +212,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     logger.info("Authenticated user: %s", uid)
 
     await manager.connect(websocket)
+
+    # Send initial usage data
+    try:
+        initial_usage = await get_usage(uid)
+        await _safe_send(websocket, build_usage_message(initial_usage))
+    except Exception as e:
+        logger.warning("Failed to send initial usage: %s", e)
+
     narrator = Narrator()
     illustrator = Illustrator()
     director = Director()
@@ -261,7 +272,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             # ── Gemini Live conversation mode ──
             if msg_type == "live_start":
-                live_session, live_response_task = await handle_live_start(websocket, live_session, live_response_task)
+                live_session, live_response_task = await handle_live_start(websocket, live_session, live_response_task, uid=uid)
                 continue
 
             if msg_type == "live_audio_chunk":
@@ -276,7 +287,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 live_session, live_response_task = await handle_live_stop(websocket, live_session, live_response_task)
                 continue
 
-            # Handle voice input — transcribe and send back to populate text field
+            # Handle voice input - transcribe and send back to populate text field
             if msg_type == "voice_input":
                 audio_data = message.get("audio_data", "")
                 mime_type = message.get("mime_type", "audio/webm")
@@ -310,11 +321,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             if msg_type == "regen_image":
-                await handle_regen_image(websocket, message, active_story_id, illustrator)
+                await handle_regen_image(websocket, message, active_story_id, illustrator, uid=uid)
                 continue
 
             if msg_type == "regen_scene":
-                await handle_regen_scene(websocket, message, active_story_id, illustrator, narrator)
+                await handle_regen_scene(websocket, message, active_story_id, illustrator, narrator, uid=uid)
                 continue
 
             if msg_type == "delete_scene":
@@ -334,6 +345,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             language = message.get("language", "English")
 
             if not active_story_id:
+                allowed, reason, _ = await check_limit(uid, "create_story")
+                if not allowed:
+                    await _safe_send(websocket, {"type": "error", "content": f"Story limit reached - upgrade to Pro for unlimited stories"})
+                    await _safe_send(websocket, {"type": "status", "content": "done"})
+                    continue
                 active_story_id = f"{uid}_{int(time.time())}"
                 await _safe_send(websocket, {"type": "story_id", "content": active_story_id})
 
@@ -350,8 +366,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if not await _validate_prompt(user_input):
                 await _safe_send(websocket, {
                     "type": "error",
-                    "content": "StoryForge is a storytelling app — try describing a story you'd like me to create!",
+                    "content": "StoryForge is a storytelling app - try describing a story you'd like me to create!",
                 })
+                await _safe_send(websocket, {"type": "status", "content": "done"})
+                continue
+
+            # Usage limit: generations per day
+            gen_allowed, gen_reason, _ = await check_limit(uid, "generate")
+            if not gen_allowed:
+                await _safe_send(websocket, {"type": "error", "content": "Daily generation limit reached - upgrade to Pro for unlimited generations"})
                 await _safe_send(websocket, {"type": "status", "content": "done"})
                 continue
 
@@ -382,8 +405,17 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         director_data=director_result,
                         language=language,
                     )
+                    # Track usage: increment generation counter (and create_story on first batch)
+                    try:
+                        if batch_index == 0:
+                            await increment_usage(uid, "create_story")
+                        updated_usage = await increment_usage(uid, "generate")
+                        await _safe_send(websocket, build_usage_message(updated_usage))
+                    except Exception as ue:
+                        logger.warning("Usage increment failed: %s", ue)
+
                     meta_task = asyncio.create_task(
-                        _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send, language=language)
+                        _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send, language=language, character_sheet=illustrator._character_sheet)
                     )
                     pipeline_tasks.append(meta_task)
 

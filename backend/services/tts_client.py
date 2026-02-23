@@ -7,7 +7,7 @@ from google.cloud import texttospeech_v1beta1 as tts
 
 logger = logging.getLogger("storyforge.tts")
 
-# Wavenet voices — support SSML <mark> tags for word-level timepoints.
+# Wavenet voices - support SSML <mark> tags for word-level timepoints.
 # (Studio voices sound slightly better but do NOT support <mark> tags.)
 LANGUAGE_VOICES = {
     "english": "en-US-Wavenet-D",

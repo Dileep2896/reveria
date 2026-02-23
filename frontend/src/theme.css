@@ -1,11 +1,11 @@
 /* ============================================
-   StoryForge — Glassmorphism Theme System
+   StoryForge - Glassmorphism Theme System
    ============================================ */
 
 :root {
   /* ---- Dark Mode (default) ---- */
 
-  /* Background — deep with color blobs behind glass */
+  /* Background - deep with color blobs behind glass */
   --bg-primary: #07060e;
   --bg-gradient: linear-gradient(135deg, #07060e 0%, #0d0b1a 40%, #0a0818 100%);
 
@@ -33,12 +33,12 @@
   --text-muted: rgba(255, 255, 255, 0.35);
   --text-inverse: #07060e;
 
-  /* Accent — Amber/Gold (story warmth) */
+  /* Accent - Amber/Gold (story warmth) */
   --accent-primary: #f59e0b;
   --accent-primary-soft: rgba(245, 158, 11, 0.1);
   --accent-primary-glow: rgba(245, 158, 11, 0.25);
 
-  /* Accent — Violet (director / AI) */
+  /* Accent - Violet (director / AI) */
   --accent-secondary: #a78bfa;
   --accent-secondary-soft: rgba(167, 139, 250, 0.1);
   --accent-secondary-glow: rgba(167, 139, 250, 0.2);
@@ -147,7 +147,7 @@
   100% { opacity: 1; filter: blur(0); transform: translateY(0); }
 }
 
-/* Regen text animations — ink-dissolve-in effect */
+/* Regen text animations - ink-dissolve-in effect */
 @keyframes textRegenContainer {
   0% { opacity: 0; }
   100% { opacity: 1; }

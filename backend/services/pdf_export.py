@@ -40,13 +40,13 @@ class _StoryPDF(FPDF):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._footer_enabled = False
-        self._fn = "Times"  # font family name — overridden if Unicode font found
+        self._fn = "Times"  # font family name - overridden if Unicode font found
 
     def setup_fonts(self) -> None:
         """Register a Unicode font if available, else fall back to Times."""
         font_path = _find_unicode_font()
         if font_path:
-            # Register the same file for all styles (fake bold/italic — glyphs are
+            # Register the same file for all styles (fake bold/italic - glyphs are
             # identical but text won't crash on non-Latin characters)
             self.add_font("UniFont", "", font_path)
             self.add_font("UniFont", "B", font_path)
@@ -55,7 +55,7 @@ class _StoryPDF(FPDF):
             self._fn = "UniFont"
             logger.info("PDF using Unicode font: %s", font_path)
         else:
-            logger.warning("No Unicode font found — PDF will only support Latin text")
+            logger.warning("No Unicode font found - PDF will only support Latin text")
 
     def footer(self):
         if not self._footer_enabled:

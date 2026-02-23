@@ -1,4 +1,4 @@
-"""Content filtering — refusal detection and prompt pre-validation."""
+"""Content filtering - refusal detection and prompt pre-validation."""
 
 import logging
 
@@ -101,7 +101,7 @@ def is_refusal(text: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Pre-pipeline prompt validation (Gemini Flash — fast, multilingual)
+# Pre-pipeline prompt validation (Gemini Flash - fast, multilingual)
 # ---------------------------------------------------------------------------
 
 _CLASSIFY_PROMPT = """You are a classifier for StoryForge, a storytelling app where users describe stories they want created.
@@ -150,4 +150,4 @@ async def validate_prompt(user_input: str) -> bool:
         return True
     except Exception as e:
         logger.warning("Pre-filter error (allowing prompt): %s", e)
-        return True  # Fail open — don't block on errors
+        return True  # Fail open - don't block on errors

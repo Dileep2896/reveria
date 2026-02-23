@@ -11,8 +11,8 @@ logger = logging.getLogger("storyforge.imagen")
 _client: genai.Client | None = None
 
 _MAX_RETRIES = 3
-_RETRY_BASE_DELAY = 10  # seconds — Imagen 429 cooldowns are typically 10-60s
-_QUOTA_COOLDOWN = 60    # 1 minute — skip calls after confirmed quota exhaustion
+_RETRY_BASE_DELAY = 10  # seconds - Imagen 429 cooldowns are typically 10-60s
+_QUOTA_COOLDOWN = 60    # 1 minute - skip calls after confirmed quota exhaustion
 
 # Circuit breaker: timestamp of last confirmed quota exhaustion
 _quota_exhausted_at: float = 0.0
@@ -109,7 +109,7 @@ async def generate_image(prompt: str, timeout: float = 90.0, aspect_ratio: str =
                     )
                     await asyncio.sleep(delay)
                     continue
-                # All retries failed — trip the circuit breaker
+                # All retries failed - trip the circuit breaker
                 _quota_exhausted_at = time.monotonic()
                 logger.warning("Imagen quota exhausted, circuit breaker tripped for %ds", int(_QUOTA_COOLDOWN))
                 return None, "quota_exhausted"

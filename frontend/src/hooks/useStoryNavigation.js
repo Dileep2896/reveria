@@ -28,7 +28,7 @@ export default function useStoryNavigation({ bookRef, currentPage, setCurrentPag
     }
   }, [maxPage, scenes.length, bookRef, setCurrentPage]);
 
-  /* ── Navigation — clamp to content pages ── */
+  /* ── Navigation - clamp to content pages ── */
   const goNext = useCallback(() => {
     if (!bookRef.current) return;
     const cur = bookRef.current.pageFlip().getCurrentPageIndex();

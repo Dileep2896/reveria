@@ -1,4 +1,4 @@
-"""Portrait generation service — character face portraits from illustrator's character sheet."""
+"""Portrait generation service - character face portraits from illustrator's character sheet."""
 
 import logging
 from typing import Any
