@@ -27,12 +27,12 @@ def _ensure_init() -> None:
         firebase_admin.initialize_app()
 
 
-async def verify_token(id_token: str) -> str | None:
-    """Verify a Firebase ID token and return the UID, or None if invalid."""
+async def verify_token(id_token: str, full: bool = False) -> str | dict | None:
+    """Verify a Firebase ID token and return the UID (or full claims dict if full=True)."""
     _ensure_init()
     try:
         decoded = await asyncio.to_thread(auth.verify_id_token, id_token)
-        return decoded["uid"]
+        return decoded if full else decoded["uid"]
     except Exception as e:
         logger.warning("Token verification failed: %s", e)
         return None

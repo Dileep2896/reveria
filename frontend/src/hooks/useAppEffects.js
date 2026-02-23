@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { db, getDoc, doc, updateDoc } from '../firebase';
 import { API_URL, findFallbackCover } from '../utils/storyHelpers';
 
@@ -7,9 +7,9 @@ export default function useAppEffects({
   scenes, generating, initialState, idToken,
   bookMeta, setBookmarkedSceneIndex, resetSaved,
   setStoryStatus, setIsPublished, setArtStyle, setLanguage,
-  setViewingReadOnly, setLiveHandler, setStoryDeletedHandler,
-  clearState, reset, addToast, live,
-  directorData, ambient,
+  setViewingReadOnly, setStoryDeletedHandler,
+  clearState, reset, addToast,
+  directorData,
   location,
 }) {
   // Sync storyId → URL (skip for /book/ pages, library, explore, subscription, admin)
@@ -82,11 +82,6 @@ export default function useAppEffects({
     }
   }, [initialState, setStoryStatus, setIsPublished, setArtStyle, setLanguage]);
 
-  // Register live voice message handler
-  useEffect(() => {
-    setLiveHandler(live.handleMessage);
-  }, [setLiveHandler, live.handleMessage]);
-
   // Handle backend deleting the entire story (all scenes removed)
   useEffect(() => {
     setStoryDeletedHandler(() => {
@@ -100,14 +95,4 @@ export default function useAppEffects({
       addToast('Story deleted - all scenes were removed', 'info');
     });
   }, [setStoryDeletedHandler, clearState, navigate, addToast, setStoryStatus, setIsPublished, setLanguage, setArtStyle, setBookmarkedSceneIndex]);
-
-  // Crossfade ambient music when director mood changes
-  const lastAmbientMood = useRef(null);
-  useEffect(() => {
-    const mood = directorData?.visual_style?.mood;
-    if (mood && mood !== lastAmbientMood.current) {
-      lastAmbientMood.current = mood;
-      ambient.crossfadeTo(mood);
-    }
-  }, [directorData, ambient]);
 }

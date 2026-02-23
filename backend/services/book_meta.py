@@ -190,3 +190,25 @@ async def auto_generate_meta(
             })
     except Exception as e:
         logger.error("Auto meta generation failed for %s: %s", story_id, e)
+        # Still mark as done with fallbacks so Library never gets stuck
+        try:
+            db = get_db()
+            doc_ref = db.collection("stories").document(story_id)
+            fallback_cover = next(
+                (s.get("image_url") for s in scenes
+                 if s.get("image_url") and not s["image_url"].startswith("data:")),
+                None,
+            )
+            update: dict[str, Any] = {"title": "Untitled Story", "title_generated": True}
+            if fallback_cover:
+                update["cover_image_url"] = fallback_cover
+            await doc_ref.update(update)
+            logger.info("Set fallback meta for %s after failure", story_id)
+            if websocket and safe_send:
+                await safe_send(websocket, {
+                    "type": "book_meta",
+                    "title": update["title"],
+                    "cover_image_url": update.get("cover_image_url"),
+                })
+        except Exception as e2:
+            logger.error("Fallback meta update also failed for %s: %s", story_id, e2)

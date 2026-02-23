@@ -33,6 +33,8 @@ async def persist_story(
     user_input: str,
     director_data: dict[str, Any] | None = None,
     language: str = "English",
+    author_name: str | None = None,
+    author_photo_url: str | None = None,
 ) -> None:
     """Upsert story document and write scene/generation subcollections."""
     db = get_db()
@@ -41,11 +43,16 @@ async def persist_story(
     # Only set status + created_at on brand-new documents
     existing = await story_ref.get()
     if not existing.exists:
-        await story_ref.set({
+        initial: dict[str, Any] = {
             "uid": uid,
             "status": "draft",
             "created_at": datetime.now(timezone.utc),
-        })
+        }
+        if author_name:
+            initial["author_name"] = author_name
+        if author_photo_url:
+            initial["author_photo_url"] = author_photo_url
+        await story_ref.set(initial)
 
     # Merge mutable fields - never touches status, title, cover_image_url, is_public
     await story_ref.set(

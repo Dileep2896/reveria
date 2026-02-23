@@ -5,8 +5,6 @@ import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
 import { SceneActionsContext } from './contexts/SceneActionsContext';
 import useWebSocket from './hooks/useWebSocket';
-import useAmbientAudio from './hooks/useAmbientAudio';
-import useLiveVoice from './hooks/useLiveVoice';
 import useActiveStory from './hooks/useActiveStory';
 import useStoryActions from './hooks/useStoryActions';
 import useBookManager from './hooks/useBookManager';
@@ -41,7 +39,7 @@ export default function App() {
 
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId);
   const { addToast } = useToast();
-  const { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendAudio, sendSceneAction, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler, setControlBarInputHandler } = useWebSocket(idToken, initialState, addToast);
+  const { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendAudio, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler } = useWebSocket(idToken, initialState, addToast);
   const { theme, toggleTheme } = useTheme();
   const [directorOpen, setDirectorOpen] = useState(true);
   const [controlBarInput, setControlBarInput] = useState('');
@@ -61,8 +59,6 @@ export default function App() {
     resetSaved,
   } = useStoryActions({ storyId, scenes, generations, bookMeta, idToken, addToast, user });
   const [readingMode, setReadingMode] = useState(false);
-  const ambient = useAmbientAudio();
-  const live = useLiveVoice(wsRef);
   const [bookmarkedSceneIndex, setBookmarkedSceneIndex] = useState(null);
 
   const isLibrary = location.pathname === '/library';
@@ -124,9 +120,9 @@ export default function App() {
     scenes, generating, initialState, idToken,
     bookMeta, setBookmarkedSceneIndex, resetSaved,
     setStoryStatus, setIsPublished, setArtStyle, setLanguage,
-    setViewingReadOnly, setLiveHandler, setStoryDeletedHandler,
-    clearState, reset, addToast, live,
-    directorData, ambient,
+    setViewingReadOnly, setStoryDeletedHandler,
+    clearState, reset, addToast,
+    directorData,
     location,
   });
 
@@ -335,7 +331,6 @@ export default function App() {
         setReadingMode={setReadingMode}
         idToken={idToken} addToast={addToast}
         directorOpen={directorOpen} setDirectorOpen={setDirectorOpen}
-        ambient={ambient}
         theme={theme} toggleTheme={toggleTheme}
         user={user} signOut={signOut}
         isAdmin={isAdmin}

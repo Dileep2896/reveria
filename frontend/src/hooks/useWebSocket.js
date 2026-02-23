@@ -27,7 +27,6 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const [portraitsLoading, setPortraitsLoading] = useState(false);
   const [usage, setUsage] = useState(null);
 
-  const liveHandlerRef = useRef(null);
   const storyDeletedRef = useRef(null);
   const controlBarInputRef = useRef(null);
 
@@ -56,7 +55,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
       setPortraits, setPortraitsLoading, setGenerations,
       generationsRef, currentBatchIndexRef, initialStateRef, hydratedRef,
       addToastRef, quotaImageToastFired, cooldownTimer,
-      liveHandlerRef, storyDeletedRef, setControlBarInput: (v) => controlBarInputRef.current?.(v),
+      storyDeletedRef, setControlBarInput: (v) => controlBarInputRef.current?.(v),
       setUsage,
     });
   }
@@ -222,9 +221,8 @@ export default function useWebSocket(idToken, initialState, addToast) {
     }
   }, []);
 
-  const setLiveHandler = useCallback((handler) => { liveHandlerRef.current = handler; }, []);
   const setStoryDeletedHandler = useCallback((handler) => { storyDeletedRef.current = handler; }, []);
   const setControlBarInputHandler = useCallback((handler) => { controlBarInputRef.current = handler; }, []);
 
-  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendAudio, sendSceneAction, reset, load, wsRef, setLiveHandler, setStoryDeletedHandler, setControlBarInputHandler };
+  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendAudio, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler };
 }

@@ -9,15 +9,10 @@ export function createWsHandlers({
   setPortraits, setPortraitsLoading, setGenerations,
   generationsRef, currentBatchIndexRef, initialStateRef, hydratedRef,
   addToastRef, quotaImageToastFired, cooldownTimer,
-  liveHandlerRef, storyDeletedRef, setControlBarInput,
+  storyDeletedRef, setControlBarInput,
   setUsage,
 }) {
   return function handleMessage(data) {
-    // Route live voice messages to handler
-    if (data.type?.startsWith('live_') && liveHandlerRef.current) {
-      if (liveHandlerRef.current(data)) return true;
-    }
-
     switch (data.type) {
       case 'story_id':
         setStoryId(data.content);

@@ -255,7 +255,7 @@ export default function useStoryActions({
           Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
-          author_name: user?.displayName || 'Anonymous',
+          author_name: user?.displayName || user?.email?.split('@')[0] || 'Anonymous',
           author_photo_url: user?.photoURL || null,
         }),
       });

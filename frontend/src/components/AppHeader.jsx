@@ -15,7 +15,6 @@ export default function AppHeader({
   setReadingMode,
   idToken, addToast,
   directorOpen, setDirectorOpen,
-  ambient,
   theme, toggleTheme,
   user, signOut,
   isAdmin,
@@ -301,35 +300,6 @@ export default function AppHeader({
             }}
           >
             Director
-          </button>
-        )}
-
-        {/* Music toggle */}
-        {ambient.playing && (
-          <button
-            onClick={ambient.toggle}
-            className="rounded-full flex items-center justify-center transition-all header-theme-btn"
-            style={{
-              background: ambient.muted ? 'var(--glass-bg)' : 'var(--accent-primary-soft)',
-              border: `1px solid ${ambient.muted ? 'var(--glass-border)' : 'var(--glass-border-accent)'}`,
-              color: ambient.muted ? 'var(--text-muted)' : 'var(--accent-primary)',
-              backdropFilter: 'var(--glass-blur)',
-            }}
-            title={ambient.muted ? 'Unmute music' : 'Mute music'}
-          >
-            {ambient.muted ? (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <line x1="23" y1="9" x2="17" y2="15" />
-                <line x1="17" y1="9" x2="23" y2="15" />
-              </svg>
-            ) : (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-              </svg>
-            )}
           </button>
         )}
 

@@ -451,7 +451,7 @@
 - Keyboard controls: Space/Right = next, Left = prev, Escape = exit
 - Fade transitions between scenes
 
-**Session 39: Background Music / Ambience**
+**Session 39: Background Music / Ambience (Removed in Session 53)**
 
 - New hook `useAmbientAudio.js` - Web Audio API with `AudioContext` + `GainNode`
 - 7 mood-mapped ambient tracks in `/public/ambient/`: peaceful, mysterious, tense, chaotic, melancholic, joyful, epic
@@ -470,7 +470,7 @@
 - Portraits persisted to Firestore and restored from Library (fixed: LibraryPage now includes `portraits` + `language` in `onOpenBook`)
 - Portrait generation hidden for completed/published books
 
-**Session 41: Gemini Live Voice Conversation**
+**Session 41: Gemini Live Voice Conversation (Removed in Session 53)**
 
 - Backend `gemini_live.py`: `LiveSession` class using `gemini-2.0-flash-live-001` model
 - System prompt: creative story collaborator; detects `[STORY_PROMPT]` prefix for auto-fill
@@ -596,7 +596,7 @@
 
 **Session 52: Ambient Audio, Portrait Gallery & Light Mode Fixes**
 
-- **Ambient audio fix**: Changed `muted`/`mutedRef` defaults from `false` to `true` in `useAmbientAudio.js`
+- **Ambient audio fix** *(feature later removed in Session 53)*: Changed `muted`/`mutedRef` defaults from `false` to `true` in `useAmbientAudio.js`
   - Root cause: Browser autoplay policy blocks AudioContext created from `useEffect` (no user gesture)
   - Button now shows muted initially; first user click provides gesture to resume AudioContext
 - **Portrait gallery**: Changed from `flexWrap: wrap` grid to horizontal scrolling row (`overflowX: auto`, `flexShrink: 0` on items)
@@ -605,6 +605,27 @@
   - `storybook.css`: Replaced hardcoded dark shadow values with CSS variables (`var(--book-shadow)` for depth, `var(--book-edge-shadow)` for gutters)
   - `StoryCanvas.jsx`: Imported `useTheme`, set `react-pageflip`'s `maxShadowOpacity` to `0.12` in light mode (was hardcoded `0.5`)
   - Root cause of sharp shadow: react-pageflip renders its own canvas-based shadow independent of CSS
+
+**Session 53: Feature Cleanup & Author Attribution**
+
+- Removed ambient sound feature entirely:
+  - Deleted `useAmbientAudio.js` hook, ambient MP3 assets from `public/ambient/`
+  - Removed ambient prop from `App.jsx`, `AppHeader.jsx`, `useAppEffects.js`
+  - Removed music toggle button from AppHeader
+- Removed Gemini Live Voice feature entirely:
+  - Deleted `useLiveVoice.js` hook, `handlers/live_session.py`, `services/gemini_live.py`
+  - Removed live session handlers from `main.py` WebSocket endpoint
+  - Removed `live_sessions_today` from usage tracking (`services/usage.py`)
+  - Removed live UI (toggle button, transcript overlay, ready prompt) from `ControlBar.jsx`
+  - Removed `liveHandlerRef` from `useWebSocket.js` and `wsHandlers.js`
+- Fixed "Anonymous" author name on BookDetailsPage:
+  - `verify_token()` now supports `full=True` to return decoded Firebase token with name/picture
+  - `main.py` WS handler extracts `author_name` and `author_photo_url` from decoded token
+  - `persist_story()` writes author info on initial story doc creation
+  - Frontend publish flow uses `email.split('@')[0]` as fallback when `displayName` is null
+- Added regenerate meta (cover + title) for stories with failed meta generation
+  - Backend `POST /api/stories/{story_id}/regenerate-meta` endpoint
+  - Library shows "Generate Cover" button on books with missing covers
 
 ---
 
@@ -659,9 +680,7 @@
 - Share link for published stories (public URL, unauthenticated viewing)
 - PDF export with cover page, scene images, and polished typography
 - Reading Mode - full-screen immersive with karaoke-style narration sync
-- Background ambient music with mood-based crossfade (7 mood tracks)
 - Character portrait gallery with auto-extraction fallback
-- Gemini Live Voice conversation for brainstorming story ideas
 - Complete/Publish confirmation dialogs (publish is permanent)
 - Auto-delete book when all scenes removed
 - Portal-based tooltips for scene action buttons
@@ -687,9 +706,10 @@
 - **Email/password auth** with email verification flow
 - **Pro user visual indicators** - tier-based avatar glow, tier pills in profile dropdown
 - **Usage counter** hidden for Pro users (unlimited generation)
-- **Ambient audio** starts muted by default (browser autoplay policy fix)
 - **Portrait gallery** horizontal scrolling layout
 - **Theme-aware book shadows** - light mode uses softer shadows (CSS variables + react-pageflip opacity)
+- **Author attribution** captured from Firebase Auth token on story creation
+- **Regenerate meta** (title + cover) for failed book meta generation
 
 ### What Needs to Be Built
 - **Demo Video** - 4-minute walkthrough for submission

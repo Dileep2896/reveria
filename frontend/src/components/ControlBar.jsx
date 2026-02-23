@@ -4,7 +4,7 @@ import useVoiceCapture from '../hooks/useVoiceCapture';
 import { ART_STYLES } from '../data/artStyles';
 import { LANGUAGES, PLACEHOLDERS } from '../data/languages';
 
-export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, setLanguage, languageLocked, live, usage }) {
+export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, setLanguage, languageLocked, usage }) {
   const [focused, setFocused] = useState(false);
   const [sceneCount, setSceneCount] = useState(2);
   const [styleOpen, setStyleOpen] = useState(false);
@@ -301,107 +301,9 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
           )}
         </div>
 
-        {/* Live toggle button - inline in form */}
-        {live && (
-          <button
-            type="button"
-            onClick={live.isLive ? live.stopLive : live.startLive}
-            disabled={!connected || generating}
-            className="flex-shrink-0 rounded-full flex items-center justify-center transition-all control-action-btn"
-            style={{
-              background: live.isLive ? 'var(--accent-primary)' : 'var(--glass-bg)',
-              border: `1px solid ${live.isLive ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
-              color: live.isLive ? '#fff' : 'var(--text-muted)',
-              cursor: !connected || generating ? 'not-allowed' : 'pointer',
-              opacity: !connected || generating ? 0.3 : 1,
-              boxShadow: live.isLive ? '0 0 16px var(--accent-primary)' : 'none',
-              animation: live.isLive ? 'micPulse 1.5s ease-in-out infinite' : 'none',
-            }}
-            title={live.isLive ? 'Stop live conversation' : 'Start live conversation with Gemini'}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 10l1 2 2-3 2 5 2-4 2 3 2-6 2 4 2-2 2 3 2-5 1 3" />
-              <circle cx="12" cy="20" r="1.5" fill="currentColor" stroke="none" />
-            </svg>
-          </button>
-        )}
       </form>
 
-      {/* Live conversation transcript overlay */}
-      {live?.isLive && (
-        <div style={{
-          position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-          width: '90%', maxWidth: '600px', maxHeight: '240px', overflowY: 'auto',
-          marginBottom: '8px', borderRadius: '12px',
-          background: 'var(--glass-bg-strong)', border: '1px solid var(--glass-border)',
-          backdropFilter: 'var(--glass-blur)', padding: '12px',
-          display: 'flex', flexDirection: 'column', gap: '6px',
-        }}>
-          {live.transcript.length === 0 && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              fontSize: '0.8rem', color: 'var(--accent-primary)',
-            }}>
-              <span style={{ display: 'inline-flex', gap: '3px', alignItems: 'center' }}>
-                <span className="live-dot" style={{ animationDelay: '0s' }} />
-                <span className="live-dot" style={{ animationDelay: '0.2s' }} />
-                <span className="live-dot" style={{ animationDelay: '0.4s' }} />
-              </span>
-              Listening - describe a story idea...
-            </div>
-          )}
-          {live.transcript.slice(-6).map((msg, i) => (
-            <div key={i} style={{
-              fontSize: '0.8rem', lineHeight: 1.5,
-              color: msg.role === 'user' ? 'var(--accent-primary)' : msg.role === 'system' ? 'var(--text-muted)' : 'var(--text-secondary)',
-              fontStyle: msg.role === 'system' ? 'italic' : 'normal',
-            }}>
-              <strong style={{ opacity: 0.6 }}>{msg.role === 'user' ? 'You' : msg.role === 'system' ? 'System' : 'Gemini'}:</strong>{' '}
-              {msg.text}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Ready prompt action */}
-      {live?.readyPrompt && (
-        <div style={{
-          position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-          marginBottom: live.transcript.length > 0 ? '220px' : '8px',
-          background: 'var(--accent-primary-soft)', border: '1px solid var(--glass-border-accent)',
-          borderRadius: '12px', padding: '12px 16px',
-          display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '500px',
-        }}>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', flex: 1, margin: 0 }}>
-            {live.readyPrompt.slice(0, 120)}...
-          </p>
-          <button
-            onClick={() => {
-              setInputValue(live.readyPrompt);
-              live.clearPrompt();
-              live.stopLive();
-            }}
-            style={{
-              padding: '4px 12px', borderRadius: '999px', border: 'none',
-              background: 'var(--accent-primary)', color: '#fff', fontSize: '0.75rem',
-              fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-            }}
-          >
-            Use prompt
-          </button>
-        </div>
-      )}
-
       <style>{`
-        .live-dot {
-          width: 5px; height: 5px; border-radius: 50%;
-          background: var(--accent-primary);
-          animation: liveBounce 1.2s ease-in-out infinite;
-        }
-        @keyframes liveBounce {
-          0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-          40% { opacity: 1; transform: scale(1.2); }
-        }
         @keyframes micPulse {
           0%, 100% { box-shadow: 0 0 8px var(--accent-primary); }
           50% { box-shadow: 0 0 20px var(--accent-primary); }

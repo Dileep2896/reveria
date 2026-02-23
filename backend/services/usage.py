@@ -14,7 +14,6 @@ FREE_LIMITS: dict[str, int] = {
     "generations_today": 5,
     "scene_regens_today": 0,
     "pdf_exports_today": 2,
-    "live_sessions_today": 2,
     "published_stories": 2,
 }
 
@@ -23,7 +22,6 @@ STANDARD_LIMITS: dict[str, int] = {
     "generations_today": 10,
     "scene_regens_today": 6,
     "pdf_exports_today": 4,
-    "live_sessions_today": 5,
     "published_stories": 4,
 }
 
@@ -32,7 +30,6 @@ PRO_LIMITS: dict[str, int] = {
     "generations_today": 999,
     "scene_regens_today": 999,
     "pdf_exports_today": 999,
-    "live_sessions_today": 999,
     "published_stories": 999,
 }
 
@@ -52,12 +49,11 @@ _ACTION_FIELD: dict[str, str] = {
     "generate": "generations_today",
     "regen": "scene_regens_today",
     "pdf_export": "pdf_exports_today",
-    "live_session": "live_sessions_today",
     "create_story": "active_stories",
     "publish": "published_stories",
 }
 
-_DAILY_FIELDS = {"generations_today", "scene_regens_today", "pdf_exports_today", "live_sessions_today"}
+_DAILY_FIELDS = {"generations_today", "scene_regens_today", "pdf_exports_today"}
 
 
 def _today_utc() -> str:
@@ -76,7 +72,6 @@ def _normalize_usage(data: dict[str, Any]) -> dict[str, Any]:
         "generations_today": 0 if new_day else data.get("generations_today", 0),
         "scene_regens_today": 0 if new_day else data.get("scene_regens_today", 0),
         "pdf_exports_today": 0 if new_day else data.get("pdf_exports_today", 0),
-        "live_sessions_today": 0 if new_day else data.get("live_sessions_today", 0),
         "usage_date": today,
         "tier": data.get("tier", "free"),
     }

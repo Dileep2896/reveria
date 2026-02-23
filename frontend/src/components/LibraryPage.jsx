@@ -64,7 +64,8 @@ function useLibraryBooks(user) {
             art_style: data.art_style || 'cinematic',
             language: data.language || 'English',
             portraits: data.portraits || [],
-            title_generated: !!data.title_generated,
+            title_generated: !!data.title_generated
+              || (Date.now() - (data.updated_at?.toDate?.()?.getTime() || 0) > 2 * 60 * 1000),
           };
         });
         setBooks(results);
@@ -83,7 +84,7 @@ function useLibraryBooks(user) {
   return { books, setBooks, loading, error, refresh };
 }
 
-function BookCard({ book, onOpen, onDelete, onToggleFavorite }) {
+function BookCard({ book, onOpen, onDelete, onToggleFavorite, onRegenMeta }) {
   const dateStr = book.updated_at.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -96,22 +97,52 @@ function BookCard({ book, onOpen, onDelete, onToggleFavorite }) {
       <div className="book-3d" onClick={() => onOpen(book)}>
         {book.cover_image_url ? (
           <img
-            className={`book-3d-cover${!book.title_generated && book.total_scene_count > 0 ? ' book-3d-cover--generating' : ''}`}
+            className={`book-3d-cover${book._regenMeta ? ' book-3d-cover--generating' : ''}`}
             src={book.cover_image_url}
             alt={book.title}
             loading="lazy"
           />
         ) : (
           <div className="book-3d-cover book-3d-cover--placeholder">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
+            {book._regenMeta ? null : book.total_scene_count > 0 ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); onRegenMeta(book.id); }}
+                style={{
+                  background: 'var(--glass-bg)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '10px',
+                  padding: '8px 14px',
+                  color: 'var(--accent-primary)',
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backdropFilter: 'var(--glass-blur)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--glass-bg-hover)'; e.currentTarget.style.borderColor = 'var(--glass-border-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--glass-bg)'; e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+                Generate Cover
+              </button>
+            ) : (
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            )}
           </div>
         )}
 
-        {/* Cover generating overlay */}
-        {!book.title_generated && book.total_scene_count > 0 && (
+        {/* Cover generating overlay — only for active regen */}
+        {book._regenMeta && (
           <div className="book-cover-generating">
             <div className="book-cover-generating-shimmer" />
             <div className="book-cover-generating-icon">
@@ -123,7 +154,7 @@ function BookCard({ book, onOpen, onDelete, onToggleFavorite }) {
               </svg>
             </div>
             <div className="book-cover-generating-label">
-              <span>Painting cover…</span>
+              <span>Generating…</span>
             </div>
           </div>
         )}
@@ -309,6 +340,31 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
     }
   }, [setBooks]);
 
+  const handleRegenMeta = useCallback(async (bookId) => {
+    // Optimistic: show shimmer
+    setBooks((prev) => prev.map((b) => b.id === bookId ? { ...b, _regenMeta: true } : b));
+    try {
+      const res = await fetch(`${API_URL}/api/stories/${bookId}/regenerate-meta`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setBooks((prev) => prev.map((b) => b.id === bookId ? {
+        ...b,
+        title: data.title || b.title,
+        cover_image_url: data.cover_image_url || b.cover_image_url,
+        title_generated: true,
+        _regenMeta: false,
+      } : b));
+      addToast('Cover & title regenerated!', 'success');
+    } catch (err) {
+      console.error('Failed to regenerate meta:', err);
+      setBooks((prev) => prev.map((b) => b.id === bookId ? { ...b, _regenMeta: false } : b));
+      addToast('Failed to regenerate cover', 'error');
+    }
+  }, [idToken, setBooks, addToast]);
+
   const stickyHeader = (compact) => (
     <div className={`library-sticky-header${compact ? ' library-sticky-header--compact' : ''}`}>
       <div className="library-header-row">
@@ -457,6 +513,7 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
               onOpen={handleOpen}
               onDelete={setDeleteTarget}
               onToggleFavorite={handleToggleFavorite}
+              onRegenMeta={handleRegenMeta}
             />
           ))}
 

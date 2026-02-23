@@ -214,22 +214,6 @@ Every saved story can be exported as a polished PDF storybook using `fpdf2`:
 
 The backend endpoint `GET /api/stories/{story_id}/pdf` downloads images from GCS, composites the PDF in memory, and returns it as a streaming response. Access control ensures only the owner (or anyone for public stories) can download.
 
-### Background Ambient Music
-
-The Director Agent doesn't just analyze mood - it now **drives the soundtrack**. Seven ambient tracks map to the Director's `visual_style.mood` analysis:
-
-| Mood | Sound |
-|------|-------|
-| Peaceful | Gentle pads, soft bells |
-| Mysterious | Low drones, distant echoes |
-| Tense | Pulsing bass, staccato strings |
-| Chaotic | Dissonant layers, rapid modulations |
-| Melancholic | Minor-key piano, slow reverb |
-| Joyful | Bright arpeggios, warm harmonics |
-| Epic | Orchestral swells, deep brass |
-
-The `useAmbientAudio` hook uses the **Web Audio API** with `AudioContext` and `GainNode` for smooth crossfading. When the Director's mood changes (e.g., from "mysterious" to "tense"), the current track fades out over 1 second, the new track fades in over 2 seconds. Volume is kept subtle at 15% - background ambience, not a concert.
-
 ### Character Portrait Gallery
 
 After generating a story, the Director Panel offers a "Generate Portraits" button. This triggers a pipeline:
@@ -242,20 +226,6 @@ After generating a story, the Director Panel offers a "Generate Portraits" butto
 
 The auto-extraction fallback was a critical fix. Some stories (especially ones with unnamed characters like "the detective" or "the ghost") returned NONE from the initial character extraction. The portrait system now re-extracts from the full story text as a fallback.
 
-### Gemini Live Voice: Brainstorming Mode
-
-The most ambitious feature: **real-time voice conversation** with Gemini for brainstorming story ideas.
-
-How it works:
-1. User clicks "Live" to start a session - opens a Gemini Live API connection (`gemini-2.0-flash-live-001`)
-2. User speaks into the microphone - `useLiveVoice.js` captures 16kHz PCM audio via `AudioContext` + `MediaRecorder`
-3. Audio chunks stream to the backend via WebSocket → forwarded to Gemini Live
-4. Gemini responds with text (displayed as conversation bubbles above the control bar)
-5. When Gemini detects the user is ready, it emits `[STORY_PROMPT]` - the prompt auto-fills in the input field
-6. User confirms → normal generation pipeline runs
-
-The system prompt instructs Gemini to be a "creative story collaborator" - it asks questions, suggests plot twists, helps refine ideas. When it senses the user has a clear vision, it synthesizes everything into a story prompt.
-
 ### Share Links & Public Viewing
 
 Published stories get shareable URLs. Click the Share button → copies `{origin}/story/{storyId}` to clipboard. When an unauthenticated user opens this URL:
@@ -266,6 +236,24 @@ Published stories get shareable URLs. Click the Share button → copies `{origin
 4. Shows a "Sign in to create your own" CTA banner
 
 The backend sanitizes the response - no user UIDs, no narrator history, no internal state. Just the story content.
+
+### Removing Features: Ambient Music & Live Voice
+
+Sometimes the right engineering decision is removing features. Both ambient music and Gemini Live voice were interesting experiments but didn't add enough value to justify their complexity:
+
+- **Ambient music** required 7 MP3 files (~1.7MB total), a Web Audio API engine with crossfading, mood mapping from the Director agent, and careful handling of browser autoplay policies. Cool technically, but users rarely noticed it.
+- **Gemini Live Voice** required a full-duplex audio streaming pipeline, a dedicated backend service, usage tracking, and complex frontend state management. The cognitive load of voice brainstorming didn't match how users actually interacted with the app - they preferred typing prompts directly.
+
+Cutting these features reduced frontend bundle size, simplified the WebSocket handler, and removed two backend services. The codebase became more focused.
+
+### Author Attribution: A Subtle but Important Fix
+
+Published stories showed "Anonymous" as the author name. The root cause was architectural: `persist_story()` only wrote `uid` to the story document, and `author_name` was only set during the publish flow - which reads from the frontend's `user.displayName`. For email/password users without a display name, this fell back to "Anonymous."
+
+The fix touches three layers:
+1. **Backend auth**: `verify_token()` now supports returning the full decoded Firebase token (not just the UID), which includes `name` and `picture` fields
+2. **Story creation**: `persist_story()` writes `author_name` and `author_photo_url` from the decoded token when creating a new story document
+3. **Frontend fallback**: The publish flow now uses `email.split('@')[0]` as a secondary fallback before "Anonymous"
 
 ### Portal-Based Tooltips
 
@@ -433,15 +421,11 @@ A single filter isn't enough. Pre-pipeline validation (Gemini Flash classifier) 
 
 You can't prompt-engineer your way to consistent characters with a single Gemini call. The solution is structural: separate character extraction from scene composition, prepend descriptions verbatim (no summarization), add anti-drift anchoring, and use hex color codes instead of subjective color names. Each of these individually helps a little; together they transform consistency.
 
-### 14. Browser APIs Have Silent Requirements
-
-The Web Audio API's autoplay policy is well-documented but easy to miss. An `AudioContext` created outside a user gesture starts suspended - it won't produce sound, but it won't throw errors either. The fix is architectural: design for user-initiated activation rather than trying to work around the restriction.
-
-### 15. Third-Party Libraries Have Hidden Rendering Layers
+### 14. Third-Party Libraries Have Hidden Rendering Layers
 
 When debugging visual issues, don't assume everything is CSS. `react-pageflip` renders shadows via `<canvas>` elements with its own opacity parameters - invisible to CSS DevTools inspection. Always check library props before hunting for CSS bugs.
 
-### 16. Premium UX is Subtraction, Not Addition
+### 15. Premium UX is Subtraction, Not Addition
 
 Making Pro users feel special isn't about adding flashy elements everywhere. It's about removing friction (hiding meaningless usage counters) and adding *subtle* visual touches (a gentle glow, a small badge). The best premium indicators are the ones users notice subconsciously.
 
@@ -462,8 +446,6 @@ Making Pro users feel special isn't about adding flashy elements everywhere. It'
 | Database | Cloud Firestore | Story persistence, user libraries, likes, ratings, comments |
 | Storage | Google Cloud Storage | Scene images, cover images |
 | PDF Generation | fpdf2 | Storybook PDF export |
-| Ambient Audio | Web Audio API | Mood-based background music |
-| Live Voice | Gemini 2.0 Flash Live API | Real-time voice brainstorming |
 | Hosting | Cloud Run + Firebase Hosting | Containerized deployment |
 
 ---

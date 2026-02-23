@@ -26,7 +26,6 @@ from google.adk.sessions import InMemorySessionService  # type: ignore[import-un
 from google.adk.runners import Runner  # type: ignore[import-untyped]
 
 from handlers.scene_actions import handle_regen_image, handle_regen_scene, handle_delete_scene
-from handlers.live_session import handle_live_start, handle_live_audio_chunk, handle_live_text, handle_live_stop
 from handlers.ws_resume import handle_resume, handle_auto_recover, handle_reset
 
 load_dotenv()
@@ -203,13 +202,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         await websocket.close(code=4003, reason="Missing auth token")
         return
 
-    uid = await verify_token(token)
-    if not uid:
+    decoded = await verify_token(token, full=True)
+    if not decoded:
         await websocket.accept()
         await websocket.close(code=4003, reason="Invalid auth token")
         return
 
-    logger.info("Authenticated user: %s", uid)
+    uid = decoded["uid"]
+    author_name = decoded.get("name") or (decoded.get("email", "").split("@")[0] if decoded.get("email") else "Anonymous")
+    author_photo_url = decoded.get("picture")
+    logger.info("Authenticated user: %s (%s)", uid, author_name)
 
     await manager.connect(websocket)
 
@@ -232,9 +234,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     active_story_id: str | None = None
     batch_index = 0
     director_result: dict[str, Any] | None = None
-
-    live_session = None
-    live_response_task: asyncio.Task | None = None
 
     try:
         while True:
@@ -268,23 +267,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 batch_index = 0
                 director_result = None
                 pipeline_tasks = []
-                continue
-
-            # ── Gemini Live conversation mode ──
-            if msg_type == "live_start":
-                live_session, live_response_task = await handle_live_start(websocket, live_session, live_response_task, uid=uid)
-                continue
-
-            if msg_type == "live_audio_chunk":
-                await handle_live_audio_chunk(live_session, message)
-                continue
-
-            if msg_type == "live_text":
-                await handle_live_text(live_session, message)
-                continue
-
-            if msg_type == "live_stop":
-                live_session, live_response_task = await handle_live_stop(websocket, live_session, live_response_task)
                 continue
 
             # Handle voice input - transcribe and send back to populate text field
@@ -404,6 +386,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         user_input=user_input,
                         director_data=director_result,
                         language=language,
+                        author_name=author_name,
+                        author_photo_url=author_photo_url,
                     )
                     # Track usage: increment generation counter (and create_story on first batch)
                     try:
@@ -455,8 +439,4 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         for task in pipeline_tasks:
             if not task.done():
                 task.cancel()
-        if live_session:
-            await live_session.close()
-        if live_response_task and not live_response_task.done():
-            live_response_task.cancel()
         manager.disconnect(websocket)

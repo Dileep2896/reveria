@@ -43,9 +43,8 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Share Link** - Copy a public URL for published stories; unauthenticated users can view shared stories with a "Sign in to create" CTA
 - **PDF Export** - Download any saved story as a polished PDF storybook with cover page, scene illustrations, decorative typography, and page numbering
 - **Reading Mode** - Full-screen immersive experience with karaoke-style word-by-word narration highlighting, auto-advance between scenes, bookmarking, and keyboard controls
-- **Background Ambient Music** - 7 mood-mapped ambient tracks (peaceful, mysterious, tense, chaotic, melancholic, joyful, epic) that auto-crossfade when Director analysis detects mood changes
 - **Character Portrait Gallery** - Generate character face portraits from the Illustrator's character sheet; displayed as circular thumbnails in the Director Panel
-- **Gemini Live Voice** - Real-time voice conversation with Gemini for brainstorming story ideas; detected prompts auto-fill the story input
+- **Author Attribution** - Story author name and photo automatically captured from Firebase Auth and stored on story creation; used in publish flow and BookDetailsPage
 - **Complete & Publish Flow** - Confirmation dialogs for completing and publishing stories; publishing is permanent and creates a shareable public link
 - **Portal-Based Tooltips** - Custom glassmorphism tooltips using React `createPortal` that escape overflow:hidden containers
 - **Scene Delete Confirmation** - Portal-based confirmation dialog with scene title preview, matching Library's glassmorphism design
@@ -83,8 +82,6 @@ flowchart TB
             direction LR
             ReadMode["Reading Mode<br/>Karaoke Narration"]
             PDFExport["PDF Export<br/>fpdf2 Backend"]
-            Ambient["Ambient Audio<br/>Web Audio API"]
-            LiveVoice["Live Voice<br/>Gemini Live API"]
         end
         FSClient["Firestore Client SDK<br/>(Library / Explore queries)"]
     end
@@ -110,7 +107,6 @@ flowchart TB
         Persist["Firestore Client<br/>(persist stories)"]
         Storage["GCS Storage Client<br/>(store images)"]
         PDFService["PDF Service<br/>(fpdf2)"]
-        LiveService["Gemini Live<br/>(Real-time Voice)"]
     end
 
     subgraph Google["Google AI Services"]
@@ -118,7 +114,6 @@ flowchart TB
         Gemini["Gemini 2.0 Flash<br/>(Vertex AI)"]
         Imagen["Imagen 3<br/>(Vertex AI)"]
         CloudTTS["Cloud TTS"]
-        GeminiLive["Gemini Live API<br/>(2.0 Flash Live)"]
     end
 
     subgraph Data["Data Layer"]
@@ -427,49 +422,6 @@ flowchart LR
     style UI fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
 ```
 
-### Gemini Live Voice Flow
-
-```mermaid
-flowchart TB
-    subgraph Client["Frontend"]
-        Mic["Microphone<br/>16kHz PCM"] --> Hook["useLiveVoice.js<br/>AudioContext +<br/>MediaRecorder"]
-        Hook -->|"live_audio_chunk"| WS["WebSocket"]
-        WS -->|"live_response"| Transcript["Conversation<br/>Transcript Bubbles"]
-        WS -->|"live_prompt_ready"| AutoFill["Auto-fill<br/>Story Prompt"]
-    end
-
-    subgraph Server["Backend"]
-        WSHandler["WS Handler"] --> Live["gemini_live.py<br/>LiveSession"]
-        Live -->|"audio chunks"| GeminiLive["Gemini 2.0 Flash<br/>Live API"]
-        GeminiLive -->|"text responses"| Live
-        Live -->|"[STORY_PROMPT] detected"| WSHandler
-    end
-
-    WS <--> WSHandler
-
-    style Client fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
-    style Server fill:#1a1a2e,stroke:#f59e0b,color:#e2e8f0
-```
-
-### Ambient Music System
-
-```mermaid
-flowchart LR
-    Director["Director Agent<br/>visual_style.mood"] -->|"mood change"| Hook["useAmbientAudio.js"]
-
-    subgraph AudioEngine["Web Audio API Engine"]
-        direction TB
-        Old["Current Track<br/>GainNode"] -->|"1s fade-out"| Silence["Silence"]
-        New["New Track<br/>Load + Decode"] -->|"2s fade-in"| Play["Playing<br/>volume: 0.15"]
-    end
-
-    Hook --> AudioEngine
-    Toggle["Music Toggle<br/>Header Button"] -->|"mute/unmute"| Hook
-
-    style Director fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
-    style AudioEngine fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
-```
-
 ---
 
 ## Interleaved Output Strategy
@@ -500,7 +452,7 @@ The output *weaves* modalities together, not just appends them sequentially:
 | Real-time Comms | WebSocket (native) | Stream interleaved output to client |
 | Backend | Python 3.12 + FastAPI + Uvicorn | WebSocket handler, orchestration |
 | Agent Framework | Google ADK (Agent Development Kit) | Multi-agent orchestration |
-| LLM | Gemini 2.0 Flash (Live API) | Story generation, interleaved output |
+| LLM | Gemini 2.0 Flash | Story generation, interleaved output |
 | Image Gen | Imagen 3 (via Vertex AI) | Scene illustrations, character portraits |
 | Voice Output | Google Cloud Text-to-Speech | Story narration with distinct voices |
 | Database | Cloud Firestore | Story persistence, user libraries, likes |
@@ -508,8 +460,6 @@ The output *weaves* modalities together, not just appends them sequentially:
 | Static Hosting | Firebase Hosting | Frontend SPA |
 | Container | Docker | Reproducible builds |
 | PDF Generation | fpdf2 | Storybook PDF export with images |
-| Ambient Audio | Web Audio API | Mood-based background music |
-| Live Voice | Gemini 2.0 Flash Live API | Real-time voice conversation |
 
 ---
 
@@ -563,22 +513,18 @@ storyforge/
 │   │   │   ├── useVoiceCapture.js     # Web Audio API hook
 │   │   │   ├── useAuth.js             # Firebase Auth hook (Google + email/password)
 │   │   │   ├── useUsage.js           # Usage tracking hook (generations, regens, exports)
-│   │   │   ├── useAdminUsers.js      # Admin user management hook
-│   │   │   ├── useAmbientAudio.js     # Background ambient music hook
-│   │   │   └── useLiveVoice.js        # Gemini Live voice conversation
+│   │   │   └── useAdminUsers.js      # Admin user management hook
 │   │   ├── utils/
 │   │   │   └── audioPlayer.js         # Queue and play TTS audio chunks
 │   │   ├── theme.css                  # Centralized glassmorphism theme
 │   │   └── index.css                  # Global styles
 │   ├── public/
-│   │   └── ambient/                    # 7 mood-mapped ambient MP3 tracks
 │   ├── Dockerfile
 │   └── package.json
 ├── backend/
 │   ├── main.py                        # FastAPI + WebSocket endpoint
 │   ├── handlers/
 │   │   ├── scene_actions.py           # Regen image/scene, delete scene
-│   │   ├── live_session.py            # Gemini Live start/stop/audio/text
 │   │   └── ws_resume.py              # Resume, auto-recover, reset
 │   ├── agents/
 │   │   ├── orchestrator.py            # ADK root agent - coordinates all agents
@@ -596,7 +542,6 @@ storyforge/
 │   │   ├── imagen_client.py           # Imagen 3 via Vertex AI
 │   │   ├── tts_client.py              # Cloud Text-to-Speech
 │   │   ├── pdf_export.py              # PDF storybook generation (fpdf2)
-│   │   ├── gemini_live.py             # Gemini Live API session management
 │   │   ├── usage.py                   # Per-tier usage limits + tracking
 │   │   ├── auth.py                    # Firebase Auth verification + admin checks
 │   │   └── firestore_client.py        # Firestore persistence utilities
@@ -715,8 +660,11 @@ VITE_WS_URL=ws://localhost:8000/ws
 
 ---
 
-## What's Next
+## What's Working
 
+- All features listed above are fully implemented and functional
+- Author attribution from Firebase Auth on story creation
+- Regenerate cover/title for failed meta generation
 - **Demo Video** - 4-minute walkthrough for hackathon submission
 - **Firebase Hosting** - Deploy frontend SPA
 - **Cloud Run** - Deploy backend container
