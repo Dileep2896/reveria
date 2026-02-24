@@ -154,28 +154,54 @@ When `title_generated` is true, NEVER overwrite `title` or `cover_image_url`. On
 - Narrator system prompt: in-character redirect for inappropriate content ("That part of the library is forbidden!")
 - `ws_callback` softened: `safety` refusals let narrator redirect play through; only `offtopic` hard-aborts
 
-## Director Chat (Gemini Live API) — Session 55
+## Director Chat (Gemini Live API) — Rewritten with Native Features
 
 ### Backend: `services/director_chat.py`
 - **Model**: `gemini-live-2.5-flash-native-audio` (persistent bidirectional audio session)
 - `DirectorChatSession` class manages Gemini Live session lifecycle
-- `start(story_context, language, voice_name)`: Opens Live session, sends greeting prompt, returns WAV data URL
-- `send_audio(audio_bytes, mime_type)`: Sends user audio, returns Director's audio response
-- `send_text(text)`: Sends user text, returns Director's audio response
-- `detect_intent(user_text)`: Gemini Flash (temp 0) classifies intent as `generate` or `continue` with confidence score
-- `suggest_prompt(story_context)`: Gemini Flash (temp 0.7) generates 2-3 sentence story prompt from conversation
+- **Typed `LiveConnectConfig`** with native features:
+  - `tools=[Tool(function_declarations=[GENERATE_STORY_TOOL])]` — model decides when to generate
+  - `input_audio_transcription=AudioTranscriptionConfig()` — native user speech transcription
+  - `output_audio_transcription=AudioTranscriptionConfig()` — native model speech transcription
+  - `context_window_compression=ContextWindowCompressionConfig(sliding_window=SlidingWindow())` — handles long sessions
+- `start(story_context, language, voice_name)`: Opens Live session, sends greeting prompt, returns response dict
+- `send_audio(audio_bytes, mime_type)`: Sends user audio, returns `{audio_url, input_transcript, output_transcript, tool_calls}`
+- `send_text(text)`: Sends user text, returns same response dict format
+- `respond_to_tool_call(tool_call, success)`: Sends `FunctionResponse` back so model can acknowledge; returns follow-up audio
+- `request_suggestion(story_context)`: Asks the Live session directly for a story prompt (no extra API call)
+- `_collect_response(session, timeout)`: Collects audio chunks + native transcriptions + tool calls from receive loop
+- `_trim_log()`: Caps `conversation_log` at 20 non-system entries (prevents unbounded growth)
 - `close()`: Closes Live session via `__aexit__`
-- Audio pipeline: `_collect_audio()` gathers PCM chunks → `_pcm_to_wav()` wraps in WAV header → base64 data URL
-- Language-adaptive: Director matches user's spoken language naturally; story prompts locked to story language via `_build_suggest_prompt_system(language)`
+- Audio pipeline: `_collect_audio()` (voice preview only) gathers PCM chunks → `_pcm_to_wav()` → base64 data URL
+- Language-adaptive: Director matches user's spoken language naturally
 - Voice configurable: `voice_name` param passed to `prebuilt_voice_config` in Live session config
 
+### GENERATE_STORY_TOOL (Function Declaration)
+- Declared at module level, included in Live session config
+- Model calls it ONLY when brainstorming is complete + user confirmed + not still asking questions
+- Returns `{prompt: "vivid 2-3 sentence story prompt"}` in the tool call args
+- System prompt includes explicit tool usage instructions with strict conditions
+- ~60-70% reliability in audio mode; manual "Suggest" button via `request_suggestion()` as fallback
+
+### What Was Eliminated (vs. Previous Architecture)
+| Before | After |
+|--------|-------|
+| `detect_intent()` — Gemini Flash call per interaction | Native tool calling (model decides) |
+| `suggest_prompt()` — Gemini Flash call when generating | Tool call includes the prompt |
+| User audio transcription — `transcribe_audio()` per message | Native `input_audio_transcription` |
+| Director audio transcription — `transcribe_audio()` per message | Native `output_audio_transcription` |
+| `generation_triggered` flag (racy, never resets) | Gone — model handles atomically |
+| 3-5 extra API calls per interaction | 0 extra calls |
+| Unbounded `conversation_log` | Capped at 20 entries + API-level context compression |
+
 ### WS Message Types
-- `director_chat_start`: `{story_context, language?, voice_name?}` → opens session, returns `director_chat_greeting` with `audio_url`
-- `director_chat_audio`: `{audio_data (base64), mime_type}` → sends to Live, returns `director_chat_response` with `audio_url`
-- `director_chat_text`: `{content}` → sends text to Live, returns `director_chat_response` with `audio_url` + intent detection
-- `director_chat_suggest`: `{story_context}` → returns `director_chat_prompt` with suggested prompt text
+- `director_chat_start`: `{story_context, language?, voice_name?}` → opens session, returns `director_chat_started` with `audio_url`
+- `director_chat_audio`: `{audio_data (base64), mime_type}` → sends to Live, returns `director_chat_response` with `audio_url` + `director_chat_user_transcript` (from native transcription) + optionally `director_chat_generate` (if tool called)
+- `director_chat_text`: `{content}` → sends text to Live, returns `director_chat_response` with `audio_url` + optionally `director_chat_generate`
+- `director_chat_suggest`: `{story_context}` → asks Live session for prompt → returns `director_chat_suggestion`
+- `director_chat_cancel_generate`: Logs cancellation (no flag to reset)
 - `director_chat_end`: Closes session
-- Auto-generate flow: Intent detection analyzes BOTH user message + transcribed Director response; requires Director to have finished exploring (not asking questions) + user confirmation; confidence threshold 0.8
+- Auto-generate flow: Model calls `generate_story` tool → handler sends `FunctionResponse` → model says "Generating!" → `director_chat_generate` sent to frontend with prompt/art_style/scene_count/language
 
 ### Frontend: VAD (Voice Activity Detection)
 - `useVoiceCapture.js`: Web Audio API `AnalyserNode` + `getFloatTimeDomainData()` for RMS computation

@@ -440,7 +440,7 @@ The `ws_callback` in the backend was also softened — for `safety`-type refusal
 
 The most exciting addition to StoryForge is **Director Chat** — a real-time voice conversation with the Director character using Google's Gemini Live API (`gemini-live-2.5-flash-native-audio`). Instead of typing prompts, you can *talk* to the Director about where the story should go next.
 
-The architecture is a persistent bidirectional audio session:
+The architecture is a persistent bidirectional audio session that leverages the Live API's native capabilities — function calling, audio transcription, and context compression — to eliminate all extra API calls:
 
 ```mermaid
 flowchart LR
@@ -461,14 +461,14 @@ flowchart LR
 
     subgraph Backend["DirectorChatSession"]
         direction TB
-        Live["Gemini Live Session<br/>native audio model"]
-        Intent["Intent Detection<br/>generate vs continue"]
-        Suggest["Prompt Suggestion<br/>conversation → prompt"]
+        Live["Gemini Live Session<br/>tools + transcription<br/>+ context compression"]
+        Tool["generate_story tool call<br/>model decides when ready"]
     end
 
     B64 --> M2 --> Live
-    Live -->|"PCM → WAV"| Client
-    Intent -->|"generate"| Suggest
+    Live -->|"audio + transcripts<br/>+ tool calls"| Client
+    Live -->|"tool call"| Tool
+    Tool -->|"FunctionResponse"| Live
 
     style Client fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
     style WS fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
@@ -477,14 +477,16 @@ flowchart LR
 
 **How it works:**
 
-1. **Start session**: Frontend sends `director_chat_start` with story context, language, and voice name. Backend opens a Gemini Live session with a Director persona system prompt and sends back the Director's audio greeting.
-2. **Conversation loop**: User speaks → Web Audio VAD detects 1.2s of silence → auto-stops recording → base64 audio sent over WebSocket → Gemini Live processes → PCM audio response collected → wrapped in WAV header → base64 data URL sent to frontend → browser plays audio → ready for next turn.
-3. **Intent detection**: After each user message, a separate Gemini Flash call analyzes whether the user wants to generate a scene ("let's do it", "write that") or continue brainstorming. High-confidence generate intent triggers automatic prompt suggestion.
-4. **Prompt suggestion**: When the user is ready, `suggest_prompt()` distills the conversation into a vivid 2-3 sentence story prompt that auto-fills the main input.
+1. **Start session**: Frontend sends `director_chat_start` with story context, language, and voice name. Backend opens a Gemini Live session configured with `GENERATE_STORY_TOOL` (function calling), native audio transcription, and context window compression. The Director's audio greeting plays back.
+2. **Conversation loop**: User speaks → Web Audio VAD detects 1.2s of silence → auto-stops recording → base64 audio sent over WebSocket → Gemini Live processes → `_collect_response()` gathers audio chunks, native input/output transcriptions, and any tool calls → WAV data URL + transcripts sent to frontend → browser plays audio → ready for next turn.
+3. **Tool-driven generation**: When the model decides brainstorming is complete (based on strong system prompt conditioning), it calls the `generate_story` tool with a vivid 2-3 sentence prompt. The backend sends a `FunctionResponse` back so the model can say "Generating your story now!", then fires the `director_chat_generate` WS message to the frontend.
+4. **Manual fallback**: The "Suggest" button calls `request_suggestion()`, which asks the Live session directly for a prompt — no separate API call. This handles the ~30-40% of cases where tool calling doesn't fire in audio mode.
+
+**Zero extra API calls.** The previous architecture made 3-5 separate Gemini calls per user interaction: user audio transcription, director audio transcription, intent detection (Gemini Flash), and prompt suggestion (Gemini Flash). The rewrite eliminated all of them by using native Live API features — transcriptions come from `input_audio_transcription`/`output_audio_transcription` config, intent detection is replaced by native function calling, and prompt suggestion uses the existing session.
 
 The **VAD (Voice Activity Detection)** was the key UX breakthrough. Without it, users had to tap twice per turn (record, then send). With Web Audio's `AnalyserNode` computing RMS levels on a 100ms polling interval, we detect the speech-to-silence transition and auto-stop the recorder. The conversation feels natural — speak, pause, the Director responds, you speak again.
 
-**Language-aware Director**: The Director speaks the story's language. For non-English stories, the system prompt appends "You MUST speak and respond ONLY in {language}." Combined with configurable voice selection (8 voices from Charon to Zephyr), users get a personalized creative collaborator.
+**Language-aware Director**: The Director speaks the story's language. For non-English stories, the system prompt appends language directives. Combined with configurable voice selection (8 voices from Charon to Zephyr), users get a personalized creative collaborator.
 
 ### Settings Dialog: Centralized Configuration
 
@@ -511,7 +513,58 @@ The broader lesson: when your app has multiple entry points to the same state (W
 
 ---
 
-## Lessons Learned
+## Architecture Evolution: Technical Challenges Solved
+
+Building StoryForge wasn't a straight line — it was an iterative process of building, measuring, and rearchitecting. Here are the most significant architectural pivots:
+
+### Director Chat: 3-5 API Calls → 0 Extra Calls
+
+The Director Chat feature started as a straightforward integration: send user audio to Gemini Live, get audio back, then use separate API calls to transcribe both sides, detect intent, and suggest prompts. It worked — but every interaction triggered a cascade of Gemini API calls:
+
+| Step | API Call | Purpose |
+|------|----------|---------|
+| 1 | Gemini Live | Conversation (audio in/out) |
+| 2 | `transcribe_audio()` | User speech → text |
+| 3 | `transcribe_audio()` | Director speech → text |
+| 4 | `detect_intent()` (Gemini Flash) | "generate" vs "continue" |
+| 5 | `suggest_prompt()` (Gemini Flash) | Conversation → story prompt |
+
+This caused noticeable latency, wasted API quota, and introduced race conditions. The `generation_triggered` boolean flag had no lock and never reset after generation completed — once it flipped to `True`, auto-generation was permanently disabled for that session.
+
+The breakthrough came from reading the Gemini Live API documentation more carefully. Three native features eliminated all extra calls:
+
+1. **`input_audio_transcription` / `output_audio_transcription`**: The Live API transcribes both sides of the conversation as a side-channel. Transcriptions arrive in the receive stream alongside audio chunks. No separate STT calls needed.
+
+2. **Function calling (`tools`)**: We declared a `generate_story` function. The model — which has full conversational context — decides when brainstorming is done and calls the tool with a story prompt. This replaced the external `detect_intent()` classifier that was working from lossy transcriptions.
+
+3. **`context_window_compression`**: A sliding window strategy at the API level handles long brainstorming sessions. Combined with a local `_trim_log()` that caps the conversation log at 20 entries, we eliminated unbounded memory growth.
+
+**Result**: Zero extra API calls per interaction. The model that's having the conversation makes the generation decision atomically — no race conditions, no flags, no external classifiers guessing from transcripts. The manual "Suggest" button remains as a fallback for the ~30-40% of cases where tool calling doesn't fire in audio mode.
+
+### Sequential Pipeline → Per-Scene Streaming
+
+The original story pipeline was batch-sequential: Narrator generates ALL scene text → Illustrator generates ALL images → TTS generates ALL audio → Director analyzes. Users stared at a spinner for 15-30 seconds before seeing anything.
+
+The rewrite fires image, audio, and director commentary tasks **per-scene** as each scene's text completes inside the Narrator loop. Scene 1's image paints in while Scene 2's text is still streaming. An `asyncio.Semaphore(1)` serializes Imagen calls (rate limits), but they start as soon as text is ready — not after all scenes finish.
+
+### External Intent Detection → Native Tool Calling
+
+This deserves emphasis because it demonstrates a broader principle. We initially built a separate classification layer on top of an API that already had the capability we needed. The Gemini Live API supports function declarations — the model can decide to call a function based on the conversation flow. By declaring `generate_story` with strict conditions in the system prompt, we let the conversational model make the judgment call instead of asking an external model to guess from transcripts.
+
+The system prompt conditioning is critical for reliability:
+```
+"Call generate_story ONLY when ALL of these are true:
+1. The brainstorming has produced a clear story direction
+2. The user has explicitly confirmed they want to proceed
+3. You are NOT still asking follow-up questions
+4. The user is NOT still exploring alternatives"
+```
+
+This pattern — using the model's native capabilities instead of building external classifiers — applies broadly to any agent architecture.
+
+---
+
+
 
 ### 1. Prompt Engineering is Architecture
 
@@ -585,9 +638,11 @@ Our Director agent started as a purely reactive observer: it analyzed scenes aft
 
 Our first Director Chat implementation required two taps per turn: tap to start recording, tap again to send. Users found this clunky — it broke the conversational flow. Web Audio's `AnalyserNode` was the solution: compute RMS from `getFloatTimeDomainData()` on a fast polling interval, detect when speech transitions to silence, and auto-stop the recorder. The conversation becomes: speak → pause → message sends → Director responds → speak again. One tap to start, zero taps per subsequent turn.
 
-### 19. Gemini Live API Enables True Audio Agents
+### 19. Use Native API Features Before Building Workarounds
 
-The Gemini Live API (`gemini-live-2.5-flash-native-audio`) is fundamentally different from text APIs. It maintains a persistent bidirectional session where you send audio in and get audio back — the model handles speech recognition and synthesis internally. This removes the need for separate STT/TTS services in the conversation loop. The tradeoff: responses arrive as raw PCM chunks that need WAV wrapping for browser playback, and session management (connect, maintain, clean up) adds complexity. But the result — a real-time voice conversation with an AI character — is worth the engineering investment.
+Our Director Chat initially used 3-5 separate Gemini API calls per interaction: the Live session for conversation, `transcribe_audio()` for user speech, `transcribe_audio()` again for the Director's response, `detect_intent()` via Gemini Flash, and `suggest_prompt()` via Gemini Flash. This worked, but was slow, expensive, and fragile (a racy boolean flag, unbounded conversation logs, lossy transcription feeding intent detection).
+
+The Gemini Live API natively supports `input_audio_transcription`, `output_audio_transcription`, function calling via `tools`, and `context_window_compression`. Enabling these four config options eliminated every extra API call and replaced our brittle intent detection with the model's own judgment. The lesson: before building workarounds (separate STT calls, external classifiers, manual context management), check if the API you're already using has native support. The platform team usually thought of it first.
 
 ---
 
@@ -621,18 +676,35 @@ Each language gets a voice that suits it: Kore (warm) for English and Spanish, L
 
 The trade-off: Gemini's Live API doesn't provide word-level timestamps like Cloud TTS's SSML marks. But our Reading Mode already had a heuristic fallback — weighting words by length and adding pauses at punctuation — that works well enough for the karaoke highlighting effect.
 
-### Director-Driven Conversation Flow
+### Director-Driven Conversation Flow: From External Intent Detection to Native Tool Calling
 
-Early versions of our Director Chat had an eager trigger: the moment a user said "sounds great" or "let's do it", intent detection fired and generated a scene — often before the Director had finished exploring the idea. The Director might still be asking about characters or setting while the scene was already generating.
+Early versions of our Director Chat used a **separate Gemini Flash API call** after every user message to detect intent — is the user ready to generate, or still brainstorming? This worked, but created problems: 3-5 API calls per interaction (Live response + user transcription + director transcription + intent detection + prompt suggestion), latency from sequential calls, a racy `generation_triggered` boolean flag that never reset after generation, and unbounded `conversation_log` growth.
 
-The fix was philosophical: **the Director should control the creative flow, not the user's casual agreement.** We updated the Director's system prompt to explicitly instruct it to explore ideas fully — ask about characters, setting, mood, conflict — before confirming. And we rewired intent detection to analyze *both* sides of the conversation:
+The deeper problem was architectural: we were asking an external model to guess whether brainstorming was done by reading lossy transcriptions of an audio conversation. The model *having* the conversation had far better context than the model *analyzing* it.
 
-1. After each exchange, we transcribe the Director's audio response
-2. Both the user's message AND the Director's response feed into intent detection
-3. Generation only triggers when the Director has stopped asking questions AND the user has explicitly confirmed
-4. Confidence threshold raised from 0.7 to 0.8
+**The fix: let the conversational model itself decide.** We declared a `generate_story` function tool in the Live session config. The system prompt includes strict conditions for when to call it (brainstorming complete, user explicitly confirmed, not still asking questions). When the model decides it's time, it calls the tool atomically — no separate intent detection, no race conditions, no flag management.
 
-This creates the natural creative collaboration we wanted: the Director leads the brainstorming, gathers enough detail, proposes a clear plan, and only then asks "Ready to bring this to life?"
+```python
+GENERATE_STORY_TOOL = types.FunctionDeclaration(
+    name="generate_story",
+    description="Generate an illustrated story scene. Call ONLY when brainstorming is "
+                "complete and the user has explicitly confirmed they are ready.",
+    parameters=types.Schema(
+        type="OBJECT",
+        properties={
+            "prompt": types.Schema(
+                type="STRING",
+                description="Vivid 2-3 sentence story prompt distilled from brainstorming",
+            ),
+        },
+        required=["prompt"],
+    ),
+)
+```
+
+We also enabled native `input_audio_transcription` and `output_audio_transcription` in the `LiveConnectConfig`, eliminating two separate STT API calls per interaction. And `context_window_compression` with a sliding window handles long brainstorming sessions at the API level, while a local `_trim_log()` caps the conversation log at 20 entries.
+
+The result: **zero extra API calls per interaction** (was 3-5), no race conditions, no unbounded memory growth, and the model that's actually having the conversation makes the generation decision — with full context, not lossy transcripts. The manual "Suggest" button remains as a fallback for the ~30-40% of cases where tool calling doesn't fire in audio mode.
 
 ---
 

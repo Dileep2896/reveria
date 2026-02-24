@@ -349,10 +349,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     chat_language = message.get("language", language_current)
                     chat_voice = message.get("voice_name", "Charon")
                     director_chat = DirectorChatSession()
-                    audio_url = await director_chat.start(story_ctx, language=chat_language, voice_name=chat_voice)
+                    result = await director_chat.start(story_ctx, language=chat_language, voice_name=chat_voice)
                     await _safe_send(websocket, {
                         "type": "director_chat_started",
-                        "audio_url": audio_url,
+                        "audio_url": result["audio_url"],
                     })
                 except Exception as e:
                     logger.error("Director chat start failed: %s", e)
@@ -367,49 +367,33 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     audio_data = message.get("audio_data", "")
                     mime_type = message.get("mime_type", "audio/webm")
                     audio_bytes = base64.b64decode(audio_data) if audio_data else b""
-                    # Send audio to Live session and transcribe user in parallel
-                    director_task = asyncio.create_task(director_chat.send_audio(audio_bytes, mime_type))
-                    transcribe_task = asyncio.create_task(transcribe_audio(audio_data, mime_type))
-                    director_audio_url, user_transcript = await asyncio.gather(director_task, transcribe_task)
-                    # Log conversation
-                    if user_transcript:
-                        director_chat.conversation_log.append({"role": "user", "text": user_transcript})
-                        await _safe_send(websocket, {"type": "director_chat_user_transcript", "content": user_transcript})
-                    # Transcribe Director's response for intent analysis
-                    director_transcript = None
-                    if director_audio_url:
-                        # Extract base64 audio from data URL for transcription
-                        try:
-                            b64_part = director_audio_url.split(",", 1)[1] if "," in director_audio_url else ""
-                            if b64_part:
-                                director_transcript = await transcribe_audio(b64_part, "audio/wav")
-                        except Exception:
-                            pass
-                        log_text = director_transcript or "[voice response]"
-                        director_chat.conversation_log.append({"role": "director", "text": log_text})
+                    result = await director_chat.send_audio(audio_bytes, mime_type)
+                    # Send native transcripts to frontend
+                    if result["input_transcript"]:
+                        await _safe_send(websocket, {"type": "director_chat_user_transcript", "content": result["input_transcript"]})
                     await _safe_send(websocket, {
                         "type": "director_chat_response",
-                        "audio_url": director_audio_url,
+                        "audio_url": result["audio_url"],
                     })
-                    # Intent detection: check if BOTH user and Director are ready
-                    if user_transcript and not is_generating:
-                        try:
-                            intent = await director_chat.detect_intent(user_transcript, director_transcript)
-                            if intent.get("intent") == "generate" and intent.get("confidence", 0) >= 0.8:
-                                story_ctx = message.get("story_context", "")
-                                if not story_ctx and director_chat.conversation_log:
-                                    story_ctx = "\n".join(m["text"] for m in director_chat.conversation_log if m["role"] == "system")
-                                prompt = await director_chat.suggest_prompt(story_ctx)
-                                if prompt:
-                                    await _safe_send(websocket, {
-                                        "type": "director_chat_generate",
-                                        "prompt": prompt,
-                                        "art_style": art_style_current,
-                                        "scene_count": scene_count_current,
-                                        "language": language_current,
-                                    })
-                        except Exception as ie:
-                            logger.warning("Intent detection failed: %s", ie)
+                    # Handle tool calls (model decided brainstorming is done)
+                    if result["tool_calls"] and not is_generating:
+                        tc = result["tool_calls"][0]
+                        prompt = tc.get("args", {}).get("prompt", "").strip()
+                        if prompt and tc["name"] == "generate_story":
+                            # Acknowledge the tool call so model can say "Generating!"
+                            followup = await director_chat.respond_to_tool_call(tc, success=True)
+                            if followup["audio_url"]:
+                                await _safe_send(websocket, {
+                                    "type": "director_chat_response",
+                                    "audio_url": followup["audio_url"],
+                                })
+                            await _safe_send(websocket, {
+                                "type": "director_chat_generate",
+                                "prompt": prompt,
+                                "art_style": art_style_current,
+                                "scene_count": scene_count_current,
+                                "language": language_current,
+                            })
                 except Exception as e:
                     logger.error("Director chat audio failed: %s", e)
                     await _safe_send(websocket, {"type": "director_chat_error", "content": "Director couldn't process audio"})
@@ -422,42 +406,36 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 try:
                     text_content = message.get("content", "").strip()
                     if text_content:
-                        audio_url = await director_chat.send_text(text_content)
-                        # Transcribe Director's response for intent analysis
-                        director_transcript = None
-                        if audio_url:
-                            try:
-                                b64_part = audio_url.split(",", 1)[1] if "," in audio_url else ""
-                                if b64_part:
-                                    director_transcript = await transcribe_audio(b64_part, "audio/wav")
-                            except Exception:
-                                pass
-                            log_text = director_transcript or "[voice response]"
-                            director_chat.conversation_log.append({"role": "director", "text": log_text})
+                        result = await director_chat.send_text(text_content)
                         await _safe_send(websocket, {
                             "type": "director_chat_response",
-                            "audio_url": audio_url,
+                            "audio_url": result["audio_url"],
                         })
-                        # Intent detection: check if BOTH user and Director are ready
-                        if not is_generating:
-                            try:
-                                intent = await director_chat.detect_intent(text_content, director_transcript)
-                                if intent.get("intent") == "generate" and intent.get("confidence", 0) >= 0.8:
-                                    story_ctx = "\n".join(m["text"] for m in director_chat.conversation_log if m["role"] == "system")
-                                    prompt = await director_chat.suggest_prompt(story_ctx)
-                                    if prompt:
-                                        await _safe_send(websocket, {
-                                            "type": "director_chat_generate",
-                                            "prompt": prompt,
-                                            "art_style": art_style_current,
-                                            "scene_count": scene_count_current,
-                                            "language": language_current,
-                                        })
-                            except Exception as ie:
-                                logger.warning("Intent detection failed: %s", ie)
+                        # Handle tool calls (model decided brainstorming is done)
+                        if result["tool_calls"] and not is_generating:
+                            tc = result["tool_calls"][0]
+                            prompt = tc.get("args", {}).get("prompt", "").strip()
+                            if prompt and tc["name"] == "generate_story":
+                                followup = await director_chat.respond_to_tool_call(tc, success=True)
+                                if followup["audio_url"]:
+                                    await _safe_send(websocket, {
+                                        "type": "director_chat_response",
+                                        "audio_url": followup["audio_url"],
+                                    })
+                                await _safe_send(websocket, {
+                                    "type": "director_chat_generate",
+                                    "prompt": prompt,
+                                    "art_style": art_style_current,
+                                    "scene_count": scene_count_current,
+                                    "language": language_current,
+                                })
                 except Exception as e:
                     logger.error("Director chat text failed: %s", e)
                     await _safe_send(websocket, {"type": "director_chat_error", "content": "Director couldn't respond"})
+                continue
+
+            if msg_type == "director_chat_cancel_generate":
+                logger.info("Director auto-generate cancelled by user")
                 continue
 
             if msg_type == "director_chat_suggest":
@@ -466,7 +444,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     continue
                 try:
                     story_ctx = message.get("story_context", "")
-                    prompt_text = await director_chat.suggest_prompt(story_ctx)
+                    prompt_text = await director_chat.request_suggestion(story_ctx)
                     await _safe_send(websocket, {
                         "type": "director_chat_suggestion",
                         "content": prompt_text or "Couldn't generate a suggestion. Try chatting more first!",
