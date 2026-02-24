@@ -87,8 +87,6 @@ _OFFTOPIC_PATTERNS = [
     "\u30b3\u30fc\u30c9\u3092\u66f8\u304f\u3053\u3068\u304c\u3067\u304d\u307e\u305b\u3093",  # コードを書くことができません
 ]
 
-_ALL_PATTERNS = _SAFETY_PATTERNS + _OFFTOPIC_PATTERNS
-
 
 def is_refusal(text: str) -> str | None:
     """Detect if text is an AI refusal. Returns 'safety', 'offtopic', or None."""

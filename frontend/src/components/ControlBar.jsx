@@ -2,19 +2,15 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import useVoiceCapture from '../hooks/useVoiceCapture';
 import { ART_STYLES } from '../data/artStyles';
-import { LANGUAGES, PLACEHOLDERS } from '../data/languages';
+import { PLACEHOLDERS } from '../data/languages';
 
-export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, setLanguage, languageLocked, usage }) {
+export default function ControlBar({ onSend, onSendAudio, onSteer, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, usage }) {
   const [focused, setFocused] = useState(false);
-  const [sceneCount, setSceneCount] = useState(2);
+  const sceneCount = 1;
   const [styleOpen, setStyleOpen] = useState(false);
-  const [langOpen, setLangOpen] = useState(false);
   const [menuPos, setMenuPos] = useState(null);
-  const [langMenuPos, setLangMenuPos] = useState(null);
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
-  const langTriggerRef = useRef(null);
-  const langMenuRef = useRef(null);
 
   const openMenu = () => {
     if (triggerRef.current) {
@@ -24,32 +20,17 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
     setStyleOpen(true);
   };
 
-  const openLangMenu = () => {
-    if (langTriggerRef.current) {
-      const rect = langTriggerRef.current.getBoundingClientRect();
-      setLangMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
-    }
-    setLangOpen(true);
-  };
-
   // Close dropdown on outside click
   useEffect(() => {
-    if (!styleOpen && !langOpen) return;
+    if (!styleOpen) return;
     const onClickOutside = (e) => {
-      if (styleOpen) {
-        if (!menuRef.current?.contains(e.target) && !triggerRef.current?.contains(e.target)) {
-          setStyleOpen(false);
-        }
-      }
-      if (langOpen) {
-        if (!langMenuRef.current?.contains(e.target) && !langTriggerRef.current?.contains(e.target)) {
-          setLangOpen(false);
-        }
+      if (!menuRef.current?.contains(e.target) && !triggerRef.current?.contains(e.target)) {
+        setStyleOpen(false);
       }
     };
     document.addEventListener('pointerdown', onClickOutside);
     return () => document.removeEventListener('pointerdown', onClickOutside);
-  }, [styleOpen, langOpen]);
+  }, [styleOpen]);
 
   const { recording, startRecording, stopRecording } = useVoiceCapture({
     onAudioCaptured: (base64, mimeType) => {
@@ -57,12 +38,20 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
     },
   });
 
-  const isDisabled = !connected || generating || quotaCooldown > 0;
+  const isDisabled = !connected || (!generating && quotaCooldown > 0);
+  const isSteerMode = generating && connected;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!inputValue.trim() || isDisabled) return;
-    onSend(inputValue.trim(), { artStyle, sceneCount, language });
+    const text = inputValue.trim();
+    if (!text) return;
+    if (isSteerMode) {
+      onSteer?.(text);
+      setInputValue('');
+      return;
+    }
+    if (isDisabled || generating) return;
+    onSend(text, { artStyle, sceneCount, language });
     setInputValue('');
   };
   const hasText = inputValue.trim().length > 0;
@@ -140,58 +129,6 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
             )}
           </div>
 
-          {/* Scene count toggle (1 or 2) */}
-          <div className="control-scene-count">
-            {[1, 2].map((n) => (
-              <button
-                key={n}
-                type="button"
-                className={`control-scene-btn${sceneCount === n ? ' active' : ''}`}
-                onClick={() => setSceneCount(n)}
-                title={`Generate ${n} scene${n > 1 ? 's' : ''}`}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-
-          {/* Language dropdown - only for new books before first generation */}
-          {!languageLocked && (
-          <div className="control-style-dropdown">
-            <button
-              ref={langTriggerRef}
-              type="button"
-              className="control-style-trigger"
-              onClick={() => langOpen ? setLangOpen(false) : openLangMenu()}
-            >
-              <span>{LANGUAGES.find((l) => l.key === language)?.label || 'English'}</span>
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, transition: 'transform 0.2s ease', transform: langOpen ? 'rotate(180deg)' : 'none' }}>
-                <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {langOpen && langMenuPos && createPortal(
-              <div ref={langMenuRef} className="control-style-menu" style={{ bottom: langMenuPos.bottom, left: langMenuPos.left }}>
-                {LANGUAGES.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`control-style-option${key === language ? ' active' : ''}`}
-                    onClick={() => { setLanguage(key); setLangOpen(false); }}
-                  >
-                    {key === language && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                    <span>{label}</span>
-                  </button>
-                ))}
-              </div>,
-              document.body
-            )}
-          </div>
-          )}
-
           {/* Usage counter pill — hidden for pro (limit is effectively unlimited) */}
           {usage && usage.limits?.generations_today > 0 && usage.usage?.tier !== 'pro' && (
             <div
@@ -227,15 +164,34 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 handleSubmit(e);
               }
             }}
-            placeholder={recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : generating ? 'Story is being crafted...' : (PLACEHOLDERS[language] || PLACEHOLDERS.English)}
-            disabled={isDisabled}
+            placeholder={recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : generating ? 'Steer the story... (e.g. make it scarier)' : (PLACEHOLDERS[language] || PLACEHOLDERS.English)}
+            disabled={isDisabled && !isSteerMode}
             className="flex-1 bg-transparent outline-none control-input"
-            style={{ color: 'var(--text-primary)', resize: 'none' }}
+            style={{ color: 'var(--text-primary)', resize: 'none', maxHeight: '120px', overflowY: 'auto' }}
             rows={1}
           />
 
-          {/* Single morphing action button: mic → send → spinner */}
-          {generating ? (
+          {/* Single morphing action button: mic → send → steer/spinner */}
+          {generating && hasText ? (
+            <button
+              type="submit"
+              className="flex-shrink-0 rounded-full flex items-center justify-center transition-all control-action-btn"
+              style={{
+                background: 'var(--accent-secondary)',
+                color: 'var(--text-inverse)',
+                border: '1px solid var(--accent-secondary)',
+                boxShadow: 'var(--shadow-glow-secondary)',
+                cursor: 'pointer',
+              }}
+              title="Steer the story"
+            >
+              {/* Compass icon */}
+              <svg className="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+              </svg>
+            </button>
+          ) : generating ? (
             <div
               className="flex-shrink-0 rounded-full flex items-center justify-center control-action-btn"
               style={{
@@ -284,12 +240,12 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 border: `1px solid ${recording ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
                 boxShadow: recording ? '0 0 12px var(--accent-primary)' : 'none',
                 animation: recording ? 'micPulse 1.2s ease-in-out infinite' : 'none',
-                opacity: isDisabled ? 0.3 : 1,
-                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                opacity: (isDisabled || generating) ? 0.3 : 1,
+                cursor: (isDisabled || generating) ? 'not-allowed' : 'pointer',
               }}
               title={recording ? 'Click to stop' : 'Click to record'}
-              onClick={!isDisabled ? (recording ? stopRecording : startRecording) : undefined}
-              disabled={isDisabled}
+              onClick={!(isDisabled || generating) ? (recording ? stopRecording : startRecording) : undefined}
+              disabled={isDisabled || generating}
             >
               <svg className="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />

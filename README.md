@@ -14,15 +14,19 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 - **Multimodal Storytelling** - Text, images, and audio stream together in real-time as an interactive flipbook
 - **Voice Input** - Hold-to-talk voice capture using Web Audio API for hands-free story steering
-- **Audio Narration** - Google Cloud Text-to-Speech narrates each scene with distinct character voices
+- **Audio Narration** - Gemini native audio (via Live API) narrates each scene with expressive, mood-adaptive voiceover
 - **Art Style Selection** - Choose from 6 visual styles: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, Pencil Sketch
 - **Genre Quick-Start** - Click a genre pill (Mystery, Fantasy, Sci-Fi, Horror, Children's) to populate a starter prompt
 - **Story Continuation & Steering** - Send follow-up prompts to continue, redirect, or reshape the story mid-flow
+- **Per-Scene Streaming** - Images and audio generate per-scene as text completes, not after all scenes. Scene 1's image paints in while Scene 2 is still being written.
+- **Live Director Commentary** - Real-time per-scene creative notes (mood, tension, craft observations) stream to the Director Panel during generation, before the full post-batch analysis.
+- **Mid-Generation Steering** - Type direction changes while the story generates (e.g. "make it scarier"). Steering is injected between scenes via the narrator's conversation history.
+- **Playful Safety Redirect** - Instead of hard error toasts for inappropriate content, the narrator redirects in-character ("That part of the library is forbidden! Let's explore this path instead...").
 - **Director Mode** - A sidebar panel revealing the agent's creative reasoning: narrative structure, tension arcs, character development, and visual decisions
 - **Tension Arc Visualization** - Live graph showing narrative tension across scenes
 - **Interactive Flipbook** - Pages flip with realistic animation, keyboard navigation (arrow keys), and dot-based page navigation
 - **Hybrid Character Consistency** - Three-stage image pipeline: character sheet extraction → scene composition (Gemini) → verbatim character descriptions prepended to prompt. Character details reach Imagen without being summarized.
-- **NSFW/Safety Content Filtering** - Refusal detection intercepts AI-generated safety responses before they reach the frontend. Users see a clean error toast instead of garbled refusal text.
+- **NSFW/Safety Content Filtering** - Refusal detection intercepts AI-generated safety responses before they reach the frontend. The narrator redirects inappropriate requests in-character with a playful narrative deflection ("That part of the library is forbidden!"), falling back to a clean error toast for hard blocks.
 - **Firebase Auth** - Google Sign-In + email/password sign-up with email verification
 - **Story Persistence** - Cloud Firestore saves stories, scenes, and generations with AI-generated titles and cover images
 - **Art Style Memory** - Selected art style is persisted per story and restored when reopening from Library
@@ -38,7 +42,7 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Glassmorphism UI** - Frosted glass panels with dark/light theme support
 - **Toast Notifications** - Global notification system (success/error/warning/info) with auto-dismiss, progress bars, and glassmorphism styling
 - **New Story** - Start fresh at any time with the New Story button - resets both frontend and backend state
-- **Multi-Language Stories** - Generate stories in 8 languages (English, Spanish, French, German, Japanese, Hindi, Portuguese, Chinese) with automatic TTS voice selection per language
+- **Multi-Language Stories** - Generate stories in 8 languages (English, Spanish, French, German, Japanese, Hindi, Portuguese, Chinese) with Gemini native audio narration
 - **Animated Book Entrance** - Smooth entrance animation when the storybook first appears on canvas
 - **Share Link** - Copy a public URL for published stories; unauthenticated users can view shared stories with a "Sign in to create" CTA
 - **PDF Export** - Download any saved story as a polished PDF storybook with cover page, scene illustrations, decorative typography, and page numbering
@@ -55,6 +59,14 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Pro User Visual Indicators** - Tier-based avatar styling: Pro users get a golden glowing ring (pulse animation) + amber "PRO" pill in profile dropdown; Standard gets violet ring + pill; Free shows default glass border
 - **Theme-Aware Book Shadows** - Light mode uses softer book depth shadows and page gutter shadows via CSS variables; react-pageflip's canvas shadow opacity adapts per theme
 - **Modular Codebase** - 7 monolithic files decomposed into ~22 focused modules (all under 320 lines) for maintainability
+- **Director Chat** - Voice-based brainstorming with the Director using Gemini Live API (`gemini-live-2.5-flash-native-audio`). Auto-sends on silence detection (Web Audio API VAD), supports text input, intent detection for auto-generation, and configurable voice selection (8 voices)
+- **Settings Dialog** - Centralized settings for theme (light/dark) and Director voice selection, replacing the standalone theme toggle
+- **Auto-Send on Silence (VAD)** - Web Audio API `AnalyserNode` detects 1.2s of silence after speech and auto-stops recording, enabling natural conversation flow without manual tap-to-send
+- **Powered by Gemini** - Subtle branding badge in Director Chat with Gemini gradient sparkle icon
+- **Voice Preview** - Hear a sample of each Director voice before selecting in Settings
+- **Director-Driven Intent Detection** - Director controls when to generate scenes, exploring ideas fully before suggesting
+- **Token Expiry Recovery** - Automatic WebSocket reconnection and REST token refresh on auth failure
+- **404 Page** - Themed not-found page with navigation to create or explore stories
 
 ---
 
@@ -92,16 +104,21 @@ flowchart TB
 
         subgraph Orchestrator["Story Orchestrator (ADK)"]
             direction TB
-            Narrator["Narrator Agent<br/>Story text + dialogue"]
+            Narrator["Narrator Agent<br/>(per-scene streaming loop)"]
 
-            subgraph Parallel["Parallel Execution"]
+            subgraph PerScene["Per-Scene Tasks (asyncio)"]
                 direction LR
-                Illustrator["Illustrator Agent<br/>Scene images"]
-                DirectorAgent["Director Agent<br/>Creative analysis"]
-                TTS["TTS Agent<br/>Voice narration"]
+                Illustrator["Illustrator<br/>Scene image"]
+                TTS["TTS<br/>Scene audio"]
+                DirectorLive["Director Live<br/>Scene commentary"]
             end
 
-            Narrator -->|scene text| Parallel
+            subgraph PostBatch["Post-Batch Analysis"]
+                DirectorAgent["Director Agent<br/>Full analysis"]
+            end
+
+            Narrator -->|"each scene ready"| PerScene
+            PerScene -->|"all scenes done"| PostBatch
         end
 
         Persist["Firestore Client<br/>(persist stories)"]
@@ -112,8 +129,9 @@ flowchart TB
     subgraph Google["Google AI Services"]
         direction LR
         Gemini["Gemini 2.0 Flash<br/>(Vertex AI)"]
+        GeminiLive["Gemini Live API<br/>(native audio)"]
         Imagen["Imagen 3<br/>(Vertex AI)"]
-        CloudTTS["Cloud TTS"]
+        CloudTTS["Gemini Native Audio"]
     end
 
     subgraph Data["Data Layer"]
@@ -133,17 +151,21 @@ flowchart TB
     Narrator -->|Gemini API| Gemini
     Illustrator -->|Gemini → Imagen| Gemini & Imagen
     DirectorAgent -->|Gemini API| Gemini
-    TTS -->|synthesize| CloudTTS
+    TTS -->|native audio| CloudTTS
 
     Persist -->|save| Firestore
     Storage -->|upload| GCS
+
+    WS -->|"director chat audio"| DirectorChat["Director Chat<br/>Gemini Live Session"]
+    DirectorChat -->|"Live API"| GeminiLive
 
     style Frontend fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
     style Backend fill:#1a1a2e,stroke:#f59e0b,color:#e2e8f0
     style Google fill:#0f172a,stroke:#3b82f6,color:#e2e8f0
     style Data fill:#0f172a,stroke:#10b981,color:#e2e8f0
     style Orchestrator fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
-    style Parallel fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
+    style PerScene fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
+    style PostBatch fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
 ```
 
 ---
@@ -171,7 +193,7 @@ flowchart TB
             direction LR
             VertexGemini["Vertex AI<br/>Gemini 2.0 Flash<br/>(text generation)"]
             VertexImagen["Vertex AI<br/>Imagen 3<br/>(image generation)"]
-            GTTS["Cloud Text-to-Speech<br/>(scene narration)"]
+            GTTS["Gemini Native Audio<br/>(Live API, scene narration)"]
         end
 
         GCSBucket[("Cloud Storage<br/>storyforge-hackathon-media<br/>──────────────────<br/>scene images (WebP)<br/>cover images (WebP)")]
@@ -185,7 +207,7 @@ flowchart TB
     FBAuth -->|"verify ID token"| CloudRun
     CloudRun -->|"Gemini API"| VertexGemini
     CloudRun -->|"Imagen API"| VertexImagen
-    CloudRun -->|"TTS API"| GTTS
+    CloudRun -->|"Live API (audio)"| GTTS
     CloudRun -->|"persist stories<br/>+ scenes"| FBFirestore
     CloudRun -->|"upload images"| GCSBucket
     GCSBucket -->|"public URLs"| Browser
@@ -316,14 +338,17 @@ StoryForge uses **Google's Agent Development Kit (ADK)** to orchestrate a multi-
 
 ```
 StoryOrchestrator (SequentialAgent)
-  ├── NarratorADKAgent          ← runs first, generates story text
+  ├── NarratorADKAgent (per-scene streaming loop)
+  │     ├── Scene text ready ──┬── asyncio.create_task(Illustrator)
+  │     │                      ├── asyncio.create_task(TTS)
+  │     │                      └── asyncio.create_task(Director Live)
+  │     ├── [Check steering queue → inject user direction]
+  │     └── await all pending tasks
   └── PostNarrationAgent (ParallelAgent)
-        ├── IllustratorADKAgent  ← generates scene images
-        ├── DirectorADKAgent     ← analyzes creative decisions
-        └── TTSADKAgent          ← synthesizes narration audio
+        └── DirectorADKAgent     ← full post-batch analysis
 ```
 
-The Narrator must complete before the parallel phase begins, because Illustrator, Director, and TTS all depend on the generated scene text. Once narration is done, all three downstream agents run **concurrently** to minimize latency.
+Instead of waiting for all scenes to finish before generating images and audio, the pipeline now fires per-scene tasks **as each scene completes**. When the Narrator finishes Scene 1's text, the Illustrator, TTS, and Director Live commentary tasks launch immediately via `asyncio.create_task` while the Narrator continues writing Scene 2. Between scenes, the pipeline checks a **steering queue** for user direction changes and injects them into the narrator's conversation history. After all scenes are written and all per-scene tasks have resolved, the PostNarrationAgent runs the Director's full post-batch analysis.
 
 ### Shared State Pattern
 
@@ -338,6 +363,7 @@ class SharedPipelineState:
     ws_callback: Callable    # WebSocket send function for real-time streaming
     story_id: str            # Firestore document ID for GCS uploads
     director_result: dict    # Populated by Director, read by main.py for persistence
+    steering_queue: list[str] # Mid-generation user directions, injected between scenes
 ```
 
 The caller sets input fields (`user_input`, `art_style`, `ws_callback`) before each pipeline run. Agents write their outputs back to shared state, enabling downstream consumers and the WebSocket handler to read results.
@@ -390,7 +416,7 @@ Step 3: Image Generation (Imagen 3)
 
 #### 3. Director Agent
 
-The Director provides **meta-commentary** on the creative process - the "why" behind story decisions. This powers the Director Mode sidebar visible to users (and judges).
+The Director provides **meta-commentary** on the creative process - the "why" behind story decisions. This powers the Director Mode sidebar visible to users (and judges). Beyond analysis, the Director actively shapes the story: each per-scene analysis includes a `suggestion` field - a bold creative direction for what should happen next. This suggestion is automatically injected into the Narrator's context for the following batch, making the Director a cross-batch creative collaborator rather than a passive observer.
 
 | Aspect | Detail |
 |--------|--------|
@@ -432,7 +458,7 @@ The frontend renders this as **glanceable visual summaries** (stage pills, trend
 
 #### 4. TTS Agent
 
-The TTS Agent generates narration audio for each scene using **Google Cloud Text-to-Speech** (Studio-quality voices at 0.95x speaking rate). Audio is generated concurrently for all scenes via `asyncio.gather`.
+The TTS Agent generates narration audio for each scene using **Gemini Native Audio** (via the Live API with `gemini-2.5-flash-native-audio`). Audio is generated per-scene with expressive, mood-adaptive voiceover.
 
 ### Service Layer
 
@@ -442,7 +468,7 @@ The agents are backed by three service modules:
 |---------|------|-------------|
 | `gemini_client.py` | Gemini API wrapper | Singleton client, streaming generation, audio transcription for voice input |
 | `imagen_client.py` | Imagen 3 wrapper | **Circuit breaker pattern** - after 3 failed retries (429 rate limits with exponential backoff at 10s/20s/40s), trips a 60-second cooldown that skips all calls. Resets on next success. |
-| `tts_client.py` | Cloud TTS wrapper | MP3 output, configurable voice name, async client |
+| `tts_client.py` | Gemini Native Audio wrapper | WAV output via Live API, mood-adaptive narration |
 
 ### Resilience Patterns
 
@@ -457,25 +483,35 @@ The agents are backed by three service modules:
 flowchart LR
     Input["User Input<br/>(voice / text)"] --> Narrator
 
-    subgraph Sequential["Sequential Phase"]
+    subgraph NarratorLoop["Narrator (per-scene streaming loop)"]
         Narrator["Narrator Agent<br/>──────────────<br/>Gemini 2.0 Flash<br/>→ scene text + markers"]
+        Steering["Check Steering Queue<br/>──────────────<br/>Inject user direction<br/>between scenes"]
+        Narrator --> Steering
+        Steering -->|"next scene"| Narrator
     end
 
-    subgraph Parallel["Parallel Phase"]
+    subgraph PerSceneTasks["Per-Scene Tasks (async, per scene)"]
         direction TB
-        Illustrator["Illustrator Agent<br/>──────────────<br/>Character sheet (Gemini)<br/>→ Image prompt (Gemini)<br/>→ Scene image (Imagen 3)"]
-        Director["Director Agent<br/>──────────────<br/>Gemini 2.0 Flash<br/>→ narrative arc, tension,<br/>characters, visual style"]
-        TTSAgent["TTS Agent<br/>──────────────<br/>Cloud TTS<br/>→ narration audio"]
+        Illustrator["Illustrator<br/>──────────────<br/>Character sheet (Gemini)<br/>→ Image prompt (Gemini)<br/>→ Scene image (Imagen 3)"]
+        TTSAgent["TTS<br/>──────────────<br/>Gemini Native Audio<br/>→ narration audio"]
+        DirectorLive["Director Live<br/>──────────────<br/>Mood, tension,<br/>craft observations"]
     end
 
-    Narrator -->|scene text| Illustrator
-    Narrator -->|scene text| Director
-    Narrator -->|scene text| TTSAgent
+    subgraph PostNarration["Post-Narration (after all scenes)"]
+        Director["Director Agent<br/>──────────────<br/>Gemini 2.0 Flash<br/>→ full narrative arc,<br/>tension, characters"]
+    end
 
-    Illustrator & Director & TTSAgent -->|"interleaved stream"| WS["WebSocket<br/>→ Frontend"]
+    Narrator -->|"each scene ready"| Illustrator
+    Narrator -->|"each scene ready"| TTSAgent
+    Narrator -->|"each scene ready"| DirectorLive
+    PerSceneTasks -->|"all scenes done"| Director
 
-    style Sequential fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
-    style Parallel fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
+    Illustrator & TTSAgent & DirectorLive -->|"interleaved stream"| WS["WebSocket<br/>→ Frontend"]
+    Director -->|"full analysis"| WS
+
+    style NarratorLoop fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
+    style PerSceneTasks fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
+    style PostNarration fill:#0f172a,stroke:#10b981,color:#e2e8f0
 ```
 
 ### Multi-Language Pipeline
@@ -484,7 +520,7 @@ flowchart LR
 flowchart LR
     User["User selects<br/>Language"] --> WS["WebSocket<br/>language field"]
     WS --> Narrator["Narrator Agent<br/>System prompt:<br/>'Write in {language}'"]
-    WS --> TTS["TTS Agent<br/>Voice: LANGUAGE_VOICES[lang]"]
+    WS --> TTS["TTS Agent<br/>Gemini Native Audio"]
     WS --> FS["Firestore<br/>language field persisted"]
 
     Narrator -->|"{language} text"| Frontend["Frontend<br/>Scene text renders"]
@@ -532,6 +568,59 @@ flowchart LR
     style UI fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
 ```
 
+### Director Chat Architecture (Gemini Live API)
+
+```mermaid
+flowchart LR
+    subgraph Client["Frontend (Browser)"]
+        direction TB
+        Orb["Voice Orb<br/>tap to record"]
+        VAD["Web Audio VAD<br/>AnalyserNode RMS<br/>1.2s silence → auto-stop"]
+        Recorder["MediaRecorder<br/>webm/opus"]
+        TextInput2["Text Input<br/>(fallback)"]
+        Orb --> VAD
+        VAD -->|"auto-stop"| Recorder
+    end
+
+    subgraph WS["WebSocket Messages"]
+        direction TB
+        Start["director_chat_start<br/>{story_context, language, voice_name}"]
+        Audio["director_chat_audio<br/>{base64, mime_type}"]
+        Text["director_chat_text<br/>{content}"]
+        Suggest["director_chat_suggest<br/>{story_context}"]
+        End["director_chat_end"]
+    end
+
+    subgraph Backend["Backend - DirectorChatSession"]
+        direction TB
+        Session["Gemini Live Session<br/>gemini-live-2.5-flash-native-audio"]
+        Intent["Intent Detection<br/>Gemini Flash (temp 0)<br/>generate vs continue"]
+        PromptGen["Suggest Prompt<br/>Gemini Flash (temp 0.7)<br/>conversation → story prompt"]
+    end
+
+    subgraph Response["Response Flow"]
+        direction TB
+        PCM["PCM Audio Chunks"] --> WAV["_pcm_to_wav()"]
+        WAV --> DataURL["Base64 WAV Data URL"]
+        DataURL --> Playback["Browser Audio Playback"]
+    end
+
+    Recorder -->|"base64"| Audio
+    TextInput2 --> Text
+    Start --> Session
+    Audio --> Session
+    Text --> Session
+    Session --> PCM
+    Suggest --> PromptGen
+    PromptGen -->|"suggested prompt"| Client
+    Intent -->|"generate intent"| PromptGen
+
+    style Client fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
+    style WS fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
+    style Backend fill:#1a1a2e,stroke:#3b82f6,color:#e2e8f0
+    style Response fill:#0f172a,stroke:#10b981,color:#e2e8f0
+```
+
 ---
 
 ## Interleaved Output Strategy
@@ -564,7 +653,8 @@ The output *weaves* modalities together, not just appends them sequentially:
 | Agent Framework | Google ADK (Agent Development Kit) | Multi-agent orchestration |
 | LLM | Gemini 2.0 Flash | Story generation, interleaved output |
 | Image Gen | Imagen 3 (via Vertex AI) | Scene illustrations, character portraits |
-| Voice Output | Google Cloud Text-to-Speech | Story narration with distinct voices |
+| Director Chat | Gemini Live API (`gemini-live-2.5-flash-native-audio`) | Real-time voice brainstorming with Director |
+| Voice Output | Gemini Native Audio (Live API) | Expressive, mood-adaptive story narration |
 | Database | Cloud Firestore | Story persistence, user libraries, likes |
 | Hosting | Google Cloud Run | Containerized backend deployment |
 | Static Hosting | Firebase Hosting | Frontend SPA |
@@ -596,6 +686,8 @@ storyforge/
 │   │   │   ├── ReadingMode.jsx        # Full-screen reading with karaoke narration
 │   │   │   ├── SplashScreen.jsx       # Loading splash with branded animation
 │   │   │   ├── AuthScreen.jsx         # Sign-in/sign-up with Google + email/password
+│   │   │   ├── DirectorChat.jsx       # Voice/text brainstorming with Director (Gemini Live)
+│   │   │   ├── SettingsDialog.jsx    # Theme + Director voice settings dialog
 │   │   │   ├── AdminDashboard.jsx    # Admin panel for user tier management
 │   │   │   ├── SubscriptionPage.jsx  # Subscription tier display and management
 │   │   │   ├── scene/                 # SceneCard sub-components
@@ -656,8 +748,9 @@ storyforge/
 │   │   └── book_details.py            # Public book details endpoint
 │   ├── services/
 │   │   ├── gemini_client.py           # Gemini API wrapper (GenAI SDK)
+│   │   ├── director_chat.py           # Director Chat session (Gemini Live API)
 │   │   ├── imagen_client.py           # Imagen 3 via Vertex AI
-│   │   ├── tts_client.py              # Cloud Text-to-Speech
+│   │   ├── tts_client.py              # Gemini Native Audio (Live API)
 │   │   ├── pdf_export.py              # PDF storybook generation (fpdf2)
 │   │   ├── usage.py                   # Per-tier usage limits + tracking
 │   │   ├── auth.py                    # Firebase Auth verification + admin checks
@@ -687,7 +780,7 @@ storyforge/
 - Node.js 20+
 - Python 3.12+
 - Docker (optional, for containerized dev)
-- Google Cloud account with Vertex AI, Cloud TTS, and Firestore APIs enabled
+- Google Cloud account with Vertex AI, Gemini API, and Firestore APIs enabled
 
 ### 1. Clone & Install
 
@@ -750,7 +843,6 @@ gcloud services enable \
   aiplatform.googleapis.com \
   run.googleapis.com \
   generativelanguage.googleapis.com \
-  texttospeech.googleapis.com \
   firestore.googleapis.com
 
 # Set application default credentials
@@ -774,9 +866,6 @@ GEMINI_MODEL=gemini-2.0-flash
 # Vertex AI (for Imagen)
 VERTEX_AI_LOCATION=us-central1
 
-# Cloud TTS
-TTS_VOICE_NAME=en-US-Studio-O
-
 # Firestore
 FIRESTORE_COLLECTION=story_sessions
 
@@ -796,6 +885,21 @@ VITE_WS_URL=ws://localhost:8000/ws
 - **Backend smoke tests** - 8 pytest tests with mocked Firebase/Firestore
 - **Frontend smoke tests** - 3 Playwright browser tests
 - **Infrastructure as Code** - All deployment config in version-controlled files (Dockerfile, ci.yml, firebase.json)
+- **Per-scene streaming** - image + audio generation fires per-scene (not batch), reducing perceived latency
+- **Live Director commentary** - per-scene creative notes stream during generation with mood, tension, craft observations, and proactive suggestions that feed into the next batch's narration
+- **Mid-generation steering** - users can steer the story while it generates (injected between scenes)
+- **Playful safety redirect** - narrator redirects inappropriate requests in-character instead of hard error
+- **Director Chat** - Real-time voice brainstorming with the Director via Gemini Live API, with auto-send on silence (VAD), text fallback, intent detection, prompt suggestion, and 8 configurable voice options
+- **Settings Dialog** - Centralized theme + Director voice settings, replacing standalone theme toggle
+- **Powered by Gemini** - Subtle branding badge in Director Chat panel
+
+---
+
+## Roadmap
+
+- **Book Layout Preference** — Single-page / two-page spread toggle for personalized reading experience
+- **Multi-Voice Narration** — Character-specific voices based on gender and age for immersive audiobook narration
+- **Custom Character Portraits** — Upload your own photos to create personalized characters, enabling auto-biographies and self-insert stories
 
 ---
 

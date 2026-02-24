@@ -27,6 +27,7 @@ export async function loadStoryById(storyId) {
       return {
         prompt: data.prompt,
         directorData: data.director_data || null,
+        directorLiveNotes: data.director_live_notes || [],
         sceneNumbers: data.scene_numbers || [],
       };
     })

@@ -26,7 +26,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
   const { storyId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { idToken } = useAuth();
+  const { idToken, getValidToken } = useAuth();
   const { addToast } = useToast();
   const prepublish = location.state?.prepublish || false;
 
@@ -245,8 +245,9 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
   const handlePdf = useCallback(async () => {
     addToast('Generating PDF...', 'info');
     try {
+      const token = getValidToken ? await getValidToken() : idToken;
       const res = await fetch(`${API_URL}/api/stories/${storyId}/pdf`, {
-        headers: { Authorization: `Bearer ${idToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
@@ -261,7 +262,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
       console.error('PDF export failed:', err);
       addToast('PDF export failed', 'error');
     }
-  }, [storyId, idToken, addToast]);
+  }, [storyId, idToken, getValidToken, addToast]);
 
   // Read This Story - load scenes and open Reading Mode
   const handleReadStory = useCallback(async () => {
@@ -449,9 +450,10 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
     });
 
     try {
+      const token = getValidToken ? await getValidToken() : idToken;
       await fetch(`${API_URL}/api/stories/${storyId}/rate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rating }),
       });
     } catch {
@@ -459,7 +461,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
     } finally {
       setRatingSubmitting(false);
     }
-  }, [user, idToken, storyId, ratingData, ratingSubmitting]);
+  }, [user, idToken, getValidToken, storyId, ratingData, ratingSubmitting]);
 
   // ── Post comment ──
   const handlePostComment = useCallback(async () => {
@@ -469,9 +471,10 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
     setCommentText('');
 
     try {
+      const token = getValidToken ? await getValidToken() : idToken;
       const res = await fetch(`${API_URL}/api/stories/${storyId}/comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text }),
       });
       if (!res.ok) throw new Error('Failed');
@@ -484,7 +487,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
     } finally {
       setPostingComment(false);
     }
-  }, [user, idToken, storyId, commentText, postingComment, addToast]);
+  }, [user, idToken, getValidToken, storyId, commentText, postingComment, addToast]);
 
   // ── Delete comment ──
   const handleDeleteComment = useCallback(async (commentId) => {
@@ -494,9 +497,10 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
     setRatingData((r) => ({ ...r, commentCount: Math.max(0, r.commentCount - 1) }));
 
     try {
+      const token = getValidToken ? await getValidToken() : idToken;
       const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${idToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed');
     } catch {
@@ -504,7 +508,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
       setRatingData((r) => ({ ...r, commentCount: r.commentCount + 1 }));
       addToast('Failed to delete comment', 'error');
     }
-  }, [idToken, storyId, comments, addToast]);
+  }, [idToken, getValidToken, storyId, comments, addToast]);
 
   // ── Loading / Error states ──
   if (storyLoading) {

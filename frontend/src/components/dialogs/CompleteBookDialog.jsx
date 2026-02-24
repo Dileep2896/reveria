@@ -1,6 +1,8 @@
 export default function CompleteBookDialog({ completing, onClose, onComplete }) {
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,

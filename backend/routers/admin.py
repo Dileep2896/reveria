@@ -91,7 +91,8 @@ async def list_users(
     await _require_admin(authorization)
     db = get_db()
 
-    # Fetch all Firebase Auth users
+    MAX_USERS = 500
+
     all_records: list[fb_auth.UserRecord] = []
     page_token = None
     while True:
@@ -100,10 +101,10 @@ async def list_users(
         )
         all_records.extend(result.users)
         page_token = result.next_page_token
-        if not page_token:
+        if not page_token or len(all_records) >= MAX_USERS:
             break
+    all_records = all_records[:MAX_USERS]
 
-    # Filter by search
     if search:
         search_lower = search.lower()
         all_records = [
@@ -114,12 +115,10 @@ async def list_users(
 
     total = len(all_records)
 
-    # Paginate
     start = (page - 1) * page_size
     end = start + page_size
     page_records = all_records[start:end]
 
-    # Enrich with Firestore data
     users = await asyncio.gather(*[_enrich_user(r, db) for r in page_records])
 
     return {"users": users, "total": total, "page": page, "page_size": page_size}
@@ -144,33 +143,18 @@ async def get_user(
 
     user_data = await _enrich_user(record, db)
 
-    # Extra stats: comment count, likes given
-    all_stories = []
     try:
-        stories_ref = db.collection("stories")
-        all_stories = [s async for s in stories_ref.stream()]
-    except Exception:
-        pass
-
-    try:
+        user_stories = db.collection("stories").where("uid", "==", uid)
         comment_count = 0
-        for story_doc in all_stories:
-            comments_ref = db.collection("stories").document(story_doc.id).collection("comments").where("uid", "==", uid)
-            comments = [c async for c in comments_ref.stream()]
-            comment_count += len(comments)
+        async for s in user_stories.stream():
+            comments_ref = s.reference.collection("comments").where("uid", "==", uid)
+            async for _ in comments_ref.stream():
+                comment_count += 1
         user_data["comment_count"] = comment_count
     except Exception:
         user_data["comment_count"] = 0
 
-    try:
-        likes_count = 0
-        for story_doc in all_stories:
-            data = story_doc.to_dict()
-            if uid in (data.get("liked_by") or []):
-                likes_count += 1
-        user_data["likes_given"] = likes_count
-    except Exception:
-        user_data["likes_given"] = 0
+    user_data["likes_given"] = 0
 
     return user_data
 

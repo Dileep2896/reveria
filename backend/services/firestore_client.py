@@ -32,6 +32,7 @@ async def persist_story(
     batch_index: int,
     user_input: str,
     director_data: dict[str, Any] | None = None,
+    director_live_notes: list[dict[str, Any]] | None = None,
     language: str = "English",
     author_name: str | None = None,
     author_photo_url: str | None = None,
@@ -92,6 +93,7 @@ async def persist_story(
         {
             "prompt": user_input,
             "director_data": director_data,
+            "director_live_notes": director_live_notes or [],
             "scene_numbers": [s["scene_number"] for s in scenes],
         }
     )

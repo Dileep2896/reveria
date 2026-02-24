@@ -15,6 +15,7 @@ import Logo from './components/Logo';
 import StoryCanvas from './components/StoryCanvas';
 import AppHeader from './components/AppHeader';
 import CompleteBookDialog from './components/dialogs/CompleteBookDialog';
+import SettingsDialog from './components/SettingsDialog';
 import DirectorPanel from './components/DirectorPanel';
 import BookDetailsPage from './components/BookDetailsPage';
 import ControlBar from './components/ControlBar';
@@ -26,11 +27,12 @@ import AuthScreen, { VerifyEmailScreen } from './components/AuthScreen';
 import SubscriptionPage from './components/SubscriptionPage';
 import AdminDashboard from './components/AdminDashboard';
 import TermsPage from './components/TermsPage';
+import NotFoundPage from './components/NotFoundPage';
 
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, idToken, loading: authLoading, isAdmin, emailVerified, signInWithGoogle, signUpWithEmail, signInWithEmail, resetPassword, resendVerification, reloadUser, signOut } = useAuth();
+  const { user, idToken, loading: authLoading, isAdmin, emailVerified, signInWithGoogle, signUpWithEmail, signInWithEmail, resetPassword, resendVerification, reloadUser, signOut, getValidToken } = useAuth();
 
   const urlStoryMatch = location.pathname.match(/^\/story\/(.+?)(?:\/|$)/);
   const urlStoryId = urlStoryMatch ? urlStoryMatch[1] : null;
@@ -39,9 +41,12 @@ export default function App() {
 
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId);
   const { addToast } = useToast();
-  const { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendAudio, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler } = useWebSocket(idToken, initialState, addToast);
+  const { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendSteer, sendAudio, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat } = useWebSocket(idToken, initialState, addToast);
   const { theme, toggleTheme } = useTheme();
   const [directorOpen, setDirectorOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [directorVoice, setDirectorVoice] = useState(() => localStorage.getItem('storyforge-director-voice') || 'Charon');
+  const handleSetDirectorVoice = useCallback((v) => { setDirectorVoice(v); localStorage.setItem('storyforge-director-voice', v); }, []);
   const [controlBarInput, setControlBarInput] = useState('');
   useEffect(() => { setControlBarInputHandler(setControlBarInput); }, [setControlBarInputHandler]);
   const [artStyle, setArtStyle] = useState('cinematic');
@@ -57,14 +62,22 @@ export default function App() {
     setShowPublishDialog,
     autoSaveCurrent, handleSave, handleComplete,
     resetSaved,
-  } = useStoryActions({ storyId, scenes, generations, bookMeta, idToken, addToast, user });
+  } = useStoryActions({ storyId, scenes, generations, bookMeta, idToken, addToast, user, getValidToken });
   const [readingMode, setReadingMode] = useState(false);
   const [bookmarkedSceneIndex, setBookmarkedSceneIndex] = useState(null);
 
   const isLibrary = location.pathname === '/library';
   const isExplore = location.pathname === '/explore';
   const isBookPage = location.pathname.startsWith('/book/');
+  const isStoryRoute = location.pathname === '/' || location.pathname.startsWith('/story/');
   const [viewingReadOnly, setViewingReadOnly] = useState(false);
+
+  // Auto-end Director Chat when navigating away from story canvas
+  useEffect(() => {
+    if (!isStoryRoute && directorChatActive) {
+      endDirectorChat();
+    }
+  }, [isStoryRoute, directorChatActive, endDirectorChat]);
 
   // Per-scene action callbacks
   const handleRegenImage = useCallback((sceneNumber, sceneText) => {
@@ -123,6 +136,20 @@ export default function App() {
     clearState, addToast,
     location,
   });
+
+  // Director auto-generation with 3-second countdown
+  useEffect(() => {
+    if (!directorAutoGenerate) return;
+    const timer = setTimeout(() => {
+      send(directorAutoGenerate.prompt, {
+        artStyle: directorAutoGenerate.artStyle,
+        sceneCount: directorAutoGenerate.sceneCount,
+        language: directorAutoGenerate.language,
+      });
+      setDirectorAutoGenerate(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [directorAutoGenerate, send, setDirectorAutoGenerate]);
 
   // Derive per-scene image tier info for DirectorPanel
   const imageTiers = useMemo(() =>
@@ -257,13 +284,17 @@ export default function App() {
           <div className="absolute inset-0" style={{ background: 'var(--orb-3)' }} />
         </div>
         <AppHeader
-          navigate={navigate} theme={theme} toggleTheme={toggleTheme}
+          navigate={navigate}
+          onOpenSettings={() => setSettingsOpen(true)}
           user={user} signOut={signOut} isAdmin={isAdmin}
           userTier={usage?.usage?.tier || 'free'}
         />
         <div className="flex flex-1 overflow-hidden relative z-10">
           <AdminDashboard idToken={idToken} addToast={addToast} />
         </div>
+        {settingsOpen && (
+          <SettingsDialog onClose={() => setSettingsOpen(false)} theme={theme} toggleTheme={toggleTheme} directorVoice={directorVoice} setDirectorVoice={handleSetDirectorVoice} />
+        )}
       </div>
     );
   }
@@ -329,7 +360,7 @@ export default function App() {
         setReadingMode={setReadingMode}
         idToken={idToken} addToast={addToast}
         directorOpen={directorOpen} setDirectorOpen={setDirectorOpen}
-        theme={theme} toggleTheme={toggleTheme}
+        onOpenSettings={() => setSettingsOpen(true)}
         user={user} signOut={signOut}
         isAdmin={isAdmin}
         userTier={usage?.usage?.tier || 'free'}
@@ -385,7 +416,7 @@ export default function App() {
             )
           }
         />
-        {['/story/:storyId', '*'].map((path) => (
+        {['/', '/story/:storyId'].map((path) => (
           <Route
             key={path}
             path={path}
@@ -393,17 +424,18 @@ export default function App() {
               <SceneActionsContext.Provider value={sceneActionsValue}>
                 <div className="flex flex-1 overflow-hidden relative z-10">
                   <div className="flex-1 relative flex flex-col">
-                    <StoryCanvas key={storyId || 'new'} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={viewingReadOnly ? null : displayPrompt} spreadPrompts={viewingReadOnly ? null : spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} />
+                    <StoryCanvas key={storyId || 'new'} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={viewingReadOnly ? null : displayPrompt} spreadPrompts={viewingReadOnly ? null : spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} onLanguageChange={scenes.length === 0 ? setLanguage : undefined} />
                     {!viewingReadOnly && storyStatus !== 'completed' && (
-                      <ControlBar onSend={(text, opts) => { if (scenes.length === 0) addToast(`Language set to ${language} - can't be changed for this story`, 'info'); send(text, opts); }} onSendAudio={(b64, mime) => { if (scenes.length === 0) addToast(`Language set to ${language} - can't be changed for this story`, 'info'); sendAudio(b64, mime); }} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} setLanguage={setLanguage} languageLocked={scenes.length > 0} usage={usage} />
+                      <ControlBar onSend={(text, opts) => send(text, opts)} onSendAudio={(b64, mime) => sendAudio(b64, mime)} onSteer={sendSteer} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} usage={usage} />
                     )}
                   </div>
-                  {directorOpen && !viewingReadOnly && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} sceneTitles={activeBatchSceneTitles} imageTiers={imageTiers} portraits={portraits} portraitsLoading={portraitsLoading} language={language} />}
+                  {directorOpen && !viewingReadOnly && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} sceneTitles={activeBatchSceneTitles} imageTiers={imageTiers} portraits={portraits} portraitsLoading={portraitsLoading} language={language} liveNotes={directorLiveNotes} chatActive={directorChatActive} chatMessages={directorChatMessages} chatLoading={directorChatLoading} chatPrompt={directorChatPrompt} autoGenerate={directorAutoGenerate} onCancelAutoGenerate={() => setDirectorAutoGenerate(null)} onStartChat={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; startDirectorChat(ctx, { language, voiceName: directorVoice }); }} onEndChat={endDirectorChat} onChatAudio={sendDirectorChatAudio} onChatSuggest={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; suggestDirectorPrompt(ctx); }} onUsePrompt={(prompt) => { setControlBarInput(prompt); }} />}
                 </div>
               </SceneActionsContext.Provider>
             }
           />
         ))}
+        <Route path="*" element={<div className="flex flex-1 overflow-hidden relative z-10"><NotFoundPage /></div>} />
       </Routes>
 
       {readingMode && scenes.length > 0 && (
@@ -412,6 +444,10 @@ export default function App() {
 
       {showCompleteDialog && (
         <CompleteBookDialog completing={completing} onClose={() => setShowCompleteDialog(false)} onComplete={handleComplete} />
+      )}
+
+      {settingsOpen && (
+        <SettingsDialog onClose={() => setSettingsOpen(false)} theme={theme} toggleTheme={toggleTheme} directorVoice={directorVoice} setDirectorVoice={handleSetDirectorVoice} />
       )}
     </div>
   );

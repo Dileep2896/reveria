@@ -146,6 +146,12 @@ async def decrement_usage(uid: str, action: str) -> dict[str, Any]:
     if not field or field in _DAILY_FIELDS:
         return await get_usage(uid)
 
+    doc = await ref.get()
+    if doc.exists:
+        current = (doc.to_dict() or {}).get(field, 0)
+        if current <= 0:
+            return await get_usage(uid)
+
     await ref.set(
         {field: Increment(-1), "updated_at": datetime.now(timezone.utc)},
         merge=True,

@@ -107,18 +107,19 @@ async def generate_portraits(
             except Exception as e:
                 logger.error("Portrait generation error for %s: %s", char["name"], e)
 
-        # Persist portraits to Firestore (merge with existing)
         if portrait_results and story_id:
             try:
+                from google.cloud.firestore_v1.transforms import ArrayUnion
                 db = get_db()
-                # Read existing portraits and append new ones
-                doc = await db.collection("stories").document(story_id).get()
-                old_portraits = (doc.to_dict() or {}).get("portraits", []) if doc.exists else []
-                merged = old_portraits + portrait_results
-                await db.collection("stories").document(story_id).set(
-                    {"portraits": merged}, merge=True
-                )
-                logger.info("Persisted %d new portraits for story %s (total %d)", len(portrait_results), story_id, len(merged))
+                try:
+                    await db.collection("stories").document(story_id).update({
+                        "portraits": ArrayUnion(portrait_results)
+                    })
+                except Exception:
+                    await db.collection("stories").document(story_id).set(
+                        {"portraits": portrait_results}, merge=True
+                    )
+                logger.info("Persisted %d new portraits for story %s", len(portrait_results), story_id)
             except Exception as e:
                 logger.error("Failed to persist portraits: %s", e)
 

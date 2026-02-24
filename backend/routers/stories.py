@@ -147,10 +147,13 @@ async def delete_story_endpoint(
     # Clean up GCS media in background (don't block the response)
     asyncio.create_task(delete_story_media(story_id))
 
-    # Decrement usage counters
-    await decrement_usage(uid, "create_story")
-    if story_data.get("is_public"):
-        await decrement_usage(uid, "publish")
+    # Decrement usage counters (best-effort — don't fail the delete if this errors)
+    try:
+        await decrement_usage(uid, "create_story")
+        if story_data.get("is_public"):
+            await decrement_usage(uid, "publish")
+    except Exception:
+        pass  # transient Firestore errors shouldn't block deletion
 
     return {"deleted": True, "story_id": story_id}
 

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { db, getDoc, doc, updateDoc } from '../firebase';
 import { API_URL, findFallbackCover } from '../utils/storyHelpers';
 
@@ -11,6 +11,9 @@ export default function useAppEffects({
   clearState, addToast,
   location,
 }) {
+  const scenesRef = useRef(scenes);
+  scenesRef.current = scenes;
+
   // Sync storyId → URL (skip for /book/ pages, library, explore, subscription, admin)
   const isBookPage = location.pathname.startsWith('/book/');
   const isSubscription = location.pathname === '/subscription';
@@ -35,7 +38,7 @@ export default function useAppEffects({
       if (snap.exists() && snap.data().title_generated) return;
       updateDoc(storyRef, {
         title: bookMeta.title || 'Untitled Story',
-        cover_image_url: bookMeta.coverUrl || findFallbackCover(scenes),
+        cover_image_url: bookMeta.coverUrl || findFallbackCover(scenesRef.current),
         title_generated: true,
         updated_at: new Date(),
       }).catch((err) => console.error('Failed to persist bookMeta:', err));

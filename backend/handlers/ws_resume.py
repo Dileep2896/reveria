@@ -7,20 +7,13 @@ from google.genai import types
 from agents.narrator import Narrator
 from agents.illustrator import Illustrator
 from agents.director import Director
+from handlers.utils import safe_send as _safe_send
 from services.firestore_client import load_story
 
 from agents.orchestrator import create_story_orchestrator
 from google.adk.sessions import InMemorySessionService  # type: ignore[import-untyped]
 
 logger = logging.getLogger("storyforge")
-
-
-async def _safe_send(websocket: WebSocket, data: dict[str, Any]) -> bool:
-    try:
-        await websocket.send_json(data)
-        return True
-    except Exception:
-        return False
 
 
 async def handle_resume(

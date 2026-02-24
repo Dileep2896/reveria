@@ -159,7 +159,7 @@ body {
 
 /* ---- Director Panel ---- */
 .director-panel {
-  width: clamp(220px, 22vw, 320px);
+  width: clamp(260px, 24vw, 380px);
 }
 
 .director-panel .sticky {

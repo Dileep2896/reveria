@@ -292,6 +292,7 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
           return {
             prompt: data.prompt,
             directorData: data.director_data || null,
+            directorLiveNotes: data.director_live_notes || [],
             sceneNumbers: data.scene_numbers || [],
           };
         })

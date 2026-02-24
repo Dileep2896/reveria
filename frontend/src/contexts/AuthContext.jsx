@@ -124,8 +124,14 @@ export function AuthProvider({ children }) {
     await auth.signOut();
   }, []);
 
+  // Returns a valid token (uses cache if fresh, auto-refreshes if expired)
+  const getValidToken = useCallback(async () => {
+    if (!auth.currentUser) return null;
+    return auth.currentUser.getIdToken();
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, idToken, loading, isAdmin, emailVerified, signInWithGoogle, signUpWithEmail, signInWithEmail, resetPassword, resendVerification, reloadUser, signOut }}>
+    <AuthContext.Provider value={{ user, idToken, loading, isAdmin, emailVerified, signInWithGoogle, signUpWithEmail, signInWithEmail, resetPassword, resendVerification, reloadUser, signOut, getValidToken }}>
       {children}
     </AuthContext.Provider>
   );

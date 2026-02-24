@@ -365,6 +365,87 @@
   color: var(--accent-primary);
 }
 
+/* Language dropdown on cover */
+.book-cover-lang-picker {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  margin-top: 1.2rem;
+}
+
+.book-cover-lang-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(5px * var(--page-scale, 1));
+  padding: calc(5px * var(--page-scale, 1)) calc(12px * var(--page-scale, 1));
+  border-radius: 999px;
+  font-size: calc(10px * var(--page-scale, 1));
+  font-weight: 500;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--book-cover-text);
+  opacity: 0.55;
+  border: 1px solid var(--book-cover-frame);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.book-cover-lang-trigger:hover {
+  opacity: 0.85;
+  border-color: var(--accent-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.book-cover-lang-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+  animation: langMenuIn 0.15s ease-out;
+}
+
+@keyframes langMenuIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.book-cover-lang-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.book-cover-lang-option:hover {
+  background: var(--glass-bg-input);
+  color: var(--text-primary);
+}
+
+.book-cover-lang-option.active {
+  color: var(--accent-primary);
+}
+
 /* ============================================
    SKELETON LOADING LINES
    ============================================ */

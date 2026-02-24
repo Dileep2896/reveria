@@ -26,11 +26,19 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const [portraits, setPortraits] = useState([]);
   const [portraitsLoading, setPortraitsLoading] = useState(false);
   const [usage, setUsage] = useState(null);
+  const [directorLiveNotes, setDirectorLiveNotes] = useState([]);
+  const [directorChatActive, setDirectorChatActive] = useState(false);
+  const [directorChatMessages, setDirectorChatMessages] = useState([]);
+  const [directorChatLoading, setDirectorChatLoading] = useState(false);
+  const [directorChatPrompt, setDirectorChatPrompt] = useState(null);
+  const [directorAutoGenerate, setDirectorAutoGenerate] = useState(null);
 
   const storyDeletedRef = useRef(null);
   const controlBarInputRef = useRef(null);
 
   const idTokenRef = useRef(idToken);
+  const prevTokenRef = useRef(idToken);
+  const authFailedRef = useRef(false);
   idTokenRef.current = idToken;
 
   const addToastRef = useRef(addToast);
@@ -57,6 +65,9 @@ export default function useWebSocket(idToken, initialState, addToast) {
       addToastRef, quotaImageToastFired, cooldownTimer,
       storyDeletedRef, setControlBarInput: (v) => controlBarInputRef.current?.(v),
       setUsage,
+      setDirectorLiveNotes,
+      setDirectorChatActive, setDirectorChatMessages, setDirectorChatLoading, setDirectorChatPrompt,
+      setDirectorAutoGenerate,
     });
   }
 
@@ -81,6 +92,17 @@ export default function useWebSocket(idToken, initialState, addToast) {
       if (initialState.portraits?.length) {
         setPortraits(initialState.portraits);
       }
+      // Hydrate Director live notes and batch-level director data from persisted generations
+      if (initialState.generations?.length) {
+        const allNotes = initialState.generations.flatMap(g => g.directorLiveNotes || []);
+        if (allNotes.length) setDirectorLiveNotes(allNotes);
+        for (let i = initialState.generations.length - 1; i >= 0; i--) {
+          if (initialState.generations[i].directorData) {
+            setDirectorData(initialState.generations[i].directorData);
+            break;
+          }
+        }
+      }
     }
   }, [initialState]);
 
@@ -89,6 +111,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
     if (disposed.current || !token) return;
     clearTimeout(reconnectTimer.current);
 
+    // TODO: migrate to first-message auth to avoid token in URL logs
     const ws = new WebSocket(`${WS_URL}?token=${token}`);
     wsRef.current = ws;
 
@@ -103,11 +126,16 @@ export default function useWebSocket(idToken, initialState, addToast) {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       if (wsRef.current !== ws) return;
       setConnected(false);
       setGenerating(false);
       if (!disposed.current) {
+        // Auth failure (4003) — wait for token refresh from AuthContext, don't spam reconnect
+        if (e.code === 4003) {
+          authFailedRef.current = true;
+          return;
+        }
         const delay = reconnectDelay.current;
         reconnectDelay.current = Math.min(delay * 2, RECONNECT_MAX_MS);
         reconnectTimer.current = setTimeout(connect, delay);
@@ -148,6 +176,23 @@ export default function useWebSocket(idToken, initialState, addToast) {
     };
   }, [idToken, storyResolved, connect]);
 
+  // Reconnect with fresh token after auth failure or periodic token refresh
+  useEffect(() => {
+    if (!idToken || !storyResolved) return;
+    const tokenChanged = prevTokenRef.current && prevTokenRef.current !== idToken;
+    prevTokenRef.current = idToken;
+    if (tokenChanged && authFailedRef.current) {
+      // Token was refreshed after an auth failure — reconnect
+      authFailedRef.current = false;
+      reconnectDelay.current = RECONNECT_BASE_MS;
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      connect();
+    }
+  }, [idToken, storyResolved, connect]);
+
   const send = useCallback((content, options = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       setUserPrompt(content);
@@ -159,9 +204,15 @@ export default function useWebSocket(idToken, initialState, addToast) {
       wsRef.current.send(JSON.stringify({
         content,
         art_style: options.artStyle || 'cinematic',
-        scene_count: options.sceneCount || 2,
+        scene_count: options.sceneCount || 1,
         language: options.language || 'English',
       }));
+    }
+  }, []);
+
+  const sendSteer = useCallback((text) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'steer', content: text }));
     }
   }, []);
 
@@ -182,7 +233,58 @@ export default function useWebSocket(idToken, initialState, addToast) {
     }
   }, []);
 
+  const startDirectorChat = useCallback((storyContext, { language, voiceName } = {}) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setDirectorChatActive(true);
+      setDirectorChatLoading(true);
+      setDirectorChatMessages([]);
+      setDirectorChatPrompt(null);
+      const msg = { type: 'director_chat_start', story_context: storyContext || '' };
+      if (language) msg.language = language;
+      if (voiceName) msg.voice_name = voiceName;
+      wsRef.current.send(JSON.stringify(msg));
+    }
+  }, []);
+
+  const sendDirectorChatAudio = useCallback((base64, mimeType) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setDirectorChatLoading(true);
+      const id = `user-${Date.now()}`;
+      setDirectorChatMessages(prev => [...prev, { id, role: 'user', type: 'audio', content: 'Voice message' }]);
+      wsRef.current.send(JSON.stringify({ type: 'director_chat_audio', audio_data: base64, mime_type: mimeType }));
+    }
+  }, []);
+
+  const sendDirectorChatText = useCallback((text) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setDirectorChatLoading(true);
+      const id = `user-${Date.now()}`;
+      setDirectorChatMessages(prev => [...prev, { id, role: 'user', type: 'text', content: text }]);
+      wsRef.current.send(JSON.stringify({ type: 'director_chat_text', content: text }));
+    }
+  }, []);
+
+  const suggestDirectorPrompt = useCallback((storyContext) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setDirectorChatLoading(true);
+      wsRef.current.send(JSON.stringify({ type: 'director_chat_suggest', story_context: storyContext || '' }));
+    }
+  }, []);
+
+  const endDirectorChat = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'director_chat_end' }));
+    }
+    setDirectorChatActive(false);
+    setDirectorChatMessages([]);
+    setDirectorChatLoading(false);
+    setDirectorChatPrompt(null);
+    addToastRef.current?.('Director mode ended', 'info');
+  }, []);
+
   const reset = useCallback(() => {
+    clearInterval(cooldownTimer.current);
+    setQuotaCooldown(0);
     setScenes([]);
     setUserPrompt(null);
     setError(null);
@@ -192,6 +294,12 @@ export default function useWebSocket(idToken, initialState, addToast) {
     setPortraits([]);
     setPortraitsLoading(false);
     setUsage(null);
+    setDirectorLiveNotes([]);
+    setDirectorChatActive(false);
+    setDirectorChatMessages([]);
+    setDirectorChatLoading(false);
+    setDirectorChatPrompt(null);
+    setDirectorAutoGenerate(null);
     quotaImageToastFired.current = false;
     setStoryId(null);
     storyIdRef.current = null;
@@ -216,6 +324,13 @@ export default function useWebSocket(idToken, initialState, addToast) {
     currentBatchIndexRef.current = state.generations?.length ? state.generations.length - 1 : -1;
     setGenerations(state.generations?.length ? [...state.generations] : []);
     setPortraits(state.portraits?.length ? state.portraits : []);
+    // Hydrate Director live notes and batch-level director data from persisted generations
+    const allNotes = (state.generations || []).flatMap(g => g.directorLiveNotes || []);
+    setDirectorLiveNotes(allNotes);
+    const gens = state.generations || [];
+    for (let i = gens.length - 1; i >= 0; i--) {
+      if (gens[i].directorData) { setDirectorData(gens[i].directorData); break; }
+    }
     if (!skipResume && wsRef.current?.readyState === WebSocket.OPEN && state.storyId) {
       wsRef.current.send(JSON.stringify({ type: 'resume', story_id: state.storyId }));
     }
@@ -224,5 +339,5 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const setStoryDeletedHandler = useCallback((handler) => { storyDeletedRef.current = handler; }, []);
   const setControlBarInputHandler = useCallback((handler) => { controlBarInputRef.current = handler; }, []);
 
-  return { connected, scenes, generating, userPrompt, error, directorData, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendAudio, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler };
+  return { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendSteer, sendAudio, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat };
 }

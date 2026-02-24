@@ -1,5 +1,8 @@
+import base64
+import io
 import json
 import logging
+import struct
 from typing import Any
 
 from google.genai import types
@@ -100,13 +103,191 @@ def _fix_scene_array(arr, scene_count, default):
     return arr
 
 
+DIRECTOR_LIVE_PROMPT = """You are the Director of StoryForge — not just an observer, but the creative force shaping the story. You analyze each scene as it's written and actively steer where the narrative should go next.
+
+Analyze THIS SINGLE SCENE and return a JSON object with exactly these keys:
+{
+  "scene_number": <int>,
+  "thought": "1-2 sentence creative observation about this scene",
+  "mood": one of "peaceful", "mysterious", "tense", "chaotic", "melancholic", "joyful", "epic", "romantic", "eerie", "adventurous",
+  "tension_level": <int 1-10>,
+  "craft_note": "one short sentence about a notable craft element (dialogue, imagery, pacing, etc.)",
+  "emoji": "single emoji that captures the scene's essence",
+  "suggestion": "1 specific, actionable creative direction for what should happen NEXT in the story. Be bold — propose a twist, reveal, escalation, or character moment. Example: 'Reveal that the stranger is her long-lost sister' or 'Let the storm break a window, forcing them into the cellar together'."
+}
+
+Your suggestion should PUSH the story forward, not just describe what already happened. Think like a film director calling the next shot.
+Output ONLY valid JSON, no markdown fences, no extra text."""
+
+
+def _pcm_to_wav(
+    pcm_data: bytes,
+    sample_rate: int = 24000,
+    bits_per_sample: int = 16,
+    channels: int = 1,
+) -> bytes:
+    """Wrap raw PCM bytes in a WAV header for browser playback."""
+    buf = io.BytesIO()
+    data_size = len(pcm_data)
+    byte_rate = sample_rate * channels * bits_per_sample // 8
+    block_align = channels * bits_per_sample // 8
+    buf.write(b"RIFF")
+    buf.write(struct.pack("<I", 36 + data_size))
+    buf.write(b"WAVE")
+    buf.write(b"fmt ")
+    buf.write(struct.pack("<I", 16))              # Subchunk1Size (PCM)
+    buf.write(struct.pack("<H", 1))               # AudioFormat (PCM)
+    buf.write(struct.pack("<H", channels))
+    buf.write(struct.pack("<I", sample_rate))
+    buf.write(struct.pack("<I", byte_rate))
+    buf.write(struct.pack("<H", block_align))
+    buf.write(struct.pack("<H", bits_per_sample))
+    buf.write(b"data")
+    buf.write(struct.pack("<I", data_size))
+    buf.write(pcm_data)
+    return buf.getvalue()
+
+
+# Voice for Director commentary — deep, authoritative tone
+DIRECTOR_VOICE = "Charon"
+
+# Gemini Live API model for real-time Director voice
+DIRECTOR_LIVE_MODEL = "gemini-live-2.5-flash-native-audio"
+
+DIRECTOR_VOICE_SYSTEM = (
+    "You are the Director of StoryForge — a passionate, insightful film director "
+    "reviewing scenes as they're written on set. React with brief, vivid creative "
+    "commentary (1-2 sentences max). Be expressive and theatrical — praise what works, "
+    "note what surprises you, or hint at what could come next. Speak naturally as if "
+    "giving notes between takes."
+)
+
+
 class Director:
+    async def live_commentary(
+        self,
+        scene_text: str,
+        scene_number: int,
+        context: str = "",
+    ) -> str | None:
+        """Stream Director voice commentary via Gemini Live API.
+
+        Opens a real-time Live API session, sends the scene text, and
+        collects streamed audio chunks into a WAV data URL.
+
+        Returns a base64 data URL (audio/wav) or None on failure.
+        """
+        if not scene_text or not scene_text.strip():
+            return None
+
+        client = get_client()
+        config = {
+            "response_modalities": ["AUDIO"],
+            "speech_config": {
+                "voice_config": {
+                    "prebuilt_voice_config": {"voice_name": DIRECTOR_VOICE}
+                }
+            },
+            "system_instruction": DIRECTOR_VOICE_SYSTEM,
+        }
+
+        prompt = f"Scene {scene_number}:\n{scene_text}"
+        if context:
+            prompt = f"Story context:\n{context}\n\n{prompt}"
+        prompt += "\n\nGive your Director's reaction."
+
+        try:
+            async with client.aio.live.connect(
+                model=DIRECTOR_LIVE_MODEL, config=config
+            ) as session:
+                content = types.Content(
+                    role="user",
+                    parts=[types.Part(text=prompt)],
+                )
+                await session.send_client_content(
+                    turns=content, turn_complete=True
+                )
+
+                audio_chunks: list[bytes] = []
+                async for response in session.receive():
+                    server = response.server_content
+                    if server and server.model_turn:
+                        for part in server.model_turn.parts:
+                            if part.inline_data and isinstance(
+                                part.inline_data.data, bytes
+                            ):
+                                audio_chunks.append(part.inline_data.data)
+                    if server and server.turn_complete:
+                        break
+
+            if audio_chunks:
+                pcm_data = b"".join(audio_chunks)
+                wav_bytes = _pcm_to_wav(pcm_data)
+                b64 = base64.b64encode(wav_bytes).decode("utf-8")
+                logger.info(
+                    "Director Live voice generated (%dKB) for scene %d",
+                    len(b64) // 1024,
+                    scene_number,
+                )
+                return f"data:audio/wav;base64,{b64}"
+
+        except Exception as e:
+            logger.error("Director Live commentary failed for scene %d: %s", scene_number, e)
+
+        return None
+
+    async def analyze_scene(
+        self,
+        scene_text: str,
+        scene_number: int,
+        user_prompt: str,
+        art_style: str,
+        context: str,
+    ) -> dict[str, Any] | None:
+        """Lightweight per-scene analysis for live commentary."""
+        client = get_client()
+
+        user_input = (
+            f"USER PROMPT: {user_prompt}\n"
+            f"ART STYLE: {art_style}\n"
+            f"SCENE NUMBER: {scene_number}\n\n"
+            f"STORY SO FAR:\n{context}\n\n"
+            f"CURRENT SCENE:\n{scene_text}"
+        )
+
+        try:
+            response = await client.aio.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=types.Content(
+                    role="user",
+                    parts=[types.Part(text=user_input)],
+                ),
+                config=types.GenerateContentConfig(
+                    system_instruction=DIRECTOR_LIVE_PROMPT,
+                    response_mime_type="application/json",
+                    temperature=0.3,
+                    max_output_tokens=300,
+                ),
+            )
+
+            if response.text:
+                result = json.loads(response.text)
+                result["scene_number"] = scene_number  # ensure correct
+                logger.info("Director live note for scene %d: %s", scene_number, result.get("emoji", ""))
+                return result
+        except json.JSONDecodeError as e:
+            logger.error("Director live returned invalid JSON: %s", e)
+        except Exception as e:
+            logger.error("Director live analysis failed for scene %d: %s", scene_number, e)
+
+        return None
+
     async def analyze(
         self,
         full_story_text: str,
         user_prompt: str,
         art_style: str = "cinematic",
-        scene_count: int = 2,
+        scene_count: int = 1,
     ) -> dict[str, Any] | None:
         """Analyze the story and return structured creative insights."""
         client = get_client()

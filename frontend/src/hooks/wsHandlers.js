@@ -3,6 +3,8 @@
  * Each handler receives (data, state) and returns true if handled.
  */
 
+let _msgId = 0;
+
 export function createWsHandlers({
   setScenes, setGenerating, setUserPrompt, setError, setDirectorData,
   setStoryId, storyIdRef, setQuotaCooldown, setSceneBusy, setBookMeta,
@@ -11,6 +13,9 @@ export function createWsHandlers({
   addToastRef, quotaImageToastFired, cooldownTimer,
   storyDeletedRef, setControlBarInput,
   setUsage,
+  setDirectorLiveNotes,
+  setDirectorChatActive, setDirectorChatMessages, setDirectorChatLoading, setDirectorChatPrompt,
+  setDirectorAutoGenerate,
 }) {
   return function handleMessage(data) {
     switch (data.type) {
@@ -28,6 +33,7 @@ export function createWsHandlers({
         setGenerating(data.content === 'generating');
         if (data.content === 'generating') {
           setError(null);
+          if (setDirectorLiveNotes) setDirectorLiveNotes([]);
         }
         return true;
 
@@ -54,7 +60,8 @@ export function createWsHandlers({
           },
         ]);
         if (currentBatch) {
-          currentBatch.sceneNumbers.push(data.scene_number);
+          const idx = currentBatchIndexRef.current;
+          generationsRef.current[idx] = { ...currentBatch, sceneNumbers: [...currentBatch.sceneNumbers, data.scene_number] };
           setGenerations([...generationsRef.current]);
         }
         return true;
@@ -100,11 +107,31 @@ export function createWsHandlers({
         }
         return true;
 
+      case 'director_live':
+        if (setDirectorLiveNotes) {
+          setDirectorLiveNotes((prev) => [...prev, {
+            scene_number: data.scene_number,
+            thought: data.thought,
+            mood: data.mood,
+            tension_level: data.tension_level,
+            craft_note: data.craft_note,
+            emoji: data.emoji,
+            suggestion: data.suggestion,
+            audio_url: data.audio_url,
+          }]);
+        }
+        return true;
+
+      case 'steer_ack':
+        addToastRef.current?.(`Steering applied: "${data.content}"`, 'info');
+        return true;
+
       case 'director': {
         setDirectorData(data.content);
-        const batch = generationsRef.current[currentBatchIndexRef.current];
+        const idx = currentBatchIndexRef.current;
+        const batch = generationsRef.current[idx];
         if (batch) {
-          batch.directorData = data.content;
+          generationsRef.current[idx] = { ...batch, directorData: data.content };
           setGenerations([...generationsRef.current]);
         }
         return true;
@@ -173,22 +200,22 @@ export function createWsHandlers({
           return next;
         });
         // Clean deleted scene from generations so Director updates
-        for (const gen of generationsRef.current) {
+        generationsRef.current = generationsRef.current.map((gen) => {
           const idx = gen.sceneNumbers.indexOf(data.scene_number);
-          if (idx !== -1) {
-            gen.sceneNumbers.splice(idx, 1);
-            // Also remove per-scene arrays at the same index
-            if (gen.directorData?.tension?.levels) {
-              gen.directorData.tension.levels.splice(idx, 1);
-            }
-            if (gen.directorData?.emotional_arc?.values) {
-              gen.directorData.emotional_arc.values.splice(idx, 1);
-            }
-            if (gen.directorData?.directors_notes?.notes) {
-              gen.directorData.directors_notes.notes.splice(idx, 1);
-            }
+          if (idx === -1) return gen;
+          const updated = {
+            ...gen,
+            sceneNumbers: gen.sceneNumbers.filter((_, i) => i !== idx),
+          };
+          if (gen.directorData) {
+            const dd = { ...gen.directorData };
+            if (dd.tension?.levels) dd.tension = { ...dd.tension, levels: dd.tension.levels.filter((_, i) => i !== idx) };
+            if (dd.emotional_arc?.values) dd.emotional_arc = { ...dd.emotional_arc, values: dd.emotional_arc.values.filter((_, i) => i !== idx) };
+            if (dd.directors_notes?.notes) dd.directors_notes = { ...dd.directors_notes, notes: dd.directors_notes.notes.filter((_, i) => i !== idx) };
+            updated.directorData = dd;
           }
-        }
+          return updated;
+        });
         setGenerations([...generationsRef.current]);
         return true;
 
@@ -198,6 +225,7 @@ export function createWsHandlers({
         setError(null);
         setGenerating(false);
         setDirectorData(null);
+        if (setDirectorLiveNotes) setDirectorLiveNotes([]);
         setBookMeta(null);
         setPortraits([]);
         setPortraitsLoading(false);
@@ -235,6 +263,76 @@ export function createWsHandlers({
       case 'error':
         setError(data.content);
         addToastRef.current?.(data.content, 'error');
+        return true;
+
+      // ── Director Chat handlers ──
+      case 'director_chat_started':
+        if (setDirectorChatActive) setDirectorChatActive(true);
+        if (setDirectorChatLoading) setDirectorChatLoading(false);
+        addToastRef.current?.('Director mode entered', 'success');
+        if (data.audio_url && setDirectorChatMessages) {
+          setDirectorChatMessages(prev => [...prev, {
+            id: `director-greeting-${++_msgId}`,
+            role: 'director',
+            type: 'audio',
+            audioUrl: data.audio_url,
+          }]);
+        }
+        return true;
+
+      case 'director_chat_response':
+        if (setDirectorChatLoading) setDirectorChatLoading(false);
+        if (setDirectorChatMessages) {
+          setDirectorChatMessages(prev => [...prev, {
+            id: `director-${++_msgId}`,
+            role: 'director',
+            type: 'audio',
+            audioUrl: data.audio_url,
+          }]);
+        }
+        return true;
+
+      case 'director_chat_user_transcript':
+        if (setDirectorChatMessages) {
+          setDirectorChatMessages(prev => {
+            // Find the latest user voice message and add transcript
+            const updated = [...prev];
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].role === 'user' && updated[i].type === 'audio' && !updated[i].transcript) {
+                updated[i] = { ...updated[i], transcript: data.content };
+                break;
+              }
+            }
+            return updated;
+          });
+        }
+        return true;
+
+      case 'director_chat_suggestion':
+        if (setDirectorChatLoading) setDirectorChatLoading(false);
+        if (setDirectorChatPrompt) setDirectorChatPrompt(data.content);
+        return true;
+
+      case 'director_chat_ended':
+        if (setDirectorChatActive) setDirectorChatActive(false);
+        if (setDirectorChatMessages) setDirectorChatMessages([]);
+        if (setDirectorChatPrompt) setDirectorChatPrompt(null);
+        return true;
+
+      case 'director_chat_generate':
+        if (setDirectorAutoGenerate) {
+          setDirectorAutoGenerate({
+            prompt: data.prompt,
+            artStyle: data.art_style,
+            sceneCount: data.scene_count,
+            language: data.language,
+          });
+        }
+        return true;
+
+      case 'director_chat_error':
+        if (setDirectorChatLoading) setDirectorChatLoading(false);
+        addToastRef.current?.(data.content || 'Director chat error', 'error');
         return true;
 
       default:

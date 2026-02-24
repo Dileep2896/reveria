@@ -1,6 +1,8 @@
 export default function PublishDialog({ publishing, onClose, onPublish }) {
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,
@@ -74,7 +76,7 @@ export default function PublishDialog({ publishing, onClose, onPublish }) {
           margin: '0 auto 2rem',
           maxWidth: '300px',
         }}>
-          Your story will be visible on Explore for everyone to read. This action is permanent and cannot be undone.
+          Your story will be publicly visible on Explore. You can unpublish later from the Book Page.
         </p>
 
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>

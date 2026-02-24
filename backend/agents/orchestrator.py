@@ -1,16 +1,19 @@
 """ADK-based story pipeline orchestrator.
 
 Wraps existing Narrator, Illustrator, Director, and TTS services into ADK
-BaseAgent subclasses and composes them into a SequentialAgent -> ParallelAgent
-pipeline.
+BaseAgent subclasses and composes them into a SequentialAgent pipeline.
 
 Pipeline structure:
     StoryOrchestrator (SequentialAgent)
-      +-- NarratorADKAgent
-      +-- PostNarrationAgent (ParallelAgent)
-           +-- IllustratorADKAgent
-           +-- DirectorADKAgent
-           +-- TTSADKAgent
+      +-- NarratorADKAgent   (streams scenes; fires image/audio/director per-scene)
+      +-- PostNarrationAgent  (ParallelAgent)
+           +-- DirectorADKAgent   (full post-batch analysis)
+
+Per-scene pipeline (inside NarratorADKAgent, non-blocking):
+    Scene text ready
+      ├── asyncio.create_task(generate_image)   ← sequential via semaphore
+      ├── asyncio.create_task(generate_audio)
+      └── asyncio.create_task(director.analyze_scene)
 
 State is shared between agents via a shared dict reference held on each agent
 instance (not via ADK session state, which returns copies).
@@ -25,10 +28,12 @@ from google.adk.agents import BaseAgent, SequentialAgent, ParallelAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event
 
+from google.genai import types
+
 from agents.narrator import Narrator
 from agents.illustrator import Illustrator
 from agents.director import Director
-from services.tts_client import synthesize_speech
+from services.gemini_tts import synthesize_speech
 from services.storage_client import upload_media
 
 logger = logging.getLogger("storyforge.orchestrator")
@@ -43,7 +48,7 @@ class SharedPipelineState:
     def __init__(self) -> None:
         self.user_input: str = ""
         self.art_style: str = "cinematic"
-        self.scene_count: int = 2
+        self.scene_count: int = 1
         self.total_scene_count: int = 0
         self.scenes: list[dict[str, Any]] = []
         self.full_story: str = ""
@@ -51,49 +56,93 @@ class SharedPipelineState:
         self.story_id: str = ""
         self.director_result: dict[str, Any] | None = None
         self.language: str = "English"
+        self.steering_queue: list[str] = []
+        self.director_suggestion: str = ""
+        self.director_live_notes: list[dict[str, Any]] = []
 
 
 class NarratorADKAgent(BaseAgent):
-    """Streams story text from Narrator, splits on [SCENE] markers."""
+    """Streams story text from Narrator, splits on [SCENE] markers.
+
+    Per-scene: fires image, audio, and director live tasks as each scene
+    completes (non-blocking). Waits for all pending tasks at the end.
+    """
 
     narrator: Narrator
+    illustrator: Illustrator
+    director: Director
     shared: SharedPipelineState
     model_config = {"arbitrary_types_allowed": True}
+
+    # Semaphore to serialise image generation (Imagen rate limits)
+    _image_sem: asyncio.Semaphore | None = None
 
     async def _run_async_impl(self, ctx: InvocationContext) -> Any:
         s = self.shared
         buffer = ""
         scenes: list[dict[str, Any]] = []
-        # Track the title parsed from the most recent [SCENE: ...] marker
         pending_title: str | None = None
+        pending_tasks: list[asyncio.Task] = []
+        characters_extracted = False
+
+        if self._image_sem is None:
+            self._image_sem = asyncio.Semaphore(1)
 
         limit = s.scene_count
         limit_hit = False
 
-        async for chunk in self.narrator.generate(s.user_input, scene_count=limit, language=s.language):
+        # Inject Director's creative suggestion from previous batch (proactive driver)
+        narrator_input = s.user_input
+        if s.director_suggestion:
+            narrator_input = (
+                f"[Director's creative direction: {s.director_suggestion}]\n\n"
+                f"{s.user_input}"
+            )
+            logger.info("Director suggestion injected: %s", s.director_suggestion)
+            s.director_suggestion = ""  # consumed
+
+        async def _on_scene_ready(scene: dict) -> None:
+            """Fire per-scene image, audio, and director live tasks."""
+            nonlocal characters_extracted
+            # Character extraction: run once when first scene arrives
+            if not characters_extracted:
+                characters_extracted = True
+                story_so_far = "\n\n".join(sc["text"] for sc in scenes)
+                self.illustrator.accumulate_story(story_so_far)
+                await self.illustrator.extract_characters(story_so_far)
+
+            # Image (serialised via semaphore)
+            pending_tasks.append(asyncio.create_task(
+                self._generate_image(scene)
+            ))
+            # Audio
+            pending_tasks.append(asyncio.create_task(
+                self._generate_audio(scene)
+            ))
+            # Director live commentary
+            pending_tasks.append(asyncio.create_task(
+                self._director_live(scene, scenes)
+            ))
+
+        async for chunk in self.narrator.generate(narrator_input, scene_count=limit, language=s.language):
             if limit_hit:
                 break
             buffer += chunk
 
             while "[SCENE" in buffer:
-                # Find the start of a [SCENE marker
                 idx = buffer.index("[SCENE")
-                # Check if we have the closing bracket yet
                 close = buffer.find("]", idx)
                 if close == -1:
-                    break  # Wait for more data
+                    break
 
                 before = buffer[:idx].strip()
                 marker = buffer[idx:close + 1]
                 buffer = buffer[close + 1:]
 
-                # Extract title from marker like [SCENE: Title Here]
                 colon_match = re.match(r"\[SCENE:\s*(.+)\]", marker)
                 new_title = colon_match.group(1).strip() if colon_match else None
 
-                # Emit any text before this marker
                 if before:
-                    # If no pending title (text before first marker), use this marker's title
                     title = pending_title if pending_title is not None else new_title
                     s.total_scene_count += 1
                     if s.ws_callback:
@@ -103,18 +152,31 @@ class NarratorADKAgent(BaseAgent):
                             "scene_number": s.total_scene_count,
                             "scene_title": title,
                         })
-                    scenes.append({
+                    scene_dict = {
                         "scene_number": s.total_scene_count,
                         "text": before,
                         "scene_title": title,
-                    })
+                    }
+                    scenes.append(scene_dict)
+                    await _on_scene_ready(scene_dict)
+
                     if len(scenes) >= limit:
                         limit_hit = True
                         break
 
+                    # Check steering queue between scenes
+                    if s.steering_queue:
+                        steer_text = s.steering_queue.pop(0)
+                        self.narrator.history.append(
+                            types.Content(
+                                role="user",
+                                parts=[types.Part(text=steer_text)],
+                            )
+                        )
+
                 pending_title = new_title
 
-        # Handle remaining text (only if we haven't hit the limit)
+        # Remaining text
         if not limit_hit:
             remaining = buffer.strip()
             if remaining:
@@ -126,84 +188,134 @@ class NarratorADKAgent(BaseAgent):
                         "scene_number": s.total_scene_count,
                         "scene_title": pending_title,
                     })
-                scenes.append({
+                scene_dict = {
                     "scene_number": s.total_scene_count,
                     "text": remaining,
                     "scene_title": pending_title,
-                })
+                }
+                scenes.append(scene_dict)
+                await _on_scene_ready(scene_dict)
 
         # Write back for downstream agents
         s.scenes = scenes
         s.full_story = "\n\n".join(sc["text"] for sc in scenes)
 
+        # Wait for all per-scene tasks to finish
+        if pending_tasks:
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
+
         yield Event(author=self.name)
 
+    # ── Per-scene helpers ──────────────────────────────────────────
 
-class IllustratorADKAgent(BaseAgent):
-    """Generates images for all scenes concurrently."""
-
-    illustrator: Illustrator
-    shared: SharedPipelineState
-    model_config = {"arbitrary_types_allowed": True}
-
-    async def _run_async_impl(self, ctx: InvocationContext) -> Any:
+    async def _generate_image(self, scene: dict) -> None:
+        """Generate and upload image for a single scene (rate-limited)."""
         s = self.shared
-
-        if not s.scenes:
-            yield Event(author=self.name)
-            return
-
-        self.illustrator.accumulate_story(s.full_story)
-        await self.illustrator.extract_characters(s.full_story)
-
-        async def generate_for_scene(scene: dict) -> None:
-            scene_num = scene["scene_number"]
-            text = scene["text"]
-            try:
-                image_data, error_reason, tier = await self.illustrator.generate_for_scene(text)
-                scene["image_tier"] = tier
-                if s.ws_callback:
-                    if image_data:
-                        # Upload to GCS
-                        try:
-                            gcs_url = await upload_media(s.story_id, scene_num, "image", image_data)
-                            scene["image_url"] = gcs_url
-                            await s.ws_callback({
-                                "type": "image",
-                                "content": gcs_url,
-                                "scene_number": scene_num,
-                                "tier": tier,
-                            })
-                        except Exception as e:
-                            logger.error("GCS image upload error for scene %d: %s", scene_num, e)
-                            scene["image_url"] = image_data
-                            await s.ws_callback({
-                                "type": "image",
-                                "content": image_data,
-                                "scene_number": scene_num,
-                                "tier": tier,
-                            })
-                    else:
+        scene_num = scene["scene_number"]
+        try:
+            async with self._image_sem:
+                image_data, error_reason, tier = await self.illustrator.generate_for_scene(scene["text"])
+            scene["image_tier"] = tier
+            if s.ws_callback:
+                if image_data:
+                    try:
+                        gcs_url = await upload_media(s.story_id, scene_num, "image", image_data)
+                        scene["image_url"] = gcs_url
                         await s.ws_callback({
-                            "type": "image_error",
+                            "type": "image",
+                            "content": gcs_url,
                             "scene_number": scene_num,
-                            "reason": error_reason or "generation_failed",
                             "tier": tier,
                         })
-            except Exception as e:
-                logger.error("Image generation error for scene %d: %s", scene_num, e)
-                if s.ws_callback:
+                    except Exception as e:
+                        logger.error("GCS image upload error for scene %d: %s", scene_num, e)
+                        scene["image_url"] = image_data
+                        await s.ws_callback({
+                            "type": "image",
+                            "content": image_data,
+                            "scene_number": scene_num,
+                            "tier": tier,
+                        })
+                else:
                     await s.ws_callback({
                         "type": "image_error",
                         "scene_number": scene_num,
-                        "reason": "generation_failed",
+                        "reason": error_reason or "generation_failed",
+                        "tier": tier,
                     })
+        except Exception as e:
+            logger.error("Image generation error for scene %d: %s", scene_num, e)
+            if s.ws_callback:
+                await s.ws_callback({
+                    "type": "image_error",
+                    "scene_number": scene_num,
+                    "reason": "generation_failed",
+                })
 
-        # Run images sequentially to respect Imagen rate limits
-        for sc in s.scenes:
-            await generate_for_scene(sc)
+    async def _generate_audio(self, scene: dict) -> None:
+        """Generate and upload audio for a single scene."""
+        s = self.shared
+        scene_num = scene["scene_number"]
+        try:
+            audio_data, word_timestamps = await synthesize_speech(scene["text"], language=s.language)
+            if audio_data and s.ws_callback:
+                msg: dict[str, Any] = {"type": "audio", "scene_number": scene_num}
+                if word_timestamps:
+                    scene["word_timestamps"] = word_timestamps
+                    msg["word_timestamps"] = word_timestamps
+                try:
+                    gcs_url = await upload_media(s.story_id, scene_num, "audio", audio_data)
+                    scene["audio_url"] = gcs_url
+                    msg["content"] = gcs_url
+                except Exception as e:
+                    logger.error("GCS audio upload error for scene %d: %s", scene_num, e)
+                    scene["audio_url"] = audio_data
+                    msg["content"] = audio_data
+                await s.ws_callback(msg)
+        except Exception as e:
+            logger.error("TTS error for scene %d: %s", scene_num, e)
 
-        yield Event(author=self.name)
+    async def _director_live(self, scene: dict, all_scenes: list[dict]) -> None:
+        """Run lightweight per-scene Director commentary."""
+        s = self.shared
+        # Preserve previous suggestion so a failure here doesn't lose it
+        prev_suggestion = s.director_suggestion
+        try:
+            context = "\n\n".join(sc["text"] for sc in all_scenes)
+            note = await self.director.analyze_scene(
+                scene_text=scene["text"],
+                scene_number=scene["scene_number"],
+                user_prompt=s.user_input,
+                art_style=s.art_style,
+                context=context,
+            )
+            if note:
+                # Collect for persistence
+                s.director_live_notes.append(note)
+
+                # Store latest suggestion so it feeds into the NEXT batch
+                suggestion = note.get("suggestion", "")
+                if suggestion:
+                    s.director_suggestion = suggestion
+
+                # Generate Director's voice via Gemini Live API (native audio)
+                audio_url = await self.director.live_commentary(
+                    scene_text=scene["text"],
+                    scene_number=scene["scene_number"],
+                    context=context,
+                )
+                if audio_url:
+                    note["audio_url"] = audio_url
+
+                if s.ws_callback:
+                    await s.ws_callback({
+                        "type": "director_live",
+                        **note,
+                    })
+        except Exception as e:
+            # Restore previous suggestion — don't lose it because this call failed
+            s.director_suggestion = prev_suggestion
+            logger.error("Director live error for scene %d: %s", scene["scene_number"], e)
 
 
 class DirectorADKAgent(BaseAgent):
@@ -237,53 +349,6 @@ class DirectorADKAgent(BaseAgent):
         yield Event(author=self.name)
 
 
-class TTSADKAgent(BaseAgent):
-    """Generates audio narration for all scenes concurrently."""
-
-    shared: SharedPipelineState
-    model_config = {"arbitrary_types_allowed": True}
-
-    async def _run_async_impl(self, ctx: InvocationContext) -> Any:
-        s = self.shared
-
-        if not s.scenes:
-            yield Event(author=self.name)
-            return
-
-        async def generate_audio(scene: dict) -> None:
-            scene_num = scene["scene_number"]
-            text = scene["text"]
-            try:
-                audio_data, word_timestamps = await synthesize_speech(text, language=s.language)
-                if audio_data and s.ws_callback:
-                    msg = {
-                        "type": "audio",
-                        "scene_number": scene_num,
-                    }
-                    if word_timestamps:
-                        scene["word_timestamps"] = word_timestamps
-                        msg["word_timestamps"] = word_timestamps
-                    # Upload to GCS
-                    try:
-                        gcs_url = await upload_media(s.story_id, scene_num, "audio", audio_data)
-                        scene["audio_url"] = gcs_url
-                        msg["content"] = gcs_url
-                    except Exception as e:
-                        logger.error("GCS audio upload error for scene %d: %s", scene_num, e)
-                        scene["audio_url"] = audio_data
-                        msg["content"] = audio_data
-                    await s.ws_callback(msg)
-            except Exception as e:
-                logger.error("TTS error for scene %d: %s", scene_num, e)
-
-        await asyncio.gather(
-            *(generate_audio(sc) for sc in s.scenes),
-            return_exceptions=True,
-        )
-
-        yield Event(author=self.name)
-
-
 def create_story_orchestrator(
     narrator: Narrator,
     illustrator: Illustrator,
@@ -299,12 +364,8 @@ def create_story_orchestrator(
     narrator_agent = NarratorADKAgent(
         name="narrator_agent",
         narrator=narrator,
-        shared=shared,
-    )
-
-    illustrator_agent = IllustratorADKAgent(
-        name="illustrator_agent",
         illustrator=illustrator,
+        director=director,
         shared=shared,
     )
 
@@ -314,14 +375,9 @@ def create_story_orchestrator(
         shared=shared,
     )
 
-    tts_agent = TTSADKAgent(
-        name="tts_agent",
-        shared=shared,
-    )
-
     post_narration = ParallelAgent(
         name="post_narration",
-        sub_agents=[illustrator_agent, director_agent, tts_agent],
+        sub_agents=[director_agent],
     )
 
     orchestrator = SequentialAgent(

@@ -233,7 +233,11 @@ export default function ReadingMode({ scenes, storyId, idToken, onExit, onBookma
     lastWordRef.current = -1;
     if (scene?.audio_url) {
       el.src = scene.audio_url;
-      el.play().catch(() => {});
+      const playWhenReady = () => {
+        el.play().catch(() => {});
+        el.removeEventListener('canplaythrough', playWhenReady);
+      };
+      el.addEventListener('canplaythrough', playWhenReady);
       setPaused(false);
     } else {
       el.pause();
@@ -247,6 +251,7 @@ export default function ReadingMode({ scenes, storyId, idToken, onExit, onBookma
   // ── Keyboard ──
   useEffect(() => {
     const onKey = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
       if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); }
       if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
       if (e.key === ' ') { e.preventDefault(); togglePause(); }

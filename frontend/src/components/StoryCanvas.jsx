@@ -3,7 +3,7 @@ import HTMLFlipBook from 'react-pageflip';
 import { useTheme } from '../contexts/ThemeContext';
 import './storybook.css';
 import SceneCard from './SceneCard';
-import { GENRE_KEYS, getLangData } from '../data/languages';
+import { GENRE_KEYS, LANGUAGES, getLangData } from '../data/languages';
 import CoverPage from './storybook/CoverPage';
 import EmptyPageContent from './storybook/EmptyPageContent';
 import GeneratingContent from './storybook/GeneratingContent';
@@ -31,9 +31,62 @@ const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWit
   );
 });
 
+function CoverLanguagePicker({ language, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e) => {
+      if (!ref.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onClickOutside);
+    return () => document.removeEventListener('pointerdown', onClickOutside);
+  }, [open]);
+
+  return (
+    <div className="book-cover-lang-picker" ref={ref}>
+      <button
+        type="button"
+        className="book-cover-lang-trigger"
+        onClick={() => setOpen(!open)}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+        <span>{LANGUAGES.find(l => l.key === language)?.label || 'English'}</span>
+        <svg width="9" height="5" viewBox="0 0 10 6" fill="none" style={{ transition: 'transform 0.2s ease', transform: open ? 'rotate(180deg)' : 'none' }}>
+          <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="book-cover-lang-menu">
+          {LANGUAGES.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              className={`book-cover-lang-option${language === key ? ' active' : ''}`}
+              onClick={() => { onChange(key); setOpen(false); }}
+            >
+              {language === key && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const PAGE_SLOTS = 21;
 
-function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English' }) {
+function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English', onLanguageChange }) {
   const { theme } = useTheme();
   const lang = getLangData(language);
   const bookRef = useRef(null);
@@ -207,6 +260,9 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
                   </button>
                 ))}
               </div>
+              {onLanguageChange && (
+                <CoverLanguagePicker language={language} onChange={onLanguageChange} />
+              )}
             </div>
           </div>
           <div className="book-idle-hint">

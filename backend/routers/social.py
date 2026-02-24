@@ -1,9 +1,12 @@
 """Social endpoints - ratings and comments for published stories."""
 
 import time
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Header, HTTPException
+from google.cloud.firestore_v1 import async_transactional
+from google.cloud.firestore_v1.transforms import Increment
 from pydantic import BaseModel, Field
 
 from services.auth import verify_token
@@ -29,6 +32,29 @@ class RateBody(BaseModel):
     rating: int = Field(..., ge=1, le=5)
 
 
+@async_transactional
+async def _rate_in_transaction(transaction, story_ref, ratings_ref, uid, rating):
+    old_snap = await ratings_ref.document(uid).get(transaction=transaction)
+    old_rating = old_snap.to_dict()["rating"] if old_snap.exists else None
+
+    transaction.set(ratings_ref.document(uid), {
+        "rating": rating,
+        "updated_at": datetime.now(timezone.utc),
+    })
+
+    if old_rating is None:
+        transaction.update(story_ref, {
+            "rating_sum": Increment(rating),
+            "rating_count": Increment(1),
+        })
+    else:
+        diff = rating - old_rating
+        if diff != 0:
+            transaction.update(story_ref, {"rating_sum": Increment(diff)})
+
+    return old_rating
+
+
 @router.post("/api/stories/{story_id}/rate")
 async def rate_story(
     story_id: str,
@@ -48,29 +74,7 @@ async def rate_story(
         raise HTTPException(status_code=404, detail="Story not found")
 
     ratings_ref = story_ref.collection("ratings")
-    old_snap = await ratings_ref.document(uid).get()
-    old_rating = old_snap.to_dict()["rating"] if old_snap.exists else None
-
-    # Write rating to subcollection
-    await ratings_ref.document(uid).set({
-        "rating": body.rating,
-        "created_at": time.time(),
-    })
-
-    # Update denormalized fields atomically
-    from google.cloud.firestore_v1.transforms import Increment
-
-    if old_rating is None:
-        await story_ref.update({
-            "rating_sum": Increment(body.rating),
-            "rating_count": Increment(1),
-        })
-    else:
-        diff = body.rating - old_rating
-        if diff != 0:
-            await story_ref.update({
-                "rating_sum": Increment(diff),
-            })
+    old_rating = await _rate_in_transaction(db.transaction(), story_ref, ratings_ref, uid, body.rating)
 
     return {"rating": body.rating, "old_rating": old_rating}
 
@@ -144,6 +148,18 @@ async def post_comment(
     author_photo_url = decoded.get("picture")
 
     comments_ref = story_ref.collection("comments")
+
+    recent = comments_ref.where("uid", "==", uid).order_by("created_at", direction="DESCENDING").limit(1)
+    async for doc in recent.stream():
+        last_time = doc.to_dict().get("created_at")
+        if last_time:
+            if isinstance(last_time, (int, float)):
+                elapsed = time.time() - last_time
+            else:
+                elapsed = (datetime.now(timezone.utc) - last_time).total_seconds()
+            if elapsed < 5:
+                raise HTTPException(status_code=429, detail="Please wait before posting another comment")
+
     comment_data = {
         "uid": uid,
         "author_name": author_name,
@@ -151,8 +167,6 @@ async def post_comment(
         "text": body.text.strip(),
         "created_at": time.time(),
     }
-
-    from google.cloud.firestore_v1.transforms import Increment
 
     new_doc = comments_ref.document()
     await new_doc.set(comment_data)
@@ -218,8 +232,8 @@ async def delete_comment(
     if comment_data.get("uid") != uid and not is_story_author:
         raise HTTPException(status_code=403, detail="Not your comment")
 
-    from google.cloud.firestore_v1.transforms import Increment
-
     await comment_ref.delete()
-    await story_ref.update({"comment_count": Increment(-1)})
+    current_count = (story_data or {}).get("comment_count", 0)
+    if current_count > 0:
+        await story_ref.update({"comment_count": Increment(-1)})
     return {"status": "deleted"}

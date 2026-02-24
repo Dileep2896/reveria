@@ -64,6 +64,11 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
       img.onload = () => setImageLoaded(true);
       img.onerror = () => setImageFailed(true);
       img.src = scene.image_url;
+      return () => {
+        img.onload = null;
+        img.onerror = null;
+        img.src = '';
+      };
     }
   }, [scene.image_url, isError, imageLoaded, imageFailed]);
 
@@ -84,6 +89,13 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
   useEffect(() => {
     if (!isBusy) setAwaitingTextRegen(false);
   }, [isBusy]);
+
+  // Safety timeout: clear awaitingTextRegen after 60s in case regen fails silently
+  useEffect(() => {
+    if (!awaitingTextRegen) return;
+    const timer = setTimeout(() => setAwaitingTextRegen(false), 60000);
+    return () => clearTimeout(timer);
+  }, [awaitingTextRegen]);
 
   const isRegen = textWasRegenerated.current;
   const skip = hasAnimated.current && !isRegen;

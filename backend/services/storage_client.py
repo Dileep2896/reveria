@@ -2,7 +2,6 @@
 
 import asyncio
 import base64
-import datetime
 import logging
 import os
 import re
@@ -13,8 +12,6 @@ logger = logging.getLogger("storyforge.storage")
 
 _bucket_name: str | None = None
 _client: storage.Client | None = None
-
-SIGNED_URL_EXPIRY = datetime.timedelta(days=7)
 
 
 def _get_bucket_name() -> str:

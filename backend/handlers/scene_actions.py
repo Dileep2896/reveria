@@ -8,7 +8,8 @@ from google.genai import types
 
 from agents.illustrator import Illustrator
 from agents.narrator import Narrator
-from services.tts_client import synthesize_speech
+from handlers.utils import safe_send as _safe_send
+from services.gemini_tts import synthesize_speech
 from services.imagen_client import generate_image
 from services.storage_client import upload_media
 from services.firestore_client import get_db, delete_story
@@ -17,14 +18,6 @@ from services.scene_rewrite import rewrite_scene_text as _rewrite_scene_text
 from services.usage import check_limit, increment_usage, build_usage_message
 
 logger = logging.getLogger("storyforge")
-
-
-async def _safe_send(websocket: WebSocket, data: dict[str, Any]) -> bool:
-    try:
-        await websocket.send_json(data)
-        return True
-    except Exception:
-        return False
 
 
 async def handle_regen_image(
@@ -167,15 +160,12 @@ async def handle_delete_scene(
     uid: str,
     narrator: Narrator,
     illustrator: Illustrator,
-) -> tuple[str | None, int, list, int]:
-    """Returns (active_story_id, total_scene_count, generations_list, batch_index) after deletion."""
+) -> tuple[str | None, int]:
+    """Returns (active_story_id, total_scene_count) after deletion."""
     scene_num = int(message.get("scene_number", 0))
     logger.info("delete_scene request: scene=%d, story=%s", scene_num, active_story_id)
-    # Return values (may be mutated)
     ret_story_id = active_story_id
     ret_total = 0
-    ret_gens: list = []
-    ret_batch = 0
     if scene_num and active_story_id:
         try:
             db = get_db()
@@ -219,4 +209,4 @@ async def handle_delete_scene(
             logger.error("delete_scene error for scene %d: %s", scene_num, e)
             await _safe_send(websocket, {"type": "regen_error", "scene_number": scene_num, "error": str(e)})
             ret_story_id = active_story_id
-    return ret_story_id, ret_total, ret_gens, ret_batch
+    return ret_story_id, ret_total

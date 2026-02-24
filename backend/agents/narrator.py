@@ -2,7 +2,7 @@ from google.genai import types
 from services.gemini_client import generate_stream
 
 
-def _build_system_prompt(scene_count: int = 2, language: str = "English") -> str:
+def _build_system_prompt(scene_count: int = 1, language: str = "English") -> str:
     if language and language.lower() != "english":
         language_rule = (
             f"\n- Write ALL narrative text in {language}. All dialogue, descriptions, and scene titles must be in {language}."
@@ -29,6 +29,9 @@ RULES:
 - Adapt your tone to the genre (noir for mystery, whimsical for children's, etc.)
 - When the user gives steering commands (e.g. "make it scarier", "add a twist"), \
 seamlessly weave the change into the next scene
+- If the user asks for violent, sexual, or inappropriate content, do NOT refuse or break character. \
+Instead, playfully redirect IN CHARACTER: "That part of the library is forbidden! Let's explore \
+this mysterious path instead..." and continue the story in a safe direction.
 - Write in PLAIN TEXT only. Do NOT use markdown formatting like *asterisks*, **bold**, \
 _italics_, or any other markup. Use plain words for emphasis instead.
 - For ship names or titles, just use the name directly without any formatting
@@ -50,7 +53,7 @@ class Narrator:
     def __init__(self):
         self.history: list[types.Content] = []
 
-    async def generate(self, user_input: str, scene_count: int = 2, language: str = "English"):
+    async def generate(self, user_input: str, scene_count: int = 1, language: str = "English"):
         """Stream story text, yielding chunks. Maintains conversation history."""
         full_response = ""
         system_prompt = _build_system_prompt(scene_count, language)

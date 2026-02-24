@@ -16,18 +16,33 @@ The killer differentiator? **Director Mode** - a split-screen view where the lef
 
 ## The Architecture: A Team of Specialist Agents
 
-StoryForge isn't a single monolithic AI call. It's an **orchestra of four specialist agents**, coordinated by Google's Agent Development Kit (ADK):
+StoryForge isn't a single monolithic AI call. It's an **orchestra of four specialist agents**, coordinated by Google's Agent Development Kit (ADK) with a **per-scene streaming loop**:
 
 ```
 StoryOrchestrator (SequentialAgent)
-  ├── Narrator Agent          ← runs first, generates story text
+  ├── NarratorADKAgent (per-scene streaming loop)
+  │     │
+  │     ├── Scene 1 text ready ──┬── asyncio.create_task(Illustrator)  ← image gen
+  │     │                        ├── asyncio.create_task(TTS)          ← audio gen
+  │     │                        └── asyncio.create_task(Director Live) ← commentary
+  │     │
+  │     ├── [Check steering queue → inject user direction]
+  │     │
+  │     ├── Scene 2 text ready ──┬── asyncio.create_task(Illustrator)
+  │     │                        ├── asyncio.create_task(TTS)
+  │     │                        └── asyncio.create_task(Director Live)
+  │     │
+  │     └── await all pending tasks
+  │
   └── PostNarrationAgent (ParallelAgent)
-        ├── Illustrator Agent  ← generates scene images
-        ├── Director Agent     ← analyzes creative decisions
-        └── TTS Agent          ← synthesizes narration audio
+        └── Director Agent     ← full post-batch analysis
 ```
 
-The Narrator must complete before the parallel phase begins - because the Illustrator, Director, and TTS all depend on the generated scene text. Once narration is done, all three downstream agents run **concurrently** to minimize latency. The user sees text appear first, then images paint in, audio becomes playable, and the Director panel populates - all streaming over a single WebSocket connection.
+Unlike a traditional sequential pipeline where the Narrator must fully complete before images/audio start, StoryForge fires off image, audio, and Director commentary generation **per-scene** as each scene's text completes. This means the user sees Scene 1's image painting in while Scene 2's text is still streaming. The experience feels truly live and agentic.
+
+**Mid-generation steering**: Users can type direction changes (e.g. "make it scarier") while generation is active. The steering text is injected into the Narrator's history between scenes, so the next scene picks up the new direction seamlessly.
+
+**Director Live Commentary**: Each scene triggers a lightweight Gemini Flash analysis that streams a creative note (mood, tension level, craft observation) to the Director panel in real-time - before the full post-batch analysis arrives.
 
 ### Why Multi-Agent?
 
@@ -365,6 +380,135 @@ Light mode exposed a sharp, dark shadow under the flipbook that looked wrong aga
 
 The second source was the real culprit - and it wasn't findable via CSS inspection since it's canvas-rendered.
 
+### Per-Scene Streaming Pipeline
+
+The original pipeline was sequential: Narrator generates ALL scenes, THEN Illustrator/TTS/Director run in parallel. This meant users waited for the full text before seeing any images or hearing any audio.
+
+The new pipeline is **per-scene streaming**: as each scene's text completes inside the Narrator loop, we immediately fire off `asyncio.create_task` for image generation, audio synthesis, and Director live commentary — all non-blocking. The user sees Scene 1's image painting in while Scene 2's text is still being written.
+
+Key implementation details:
+- **Image semaphore**: Imagen has rate limits, so images run sequentially via `asyncio.Semaphore(1)` — but they start as soon as each scene's text is ready, not after all scenes
+- **Character extraction**: Runs once when the first scene arrives (needs at least one scene's text), then all subsequent scenes benefit from the cached character sheet
+- **Task collection**: All spawned tasks are collected and `await asyncio.gather(*pending_tasks)` runs after the narrator loop completes, ensuring nothing is dropped
+
+The PostNarrationAgent now only contains the Director's full batch analysis — everything else runs per-scene.
+
+### Live Director Commentary (Director-as-Driver)
+
+During generation, the Director Panel comes alive with **per-scene creative notes**. Each scene triggers a lightweight Gemini Flash analysis (temp 0.3, 300 tokens, JSON response) that streams a creative observation to the frontend:
+
+```json
+{
+  "scene_number": 1,
+  "thought": "Opening with rain-soaked streets creates immediate noir atmosphere",
+  "mood": "mysterious",
+  "tension_level": 4,
+  "craft_note": "Strong use of pathetic fallacy — weather mirrors the detective's inner turmoil",
+  "suggestion": "Reveal that the stranger watching from the alley is her long-lost sister",
+  "emoji": "🌧️"
+}
+```
+
+The frontend renders these as animated cards in the Director Panel with emoji headers, mood badges, tension meters, and italic craft notes. When the full post-batch Director analysis arrives, it replaces the live notes with the comprehensive breakdown.
+
+But the Director doesn't just observe — **it drives**. Each per-scene `analyze_scene()` call now returns a `suggestion` field: a bold, specific creative direction for what should happen next. This suggestion is stored on `SharedPipelineState.director_suggestion` and automatically prepended to the Narrator's input at the start of the next batch as `[Director's creative direction: ...]`. The Narrator naturally weaves the Director's suggestion into the opening scenes of the next generation cycle.
+
+This transforms the Director from a reactive analyst into a **proactive creative collaborator** — like a real film director calling the next shot between takes. The user can see the suggestion in the Director Panel, watch the Narrator pick it up in the next batch, and feel the story being shaped by a creative partnership between two agents rather than a single author. It also means the story develops a narrative momentum that carries across batches: the Director spots an opportunity ("Reveal that the stranger is her long-lost sister"), and the Narrator runs with it.
+
+This makes the AI's creative process **visible in real-time** — you can watch the Director react to each scene as it's written, steer the next batch with a creative suggestion, and see that suggestion materialize in the narrative. It's not just commentary; it's collaboration.
+
+### Mid-Generation Steering
+
+Previously, the ControlBar was disabled during generation — you had to wait for the full batch to complete before sending another prompt. Now the input stays active, and users can **steer the story while it's being written**.
+
+When you type during generation (e.g., "make it scarier", "add a dragon"), the message is sent as `type: "steer"` instead of `type: "generate"`. The backend pushes it to `SharedPipelineState.steering_queue`, which is checked between scenes in the Narrator loop. The steering text is injected into the Narrator's conversation history, so the next scene naturally picks up the new direction.
+
+The UX signals this mode clearly:
+- Placeholder changes to "Steer the story... (e.g. make it scarier)"
+- The send button morphs from a spinner to a **compass icon** (steering, not sending)
+- A toast confirms: "Steering applied: make it scarier"
+
+### Playful Safety Redirect
+
+Instead of showing a hard error toast when users request inappropriate content, the Narrator now **redirects in-character**. The system prompt includes:
+
+> If the user asks for violent, sexual, or inappropriate content, do NOT refuse or break character. Instead, playfully redirect IN CHARACTER: "That part of the library is forbidden! Let's explore this mysterious path instead..." and continue the story in a safe direction.
+
+The `ws_callback` in the backend was also softened — for `safety`-type refusals, we let the Narrator's redirect play through as normal story content. Only `offtopic` refusals (coding questions, homework, etc.) still trigger a hard error toast. This feels much more natural than breaking the fourth wall with "Your prompt was blocked by our safety filters."
+
+### Director Chat: Voice Brainstorming with Gemini Live API
+
+The most exciting addition to StoryForge is **Director Chat** — a real-time voice conversation with the Director character using Google's Gemini Live API (`gemini-live-2.5-flash-native-audio`). Instead of typing prompts, you can *talk* to the Director about where the story should go next.
+
+The architecture is a persistent bidirectional audio session:
+
+```mermaid
+flowchart LR
+    subgraph Client["Browser"]
+        direction TB
+        Orb["Voice Orb"] --> VAD["Web Audio VAD<br/>AnalyserNode"]
+        VAD -->|"1.2s silence"| Stop["Auto-stop<br/>MediaRecorder"]
+        Stop --> B64["Base64 audio"]
+    end
+
+    subgraph WS["WebSocket"]
+        direction TB
+        M1["director_chat_start<br/>{context, lang, voice}"]
+        M2["director_chat_audio<br/>{base64, mime}"]
+        M3["director_chat_text"]
+        M4["director_chat_suggest"]
+    end
+
+    subgraph Backend["DirectorChatSession"]
+        direction TB
+        Live["Gemini Live Session<br/>native audio model"]
+        Intent["Intent Detection<br/>generate vs continue"]
+        Suggest["Prompt Suggestion<br/>conversation → prompt"]
+    end
+
+    B64 --> M2 --> Live
+    Live -->|"PCM → WAV"| Client
+    Intent -->|"generate"| Suggest
+
+    style Client fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
+    style WS fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
+    style Backend fill:#1a1a2e,stroke:#3b82f6,color:#e2e8f0
+```
+
+**How it works:**
+
+1. **Start session**: Frontend sends `director_chat_start` with story context, language, and voice name. Backend opens a Gemini Live session with a Director persona system prompt and sends back the Director's audio greeting.
+2. **Conversation loop**: User speaks → Web Audio VAD detects 1.2s of silence → auto-stops recording → base64 audio sent over WebSocket → Gemini Live processes → PCM audio response collected → wrapped in WAV header → base64 data URL sent to frontend → browser plays audio → ready for next turn.
+3. **Intent detection**: After each user message, a separate Gemini Flash call analyzes whether the user wants to generate a scene ("let's do it", "write that") or continue brainstorming. High-confidence generate intent triggers automatic prompt suggestion.
+4. **Prompt suggestion**: When the user is ready, `suggest_prompt()` distills the conversation into a vivid 2-3 sentence story prompt that auto-fills the main input.
+
+The **VAD (Voice Activity Detection)** was the key UX breakthrough. Without it, users had to tap twice per turn (record, then send). With Web Audio's `AnalyserNode` computing RMS levels on a 100ms polling interval, we detect the speech-to-silence transition and auto-stop the recorder. The conversation feels natural — speak, pause, the Director responds, you speak again.
+
+**Language-aware Director**: The Director speaks the story's language. For non-English stories, the system prompt appends "You MUST speak and respond ONLY in {language}." Combined with configurable voice selection (8 voices from Charon to Zephyr), users get a personalized creative collaborator.
+
+### Settings Dialog: Centralized Configuration
+
+We replaced the standalone theme toggle button in the header with a **Settings Dialog** — a glassmorphism modal with two sections:
+
+1. **Appearance**: Light/Dark toggle pills with sun/moon icons
+2. **Director Voice**: 2-column grid of 8 curated voice chips (Charon, Kore, Fenrir, Aoede, Puck, Orus, Leda, Zephyr) with descriptions
+
+The voice preference persists to `localStorage` and is sent when opening a Director Chat session. This means you can pick a voice that fits your creative mood — Charon for dark drama, Puck for playful adventures, Aoede for lyrical stories.
+
+### The Invisible Bug: Why Director Notes Disappeared on Library Load
+
+This one was maddening. Open a story fresh from the Library — gorgeous illustrations, flowing text, audio players ready to go — but the Director Panel sat empty. No live notes, no mood badges, no emoji-headed analysis cards. Hit Ctrl+R to reload the page? Everything appeared instantly. The data was clearly *there*, it just wasn't *arriving*.
+
+The investigation started at the obvious place: the WebSocket handler. Were `director_live` messages being dropped? No — the notes weren't coming from WebSocket at all. When you open a saved story from the Library, there's no active generation; the data comes from Firestore hydration. Two completely separate code paths produce the same UI state, and therein lay the bug.
+
+`LibraryPage.jsx` loads generation data from Firestore and passes it through to the story canvas. It faithfully restored `scenes`, `characters`, `narrativeArc`, `portraits` — but silently omitted `directorLiveNotes`. The field simply wasn't in the destructured payload. Meanwhile, the `load()` function that hydrates app state from persisted data never initialized the standalone `directorData` state that the Director Panel reads from.
+
+So the data sat in Firestore, the UI waited for state that was never populated, and neither side threw an error. A page reload worked because the fresh mount triggered a different initialization path that happened to pick up the Director data from the URL-based story fetch.
+
+The fix was two lines in two files: add `directorLiveNotes` to the Library's Firestore read, and hydrate `directorData` from the persisted generation data in the load function. Classic case of two code paths doing the same thing slightly differently — one of them correctly, one of them not.
+
+The broader lesson: when your app has multiple entry points to the same state (WebSocket streaming vs. Firestore hydration vs. URL-based fetch), every field needs to flow through *all* of them. A missing field doesn't crash — it just silently produces an empty panel that looks like a rendering bug.
+
 ---
 
 ## Lessons Learned
@@ -429,6 +573,22 @@ When debugging visual issues, don't assume everything is CSS. `react-pageflip` r
 
 Making Pro users feel special isn't about adding flashy elements everywhere. It's about removing friction (hiding meaningless usage counters) and adding *subtle* visual touches (a gentle glow, a small badge). The best premium indicators are the ones users notice subconsciously.
 
+### 16. Per-Scene is the Right Granularity
+
+Batch-level parallelism (generate all text, then all images) feels sequential to the user. Scene-level parallelism (fire off image/audio/commentary as each scene completes) makes the experience feel truly live. The implementation complexity is manageable — `asyncio.create_task` + a semaphore for rate limiting — and the UX improvement is dramatic. Users see results streaming in continuously instead of waiting for phase transitions.
+
+### 17. Reactive Agents Are Not Enough — Make Them Proactive
+
+Our Director agent started as a purely reactive observer: it analyzed scenes after they were written and produced commentary. Useful, but passive. The breakthrough came when we gave it a voice *forward* — a `suggestion` field that proposes what should happen next. Storing that suggestion on shared state and feeding it to the Narrator at the start of the next batch turned a read-only analyst into an active creative partner. The lesson generalizes: in multi-agent systems, agents that only observe and report are half as valuable as agents that observe, report, *and influence*. If an agent has enough context to analyze, it has enough context to suggest — and the system becomes more than the sum of its parts.
+
+### 18. Voice UX Needs Silence Detection, Not Button Choreography
+
+Our first Director Chat implementation required two taps per turn: tap to start recording, tap again to send. Users found this clunky — it broke the conversational flow. Web Audio's `AnalyserNode` was the solution: compute RMS from `getFloatTimeDomainData()` on a fast polling interval, detect when speech transitions to silence, and auto-stop the recorder. The conversation becomes: speak → pause → message sends → Director responds → speak again. One tap to start, zero taps per subsequent turn.
+
+### 19. Gemini Live API Enables True Audio Agents
+
+The Gemini Live API (`gemini-live-2.5-flash-native-audio`) is fundamentally different from text APIs. It maintains a persistent bidirectional session where you send audio in and get audio back — the model handles speech recognition and synthesis internally. This removes the need for separate STT/TTS services in the conversation loop. The tradeoff: responses arrive as raw PCM chunks that need WAV wrapping for browser playback, and session management (connect, maintain, clean up) adds complexity. But the result — a real-time voice conversation with an AI character — is worth the engineering investment.
+
 ---
 
 ## Tech Stack
@@ -441,7 +601,8 @@ Making Pro users feel special isn't about adding flashy elements everywhere. It'
 | Agent Framework | Google ADK | Multi-agent orchestration |
 | LLM | Gemini 2.0 Flash (Vertex AI) | Story generation, prompt engineering, analysis |
 | Image Gen | Imagen 3 (Vertex AI) | Scene illustrations, book covers |
-| Voice | Web Audio API + Cloud TTS | Input capture + narration |
+| Director Chat | Gemini Live API (`gemini-live-2.5-flash-native-audio`) | Real-time voice brainstorming |
+| Voice | Web Audio API + Gemini Native Audio (Live API) | Input capture + expressive narration |
 | Auth | Firebase Authentication | Google Sign-In |
 | Database | Cloud Firestore | Story persistence, user libraries, likes, ratings, comments |
 | Storage | Google Cloud Storage | Scene images, cover images |
@@ -450,12 +611,38 @@ Making Pro users feel special isn't about adding flashy elements everywhere. It'
 
 ---
 
+### Gemini Native Audio — Expressive Story Narration
+
+One of our most impactful changes was replacing Google Cloud TTS with Gemini's own native audio output for story narration. The difference is striking — instead of robotic Wavenet voices reading text flatly, Gemini delivers audiobook-quality narration that varies tone with the story's mood.
+
+The implementation mirrors our Director Chat architecture: we open a short-lived Gemini Live session (`gemini-2.5-flash-native-audio`), pass the scene text with an audiobook narrator system prompt, and collect the PCM audio response. The system prompt instructs: "Vary your tone to match the mood — dramatic for tense moments, gentle for quiet scenes, energetic for action."
+
+Each language gets a voice that suits it: Kore (warm) for English and Spanish, Leda (elegant) for French, Orus (calm) for German, Aoede (lyrical) for Japanese. The narration feels like it belongs to the story rather than being bolted on.
+
+The trade-off: Gemini's Live API doesn't provide word-level timestamps like Cloud TTS's SSML marks. But our Reading Mode already had a heuristic fallback — weighting words by length and adding pauses at punctuation — that works well enough for the karaoke highlighting effect.
+
+### Director-Driven Conversation Flow
+
+Early versions of our Director Chat had an eager trigger: the moment a user said "sounds great" or "let's do it", intent detection fired and generated a scene — often before the Director had finished exploring the idea. The Director might still be asking about characters or setting while the scene was already generating.
+
+The fix was philosophical: **the Director should control the creative flow, not the user's casual agreement.** We updated the Director's system prompt to explicitly instruct it to explore ideas fully — ask about characters, setting, mood, conflict — before confirming. And we rewired intent detection to analyze *both* sides of the conversation:
+
+1. After each exchange, we transcribe the Director's audio response
+2. Both the user's message AND the Director's response feed into intent detection
+3. Generation only triggers when the Director has stopped asking questions AND the user has explicitly confirmed
+4. Confidence threshold raised from 0.7 to 0.8
+
+This creates the natural creative collaboration we wanted: the Director leads the brainstorming, gathers enough detail, proposes a clear plan, and only then asks "Ready to bring this to life?"
+
+---
+
 ## What's Next
 
-- **Portrait-as-reference pipeline** - Using Imagen 3's subject customization API (`imagen-3.0-capability-001`) to feed character portrait images back as reference images for scene generation, achieving true visual consistency
-- **Demo video** for hackathon submission
-- **Firebase Hosting** - deploy frontend SPA
-- **Cloud Run** - deploy backend container
+- **Demo video** — 4-minute walkthrough for submission
+- **Polish & edge cases** — Final round of UX polish, error handling hardening, and mobile responsiveness tuning
+- **Book layout preferences** — Let users choose between single-page and two-page spread layouts for different reading experiences
+- **Multi-voice narration** — Character-specific voices so dialogue scenes sound like distinct people, not one narrator doing all the parts
+- **Custom character portraits from user photos** — Upload a selfie or reference image and have your characters rendered in the story's art style
 
 ---
 

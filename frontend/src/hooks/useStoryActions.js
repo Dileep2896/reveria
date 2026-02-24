@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { db, getDoc, doc, updateDoc } from '../firebase';
 import { API_URL, findFallbackCover } from '../utils/storyHelpers';
 
@@ -10,7 +10,11 @@ export default function useStoryActions({
   idToken,
   addToast,
   user,
+  getValidToken,
 }) {
+  const storyIdRef = useRef(storyId);
+  storyIdRef.current = storyId;
+
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [generatingCover, setGeneratingCover] = useState(false);
@@ -27,7 +31,7 @@ export default function useStoryActions({
   // Generate AI book title + cover via backend
   const generateBookMeta = useCallback(async (sceneTexts, artStyle, sid) => {
     try {
-      const token = idToken;
+      const token = getValidToken ? await getValidToken() : idToken;
       const res = await fetch(`${API_URL}/api/generate-book-meta`, {
         method: 'POST',
         headers: {
@@ -46,7 +50,7 @@ export default function useStoryActions({
       console.error('Book meta generation failed:', err);
       return null;
     }
-  }, [idToken]);
+  }, [idToken, getValidToken]);
 
   // Auto-save current story as 'saved' (used when switching away from a draft)
   // NEVER calls generateBookMeta - always fast (~200ms)
@@ -154,7 +158,7 @@ export default function useStoryActions({
       }
 
       // Guard: user may have navigated away during async cover generation
-      if (storyId !== capturedStoryId) return;
+      if (storyIdRef.current !== capturedStoryId) return;
 
       setSaving(true);
       await updateDoc(storyRef, {
@@ -189,7 +193,7 @@ export default function useStoryActions({
       // Tier 1: already has AI title + cover - just complete
       if (alreadyGenerated) {
         await updateDoc(storyRef, { status: 'completed', updated_at: new Date() });
-        if (storyId === capturedStoryId) setStoryStatus('completed');
+        if (storyIdRef.current === capturedStoryId) setStoryStatus('completed');
         setShowCompleteDialog(false);
         addToast('Book completed!', 'success');
         return;
@@ -204,7 +208,7 @@ export default function useStoryActions({
           status: 'completed',
           updated_at: new Date(),
         });
-        if (storyId === capturedStoryId) setStoryStatus('completed');
+        if (storyIdRef.current === capturedStoryId) setStoryStatus('completed');
         setShowCompleteDialog(false);
         addToast('Book completed!', 'success');
         return;
@@ -224,7 +228,7 @@ export default function useStoryActions({
       }
 
       // Guard: user may have navigated away during async cover generation
-      if (storyId !== capturedStoryId) return;
+      if (storyIdRef.current !== capturedStoryId) return;
 
       await updateDoc(storyRef, {
         title,
@@ -248,11 +252,12 @@ export default function useStoryActions({
     if (!storyId || publishing) return;
     setPublishing(true);
     try {
+      const token = getValidToken ? await getValidToken() : idToken;
       const res = await fetch(`${API_URL}/api/stories/${storyId}/publish`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           author_name: user?.displayName || user?.email?.split('@')[0] || 'Anonymous',
@@ -273,7 +278,7 @@ export default function useStoryActions({
     } finally {
       setPublishing(false);
     }
-  }, [storyId, publishing, user, idToken, addToast]);
+  }, [storyId, publishing, user, idToken, getValidToken, addToast]);
 
   // Convenience: reset saved flag (called by parent when generating changes)
   const resetSaved = useCallback(() => setSaved(false), []);

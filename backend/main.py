@@ -1,7 +1,8 @@
 import asyncio
+import base64
 import json
 import logging
-import time
+import uuid
 from typing import Any
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -17,7 +18,8 @@ from services.auth import verify_token
 from services.content_filter import is_refusal as _is_refusal, validate_prompt as _validate_prompt
 from services.book_meta import auto_generate_meta as _auto_generate_meta
 from services.portrait_service import generate_portraits as _generate_portraits
-from services.usage import get_usage, check_limit, increment_usage, build_usage_message
+from services.usage import get_usage, check_limit, increment_usage, decrement_usage, build_usage_message
+from services.director_chat import DirectorChatSession, generate_voice_preview
 
 from routers import stories, bookmarks, meta, book_details, social, usage, admin
 
@@ -26,6 +28,7 @@ from google.adk.sessions import InMemorySessionService  # type: ignore[import-un
 from google.adk.runners import Runner  # type: ignore[import-untyped]
 
 from handlers.scene_actions import handle_regen_image, handle_regen_scene, handle_delete_scene
+from handlers.utils import safe_send as _safe_send
 from handlers.ws_resume import handle_resume, handle_auto_recover, handle_reset
 
 load_dotenv()
@@ -69,36 +72,20 @@ app.include_router(usage.router)
 app.include_router(admin.router)
 
 
-class ConnectionManager:
-    def __init__(self) -> None:
-        self.active_connections: list[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket) -> None:
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket) -> None:
-        try:
-            self.active_connections.remove(websocket)
-        except ValueError:
-            pass
-
-
-manager = ConnectionManager()
-
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return {"status": "ok", "adk": True}
 
 
-async def _safe_send(websocket: WebSocket, data: dict[str, Any]) -> bool:
-    """Send JSON to websocket, return False if connection is dead."""
-    try:
-        await websocket.send_json(data)
-        return True
-    except Exception:
-        return False
+@app.get("/api/voice-preview/{voice_name}")
+async def voice_preview(voice_name: str):
+    """Generate a short audio preview for a Director voice."""
+    valid_voices = {"Charon", "Kore", "Fenrir", "Aoede", "Puck", "Orus", "Leda", "Zephyr"}
+    if voice_name not in valid_voices:
+        return {"audio_url": None, "error": "Invalid voice name"}
+    audio_url = await generate_voice_preview(voice_name)
+    return {"audio_url": audio_url}
 
 
 def _serialize_narrator_history(narrator: Narrator) -> list[dict[str, str]]:
@@ -151,16 +138,17 @@ async def _run_adk_pipeline(
             return
         if data.get("type") == "text":
             refusal_kind = _is_refusal(data.get("content", ""))
-            if refusal_kind:
+            if refusal_kind == "offtopic":
                 refusal_detected = True
-                if refusal_kind == "offtopic":
-                    msg = "StoryForge is a storytelling app - try describing a story you'd like me to create!"
-                else:
-                    msg = "Your prompt was blocked by our safety filters. Please try a different story idea."
-                logger.warning("ADK narrator produced %s refusal, aborting batch", refusal_kind)
+                msg = "StoryForge is a storytelling app - try describing a story you'd like me to create!"
+                logger.warning("ADK narrator produced offtopic refusal, aborting batch")
                 await _safe_send(websocket, {"type": "error", "content": msg})
                 await _safe_send(websocket, {"type": "status", "content": "done"})
                 return
+            # For "safety" refusals: let the narrator's in-character redirect play out
+            # (the narrator prompt instructs it to redirect playfully)
+            if refusal_kind == "safety":
+                logger.info("ADK narrator produced safety-adjacent text, letting redirect play out")
         await _safe_send(websocket, data)
     shared_state.ws_callback = ws_callback
 
@@ -226,7 +214,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     author_photo_url = decoded.get("picture")
     logger.info("Authenticated user: %s (%s)", uid, author_name)
 
-    await manager.connect(websocket)
+    await websocket.accept()
 
     # Send initial usage data
     try:
@@ -238,6 +226,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     narrator = Narrator()
     illustrator = Illustrator()
     director = Director()
+    director_chat: DirectorChatSession | None = None
 
     orchestrator, shared_state = create_story_orchestrator(narrator, illustrator, director)
     session_service = InMemorySessionService()
@@ -247,6 +236,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     active_story_id: str | None = None
     batch_index = 0
     director_result: dict[str, Any] | None = None
+    is_generating = False
+    art_style_current = "cinematic"
+    scene_count_current = 1
+    language_current = "English"
 
     try:
         while True:
@@ -325,13 +318,169 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             if msg_type == "delete_scene":
-                ret_sid, ret_total, _, _ = await handle_delete_scene(websocket, message, active_story_id, uid, narrator, illustrator)
+                ret_sid, ret_total = await handle_delete_scene(websocket, message, active_story_id, uid, narrator, illustrator)
                 active_story_id = ret_sid
                 if ret_sid is None:
                     total_scene_count = 0
                     batch_index = 0
                 else:
                     total_scene_count = ret_total
+                continue
+
+            # Handle mid-generation steering
+            if msg_type == "steer":
+                steer_text = message.get("content", "").strip()
+                if steer_text and shared_state:
+                    shared_state.steering_queue.append(steer_text)
+                    await _safe_send(websocket, {"type": "steer_ack", "content": steer_text})
+                    logger.info("Steering injected: %s", steer_text[:80])
+                continue
+
+            # ── Director Chat handlers ──
+            if msg_type == "director_chat_start":
+                try:
+                    story_ctx = message.get("story_context", "")
+                    if not story_ctx and shared_state and shared_state.scenes:
+                        story_ctx = "\n\n".join(
+                            s.get("text", "") for s in shared_state.scenes if s.get("text")
+                        )
+                    if not story_ctx:
+                        story_ctx = "No story yet \u2014 starting fresh."
+                    chat_language = message.get("language", language_current)
+                    chat_voice = message.get("voice_name", "Charon")
+                    director_chat = DirectorChatSession()
+                    audio_url = await director_chat.start(story_ctx, language=chat_language, voice_name=chat_voice)
+                    await _safe_send(websocket, {
+                        "type": "director_chat_started",
+                        "audio_url": audio_url,
+                    })
+                except Exception as e:
+                    logger.error("Director chat start failed: %s", e)
+                    await _safe_send(websocket, {"type": "director_chat_error", "content": "Failed to start Director chat"})
+                continue
+
+            if msg_type == "director_chat_audio":
+                if not director_chat:
+                    logger.debug("Ignoring director_chat_audio — no active session")
+                    continue
+                try:
+                    audio_data = message.get("audio_data", "")
+                    mime_type = message.get("mime_type", "audio/webm")
+                    audio_bytes = base64.b64decode(audio_data) if audio_data else b""
+                    # Send audio to Live session and transcribe user in parallel
+                    director_task = asyncio.create_task(director_chat.send_audio(audio_bytes, mime_type))
+                    transcribe_task = asyncio.create_task(transcribe_audio(audio_data, mime_type))
+                    director_audio_url, user_transcript = await asyncio.gather(director_task, transcribe_task)
+                    # Log conversation
+                    if user_transcript:
+                        director_chat.conversation_log.append({"role": "user", "text": user_transcript})
+                        await _safe_send(websocket, {"type": "director_chat_user_transcript", "content": user_transcript})
+                    # Transcribe Director's response for intent analysis
+                    director_transcript = None
+                    if director_audio_url:
+                        # Extract base64 audio from data URL for transcription
+                        try:
+                            b64_part = director_audio_url.split(",", 1)[1] if "," in director_audio_url else ""
+                            if b64_part:
+                                director_transcript = await transcribe_audio(b64_part, "audio/wav")
+                        except Exception:
+                            pass
+                        log_text = director_transcript or "[voice response]"
+                        director_chat.conversation_log.append({"role": "director", "text": log_text})
+                    await _safe_send(websocket, {
+                        "type": "director_chat_response",
+                        "audio_url": director_audio_url,
+                    })
+                    # Intent detection: check if BOTH user and Director are ready
+                    if user_transcript and not is_generating:
+                        try:
+                            intent = await director_chat.detect_intent(user_transcript, director_transcript)
+                            if intent.get("intent") == "generate" and intent.get("confidence", 0) >= 0.8:
+                                story_ctx = message.get("story_context", "")
+                                if not story_ctx and director_chat.conversation_log:
+                                    story_ctx = "\n".join(m["text"] for m in director_chat.conversation_log if m["role"] == "system")
+                                prompt = await director_chat.suggest_prompt(story_ctx)
+                                if prompt:
+                                    await _safe_send(websocket, {
+                                        "type": "director_chat_generate",
+                                        "prompt": prompt,
+                                        "art_style": art_style_current,
+                                        "scene_count": scene_count_current,
+                                        "language": language_current,
+                                    })
+                        except Exception as ie:
+                            logger.warning("Intent detection failed: %s", ie)
+                except Exception as e:
+                    logger.error("Director chat audio failed: %s", e)
+                    await _safe_send(websocket, {"type": "director_chat_error", "content": "Director couldn't process audio"})
+                continue
+
+            if msg_type == "director_chat_text":
+                if not director_chat:
+                    logger.debug("Ignoring director_chat_text — no active session")
+                    continue
+                try:
+                    text_content = message.get("content", "").strip()
+                    if text_content:
+                        audio_url = await director_chat.send_text(text_content)
+                        # Transcribe Director's response for intent analysis
+                        director_transcript = None
+                        if audio_url:
+                            try:
+                                b64_part = audio_url.split(",", 1)[1] if "," in audio_url else ""
+                                if b64_part:
+                                    director_transcript = await transcribe_audio(b64_part, "audio/wav")
+                            except Exception:
+                                pass
+                            log_text = director_transcript or "[voice response]"
+                            director_chat.conversation_log.append({"role": "director", "text": log_text})
+                        await _safe_send(websocket, {
+                            "type": "director_chat_response",
+                            "audio_url": audio_url,
+                        })
+                        # Intent detection: check if BOTH user and Director are ready
+                        if not is_generating:
+                            try:
+                                intent = await director_chat.detect_intent(text_content, director_transcript)
+                                if intent.get("intent") == "generate" and intent.get("confidence", 0) >= 0.8:
+                                    story_ctx = "\n".join(m["text"] for m in director_chat.conversation_log if m["role"] == "system")
+                                    prompt = await director_chat.suggest_prompt(story_ctx)
+                                    if prompt:
+                                        await _safe_send(websocket, {
+                                            "type": "director_chat_generate",
+                                            "prompt": prompt,
+                                            "art_style": art_style_current,
+                                            "scene_count": scene_count_current,
+                                            "language": language_current,
+                                        })
+                            except Exception as ie:
+                                logger.warning("Intent detection failed: %s", ie)
+                except Exception as e:
+                    logger.error("Director chat text failed: %s", e)
+                    await _safe_send(websocket, {"type": "director_chat_error", "content": "Director couldn't respond"})
+                continue
+
+            if msg_type == "director_chat_suggest":
+                if not director_chat:
+                    logger.debug("Ignoring director_chat_suggest — no active session")
+                    continue
+                try:
+                    story_ctx = message.get("story_context", "")
+                    prompt_text = await director_chat.suggest_prompt(story_ctx)
+                    await _safe_send(websocket, {
+                        "type": "director_chat_suggestion",
+                        "content": prompt_text or "Couldn't generate a suggestion. Try chatting more first!",
+                    })
+                except Exception as e:
+                    logger.error("Director chat suggest failed: %s", e)
+                    await _safe_send(websocket, {"type": "director_chat_error", "content": "Couldn't generate suggestion"})
+                continue
+
+            if msg_type == "director_chat_end":
+                if director_chat:
+                    await director_chat.close()
+                    director_chat = None
+                await _safe_send(websocket, {"type": "director_chat_ended"})
                 continue
 
             # Only treat as story generation if type is "generate" or absent
@@ -345,30 +494,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             art_style = message.get("art_style", "cinematic")
             try:
-                scene_count = max(1, min(2, int(message.get("scene_count", 2))))
+                scene_count = max(1, min(2, int(message.get("scene_count", 1))))
             except (ValueError, TypeError):
-                scene_count = 2
+                scene_count = 1
             language = message.get("language", "English")
 
-            if not active_story_id:
-                allowed, reason, _ = await check_limit(uid, "create_story")
-                if not allowed:
-                    await _safe_send(websocket, {"type": "error", "content": f"Story limit reached - upgrade to Pro for unlimited stories"})
-                    await _safe_send(websocket, {"type": "status", "content": "done"})
-                    continue
-                active_story_id = f"{uid}_{int(time.time())}"
-                await _safe_send(websocket, {"type": "story_id", "content": active_story_id})
-
-            if not await _safe_send(websocket, {"type": "status", "content": "generating"}):
-                continue
-
-            if not is_quota_available():
-                remaining = get_quota_cooldown_remaining()
-                await _safe_send(websocket, {"type": "quota_exhausted", "retry_after": remaining})
-                await _safe_send(websocket, {"type": "status", "content": "done"})
-                continue
-
-            # Pre-filter: reject non-story prompts before expensive pipeline
+            # Pre-filter: reject non-story prompts before creating story doc
             if not await _validate_prompt(user_input):
                 await _safe_send(websocket, {
                     "type": "error",
@@ -377,90 +508,137 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _safe_send(websocket, {"type": "status", "content": "done"})
                 continue
 
-            # Usage limit: generations per day
-            gen_allowed, gen_reason, _ = await check_limit(uid, "generate")
-            if not gen_allowed:
-                await _safe_send(websocket, {"type": "error", "content": "Daily generation limit reached - upgrade to Pro for unlimited generations"})
-                await _safe_send(websocket, {"type": "status", "content": "done"})
+            if not active_story_id:
+                allowed, reason, _ = await check_limit(uid, "create_story")
+                if not allowed:
+                    await _safe_send(websocket, {"type": "error", "content": f"Story limit reached - upgrade to Pro for unlimited stories"})
+                    await _safe_send(websocket, {"type": "status", "content": "done"})
+                    continue
+                active_story_id = f"{uid}_{uuid.uuid4().hex[:12]}"
+                await _safe_send(websocket, {"type": "story_id", "content": active_story_id})
+
+            if is_generating:
+                await _safe_send(websocket, {"type": "error", "content": "Generation already in progress"})
                 continue
 
-            pipeline_tasks = []
-            current_batch_scenes: list[dict[str, Any]] = []
-
+            is_generating = True
             try:
-                total_scene_count, pipeline_tasks, current_batch_scenes, director_result = await _run_adk_pipeline(
-                    websocket, orchestrator, shared_state,
-                    session_service, user_input, art_style,
-                    scene_count, total_scene_count, illustrator,
-                    active_story_id, language=language,
-                )
+                if not await _safe_send(websocket, {"type": "status", "content": "generating"}):
+                    continue
 
-                current_batch_scenes = [s for s in current_batch_scenes if not s.get("_image_failed")]
+                if not is_quota_available():
+                    remaining = get_quota_cooldown_remaining()
+                    await _safe_send(websocket, {"type": "quota_exhausted", "retry_after": remaining})
+                    await _safe_send(websocket, {"type": "status", "content": "done"})
+                    continue
+
+                # Usage limit: generations per day
+                gen_allowed, gen_reason, _ = await check_limit(uid, "generate")
+                if not gen_allowed:
+                    await _safe_send(websocket, {"type": "error", "content": "Daily generation limit reached - upgrade to Pro for unlimited generations"})
+                    await _safe_send(websocket, {"type": "status", "content": "done"})
+                    continue
+
+                # Pre-increment usage before pipeline to prevent parallel abuse
+                usage_incremented = False
+                try:
+                    if batch_index == 0:
+                        await increment_usage(uid, "create_story")
+                    updated_usage = await increment_usage(uid, "generate")
+                    usage_incremented = True
+                    await _safe_send(websocket, build_usage_message(updated_usage))
+                except Exception as ue:
+                    logger.warning("Usage pre-increment failed: %s", ue)
+
+                pipeline_tasks = []
+                current_batch_scenes: list[dict[str, Any]] = []
 
                 try:
-                    await persist_story(
-                        story_id=active_story_id,
-                        uid=uid,
-                        narrator_history=_serialize_narrator_history(narrator),
-                        illustrator_state=illustrator.serialize_state(),
-                        total_scene_count=total_scene_count,
-                        art_style=art_style,
-                        scenes=current_batch_scenes,
-                        batch_index=batch_index,
-                        user_input=user_input,
-                        director_data=director_result,
-                        language=language,
-                        author_name=author_name,
-                        author_photo_url=author_photo_url,
+                    total_scene_count, pipeline_tasks, current_batch_scenes, director_result = await _run_adk_pipeline(
+                        websocket, orchestrator, shared_state,
+                        session_service, user_input, art_style,
+                        scene_count, total_scene_count, illustrator,
+                        active_story_id, language=language,
                     )
-                    # Track usage: increment generation counter (and create_story on first batch)
-                    try:
-                        if batch_index == 0:
-                            await increment_usage(uid, "create_story")
-                        updated_usage = await increment_usage(uid, "generate")
-                        await _safe_send(websocket, build_usage_message(updated_usage))
-                    except Exception as ue:
-                        logger.warning("Usage increment failed: %s", ue)
 
-                    meta_task = asyncio.create_task(
-                        _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send, language=language, character_sheet=illustrator._character_sheet)
-                    )
-                    pipeline_tasks.append(meta_task)
+                    current_batch_scenes = [s for s in current_batch_scenes if not s.get("_image_failed")]
 
-                    # Auto-generate portraits for newly introduced characters
                     try:
-                        from services.firestore_client import get_db
-                        _db = get_db()
-                        _doc = await _db.collection("stories").document(active_story_id).get()
-                        _existing_portraits = (_doc.to_dict() or {}).get("portraits", []) if _doc.exists else []
-                        _existing_names = [p["name"] for p in _existing_portraits if p.get("name")]
-                    except Exception:
-                        _existing_names = []
-                    portrait_task = asyncio.create_task(_generate_portraits(
-                        websocket, illustrator, active_story_id,
-                        safe_send=_safe_send, existing_names=_existing_names,
-                    ))
-                    pipeline_tasks.append(portrait_task)
+                        await persist_story(
+                            story_id=active_story_id,
+                            uid=uid,
+                            narrator_history=_serialize_narrator_history(narrator),
+                            illustrator_state=illustrator.serialize_state(),
+                            total_scene_count=total_scene_count,
+                            art_style=art_style,
+                            scenes=current_batch_scenes,
+                            batch_index=batch_index,
+                            user_input=user_input,
+                            director_data=director_result,
+                            director_live_notes=shared_state.director_live_notes,
+                            language=language,
+                            author_name=author_name,
+                            author_photo_url=author_photo_url,
+                        )
+
+                        meta_task = asyncio.create_task(
+                            _auto_generate_meta(active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send, language=language, character_sheet=illustrator._character_sheet)
+                        )
+                        pipeline_tasks.append(meta_task)
+
+                        # Auto-generate portraits for newly introduced characters
+                        try:
+                            from services.firestore_client import get_db
+                            _db = get_db()
+                            _doc = await _db.collection("stories").document(active_story_id).get()
+                            _existing_portraits = (_doc.to_dict() or {}).get("portraits", []) if _doc.exists else []
+                            _existing_names = [p["name"] for p in _existing_portraits if p.get("name")]
+                        except Exception:
+                            _existing_names = []
+                        portrait_task = asyncio.create_task(_generate_portraits(
+                            websocket, illustrator, active_story_id,
+                            safe_send=_safe_send, existing_names=_existing_names,
+                        ))
+                        pipeline_tasks.append(portrait_task)
+                    except Exception as e:
+                        logger.error("Firestore persist error: %s", e)
+
+                    batch_index += 1
+
+                except ContentBlockedError:
+                    logger.warning("Content blocked by safety filters for user prompt")
+                    await _safe_send(websocket, {"type": "error", "content": "Your prompt was blocked by our safety filters. Please try a different story idea."})
+                    if usage_incremented:
+                        try:
+                            await decrement_usage(uid, "generate")
+                        except Exception:
+                            pass
                 except Exception as e:
-                    logger.error("Firestore persist error: %s", e)
+                    logger.error("Pipeline error: %s", e)
+                    await _safe_send(websocket, {"type": "error", "content": "Something went wrong. Please try again."})
+                    if usage_incremented:
+                        try:
+                            await decrement_usage(uid, "generate")
+                        except Exception:
+                            pass
 
-                batch_index += 1
-
-            except ContentBlockedError:
-                logger.warning("Content blocked by safety filters for user prompt")
-                await _safe_send(websocket, {"type": "error", "content": "Your prompt was blocked by our safety filters. Please try a different story idea."})
-            except Exception as e:
-                logger.error("Pipeline error: %s", e)
-                await _safe_send(websocket, {"type": "error", "content": "Something went wrong. Please try again."})
-
-            await _safe_send(websocket, {"type": "status", "content": "done"})
+                art_style_current = art_style
+                scene_count_current = scene_count
+                language_current = language
+                await _safe_send(websocket, {"type": "status", "content": "done"})
+            finally:
+                is_generating = False
 
     except WebSocketDisconnect:
         logger.debug("Client disconnected")
     except Exception as e:
         logger.error("WebSocket handler error: %s", e)
     finally:
+        if director_chat:
+            try:
+                await director_chat.close()
+            except Exception:
+                pass
         for task in pipeline_tasks:
             if not task.done():
                 task.cancel()
-        manager.disconnect(websocket)
