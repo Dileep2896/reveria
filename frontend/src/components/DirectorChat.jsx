@@ -11,6 +11,7 @@ export default function DirectorChat({
   chatLoading,
   autoGenerate,
   onCancelAutoGenerate,
+  generating,
 }) {
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef(null);
@@ -56,13 +57,29 @@ export default function DirectorChat({
       prevSpeakingRef.current = true;
     } else if (prevSpeakingRef.current) {
       prevSpeakingRef.current = false;
+      // Don't auto-resume during generation — Director will speak proactively
+      if (generating) return;
       // Director just finished → auto-start listening after a brief pause
       const timer = setTimeout(() => {
         if (mountedRef.current) startRecording();
       }, 600);
       return () => clearTimeout(timer);
     }
-  }, [speaking, startRecording]);
+  }, [speaking, startRecording, generating]);
+
+  // Auto-resume when generation ends
+  const prevGenerating = useRef(false);
+  useEffect(() => {
+    if (prevGenerating.current && !generating && !speaking) {
+      // Generation just finished — auto-resume after brief pause
+      const timer = setTimeout(() => {
+        if (mountedRef.current && !speaking) startRecording();
+      }, 800);
+      prevGenerating.current = false;
+      return () => clearTimeout(timer);
+    }
+    prevGenerating.current = generating;
+  }, [generating, speaking, startRecording]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -82,7 +99,9 @@ export default function DirectorChat({
       ? 'speaking'
       : chatLoading
         ? 'loading'
-        : 'idle';
+        : generating
+          ? 'watching'
+          : 'idle';
 
   // Toggle: tap to start recording, tap again to send
   const handleOrbClick = () => {
@@ -100,7 +119,7 @@ export default function DirectorChat({
       <button
         className={`director-voice-orb ${orbState}`}
         onClick={handleOrbClick}
-        aria-label={recording ? 'Stop recording' : chatLoading ? 'Director is thinking' : speaking ? 'Director is speaking' : 'Start recording'}
+        aria-label={recording ? 'Stop recording' : chatLoading ? 'Director is thinking' : speaking ? 'Director is speaking' : generating ? 'Director is watching' : 'Start recording'}
         type="button"
       >
         {/* Animated rings */}
@@ -113,7 +132,15 @@ export default function DirectorChat({
 
         {/* Inner orb */}
         <div className="voice-orb-inner">
-          {orbState === 'speaking' ? (
+          {orbState === 'watching' ? (
+            <div className="voice-watching">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </div>
+          ) : orbState === 'speaking' ? (
             <div className="voice-wave">
               {[0, 1, 2, 3, 4].map((i) => (
                 <span
@@ -173,7 +200,9 @@ export default function DirectorChat({
               ? 'var(--status-error, #ef4444)'
               : orbState === 'speaking'
                 ? 'var(--accent-secondary)'
-                : 'var(--text-muted)',
+                : orbState === 'watching'
+                  ? 'var(--accent-primary)'
+                  : 'var(--text-muted)',
         }}
       >
         {orbState === 'recording'
@@ -182,7 +211,9 @@ export default function DirectorChat({
             ? 'Director speaking'
             : orbState === 'loading'
               ? 'Thinking...'
-              : 'Tap to speak'}
+              : orbState === 'watching'
+                ? 'Watching story unfold...'
+                : 'Tap to speak'}
       </span>
 
       {/* Auto-generate countdown card */}

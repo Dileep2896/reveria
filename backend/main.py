@@ -129,6 +129,7 @@ async def _run_adk_pipeline(
     shared_state.full_story = ""
     shared_state.story_id = story_id
     shared_state.language = kwargs.get("language", "English")
+    shared_state.director_chat_session = kwargs.get("director_chat")
 
     refusal_detected = False
 
@@ -339,6 +340,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             # ── Director Chat handlers ──
             if msg_type == "director_chat_start":
                 try:
+                    # Close any orphaned session before starting a new one
+                    if director_chat:
+                        try:
+                            await director_chat.close()
+                        except Exception:
+                            pass
+                        director_chat = None
+
                     story_ctx = message.get("story_context", "")
                     if not story_ctx and shared_state and shared_state.scenes:
                         story_ctx = "\n\n".join(
@@ -537,6 +546,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         session_service, user_input, art_style,
                         scene_count, total_scene_count, illustrator,
                         active_story_id, language=language,
+                        director_chat=director_chat,
                     )
 
                     current_batch_scenes = [s for s in current_batch_scenes if not s.get("_image_failed")]
@@ -582,6 +592,18 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         logger.error("Firestore persist error: %s", e)
 
                     batch_index += 1
+
+                    # Director Chat wrap-up — invite continuation
+                    if director_chat and current_batch_scenes:
+                        try:
+                            wrapup = await director_chat.generation_wrapup(len(current_batch_scenes))
+                            if wrapup.get("audio_url"):
+                                await _safe_send(websocket, {
+                                    "type": "director_chat_response",
+                                    "audio_url": wrapup["audio_url"],
+                                })
+                        except Exception:
+                            pass  # non-critical
 
                 except ContentBlockedError:
                     logger.warning("Content blocked by safety filters for user prompt")

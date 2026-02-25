@@ -144,6 +144,7 @@ When `title_generated` is true, NEVER overwrite `title` or `cover_image_url`. On
 - Sent as `director_live` WS message; frontend shows animated cards in DirectorPanel
 - Full director analysis still runs post-batch via `DirectorADKAgent`
 - **Cross-batch influence**: `suggestion` stored on `SharedPipelineState.director_suggestion`. At the start of each new batch, `NarratorADKAgent._run_async_impl` prepends `[Director's creative direction: ...]` to narrator input if set, then clears it. Director analysis of batch N shapes batch N+1.
+- **Director Chat routing**: When `director_chat_session` is active, `_director_live()` skips standalone `live_commentary()` and routes voice through `proactive_comment()` instead. Structured data (`director_live` WS message) still sent either way.
 
 ### WS Message Types (New)
 - `director_live`: per-scene director commentary during generation
@@ -159,22 +160,26 @@ When `title_generated` is true, NEVER overwrite `title` or `cover_image_url`. On
 ### Backend: `services/director_chat.py`
 - **Model**: `gemini-live-2.5-flash-native-audio` (persistent bidirectional audio session)
 - `DirectorChatSession` class manages Gemini Live session lifecycle
+- **`_session_lock`** (`asyncio.Lock`): Serializes all Live session access — prevents concurrent sends (e.g. two scenes completing close together, or rapid user messages from network jitter)
 - **Typed `LiveConnectConfig`** with native features:
   - `tools=[Tool(function_declarations=[GENERATE_STORY_TOOL])]` — model decides when to generate
   - `input_audio_transcription=AudioTranscriptionConfig()` — native user speech transcription
   - `output_audio_transcription=AudioTranscriptionConfig()` — native model speech transcription
   - `context_window_compression=ContextWindowCompressionConfig(sliding_window=SlidingWindow())` — handles long sessions
 - `start(story_context, language, voice_name)`: Opens Live session, sends greeting prompt, returns response dict
-- `send_audio(audio_bytes, mime_type)`: Sends user audio, returns `{audio_url, input_transcript, output_transcript, tool_calls}`
-- `send_text(text)`: Sends user text, returns same response dict format
-- `respond_to_tool_call(tool_call, success)`: Sends `FunctionResponse` back so model can acknowledge; returns follow-up audio
-- `request_suggestion(story_context)`: Asks the Live session directly for a story prompt (no extra API call)
+- `send_audio(audio_bytes, mime_type)`: Sends user audio (lock-wrapped), returns `{audio_url, input_transcript, output_transcript, tool_calls}`
+- `send_text(text)`: Sends user text (lock-wrapped), returns same response dict format
+- `respond_to_tool_call(tool_call, success)`: Sends `FunctionResponse` back so model can acknowledge (lock-wrapped); returns follow-up audio
+- `request_suggestion(story_context)`: Asks the Live session directly for a story prompt (lock-wrapped, no extra API call)
+- `proactive_comment(scene_text, scene_number)`: During generation, sends scene to Live session for in-conversation Director reaction. Lock-wrapped. Strips `tool_calls` from response. Returns response dict.
+- `generation_wrapup(scene_count)`: Post-generation wrap-up — Director summarizes and invites continuation. Lock-wrapped. Strips `tool_calls`.
 - `_collect_response(session, timeout)`: Collects audio chunks + native transcriptions + tool calls from receive loop
 - `_trim_log()`: Caps `conversation_log` at 20 non-system entries (prevents unbounded growth)
 - `close()`: Closes Live session via `__aexit__`
 - Audio pipeline: `_collect_audio()` (voice preview only) gathers PCM chunks → `_pcm_to_wav()` → base64 data URL
 - Language-adaptive: Director matches user's spoken language naturally
 - Voice configurable: `voice_name` param passed to `prebuilt_voice_config` in Live session config
+- **Session lifecycle**: `main.py` closes any existing session before creating a new one on `director_chat_start` (prevents orphaned Gemini API connections)
 
 ### GENERATE_STORY_TOOL (Function Declaration)
 - Declared at module level, included in Live session config
@@ -202,6 +207,41 @@ When `title_generated` is true, NEVER overwrite `title` or `cover_image_url`. On
 - `director_chat_cancel_generate`: Logs cancellation (no flag to reset)
 - `director_chat_end`: Closes session
 - Auto-generate flow: Model calls `generate_story` tool → handler sends `FunctionResponse` → model says "Generating!" → `director_chat_generate` sent to frontend with prompt/art_style/scene_count/language
+
+### Seamless Director Chat During Generation
+
+When Director Chat is active and the user triggers generation (via `generate_story` tool call), the Director stays engaged throughout:
+
+#### Flow
+```
+Director Chat active → generate_story tool fires → generation starts
+  ├── Frontend orb → "watching" state (eye icon + accent-primary pulse)
+  ├── Scene N text completes:
+  │   ├── analyze_scene() runs (structured data: mood, tension, emoji, suggestion)
+  │   ├── SKIP standalone live_commentary()
+  │   └── proactive_comment(scene_text) → same Live session reacts
+  │       └── Audio sent as director_chat_response (plays in chat thread)
+  ├── Pipeline done → generation_wrapup(scene_count)
+  │   └── Director summarizes + asks "what next?" → audio in chat
+  └── Frontend orb auto-resumes recording after 800ms
+```
+
+#### Backend Changes
+- `SharedPipelineState.director_chat_session`: Set by `main.py` before pipeline run
+- `_director_live()` in orchestrator: checks `s.director_chat_session`; if active, routes voice through `proactive_comment()` instead of `live_commentary()`. Falls back to standalone on failure.
+- `main.py`: passes `director_chat=director_chat` kwarg to `_run_adk_pipeline()`; calls `generation_wrapup()` after persist + batch_index increment
+
+#### Frontend Changes
+- `DirectorChat.jsx`: new `generating` prop → `watching` orbState; auto-resume suppressed during generation; auto-resumes 800ms after generation ends via `prevGenerating` ref
+- `DirectorPanel.jsx`: forwards `generating` to DirectorChat; live note auto-play suppressed when `chatActive` (audio comes through chat thread instead)
+- `director-panel.css`: `.watching` orb styles — accent-primary rings, spinning animation, pulsing glow, eye icon animation
+
+#### Edge Cases
+- Director Chat NOT active: zero changes — existing `analyze_scene()` + `live_commentary()` flow unchanged
+- `proactive_comment()` failure: falls back to standalone `live_commentary()` for that scene
+- Accidental tool calls during proactive comment: stripped from result (`result["tool_calls"] = []`)
+- Session lock contention: scenes queue up rather than racing
+- Wrap-up only fires when `current_batch_scenes` is non-empty
 
 ### Frontend: VAD (Voice Activity Detection)
 - `useVoiceCapture.js`: Web Audio API `AnalyserNode` + `getFloatTimeDomainData()` for RMS computation

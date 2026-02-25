@@ -33,7 +33,7 @@ from google.genai import types
 from agents.narrator import Narrator
 from agents.illustrator import Illustrator
 from agents.director import Director
-from services.gemini_tts import synthesize_speech
+from services.multi_voice_tts import synthesize_multi_voice
 from services.storage_client import upload_media
 
 logger = logging.getLogger("storyforge.orchestrator")
@@ -59,6 +59,7 @@ class SharedPipelineState:
         self.steering_queue: list[str] = []
         self.director_suggestion: str = ""
         self.director_live_notes: list[dict[str, Any]] = []
+        self.director_chat_session = None  # DirectorChatSession | None
 
 
 class NarratorADKAgent(BaseAgent):
@@ -257,7 +258,11 @@ class NarratorADKAgent(BaseAgent):
         s = self.shared
         scene_num = scene["scene_number"]
         try:
-            audio_data, word_timestamps = await synthesize_speech(scene["text"], language=s.language)
+            audio_data, word_timestamps = await synthesize_multi_voice(
+                scene["text"],
+                character_sheet=self.illustrator._character_sheet,
+                language=s.language,
+            )
             if audio_data and s.ws_callback:
                 msg: dict[str, Any] = {"type": "audio", "scene_number": scene_num}
                 if word_timestamps:
@@ -298,14 +303,36 @@ class NarratorADKAgent(BaseAgent):
                 if suggestion:
                     s.director_suggestion = suggestion
 
-                # Generate Director's voice via Gemini Live API (native audio)
-                audio_url = await self.director.live_commentary(
-                    scene_text=scene["text"],
-                    scene_number=scene["scene_number"],
-                    context=context,
-                )
-                if audio_url:
-                    note["audio_url"] = audio_url
+                # Route voice through Director Chat if active
+                if s.director_chat_session:
+                    try:
+                        chat_result = await s.director_chat_session.proactive_comment(
+                            scene["text"], scene["scene_number"]
+                        )
+                        if chat_result.get("audio_url") and s.ws_callback:
+                            await s.ws_callback({
+                                "type": "director_chat_response",
+                                "audio_url": chat_result["audio_url"],
+                            })
+                    except Exception as e:
+                        logger.warning("Director Chat proactive failed, falling back: %s", e)
+                        # Fallback to standalone voice
+                        audio_url = await self.director.live_commentary(
+                            scene_text=scene["text"],
+                            scene_number=scene["scene_number"],
+                            context=context,
+                        )
+                        if audio_url:
+                            note["audio_url"] = audio_url
+                else:
+                    # No active chat — use standalone voice generation
+                    audio_url = await self.director.live_commentary(
+                        scene_text=scene["text"],
+                        scene_number=scene["scene_number"],
+                        context=context,
+                    )
+                    if audio_url:
+                        note["audio_url"] = audio_url
 
                 if s.ws_callback:
                     await s.ws_callback({

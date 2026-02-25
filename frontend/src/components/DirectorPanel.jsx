@@ -8,6 +8,7 @@ import DirectorCardList from './director/DirectorCardList';
 import DirectorChat from './DirectorChat';
 
 export default function DirectorPanel({
+  singlePage = false,
   data, generating, sceneNumbers, sceneTitles, imageTiers,
   portraits = [], portraitsLoading = false, language, liveNotes = [],
   chatActive, chatMessages = [], chatLoading, chatPrompt,
@@ -59,12 +60,13 @@ export default function DirectorPanel({
     setPlayingNoteIdx(noteIdx);
   }, [playingNoteIdx]);
 
-  // Auto-play new notes
+  // Auto-play new notes (skip when Director Chat handles audio)
   useEffect(() => {
     if (!liveNotes.length) {
       playedRef.current = new Set();
       return;
     }
+    if (chatActive) return;
     const latestIdx = liveNotes.length - 1;
     const latest = liveNotes[latestIdx];
     const key = `${latest.scene_number}`;
@@ -72,11 +74,11 @@ export default function DirectorPanel({
       playedRef.current.add(key);
       playAudio(latest.audio_url, latestIdx);
     }
-  }, [liveNotes, playAudio]);
+  }, [liveNotes, playAudio, chatActive]);
 
   return (
     <div
-      className="director-panel flex-shrink-0"
+      className={`director-panel flex-shrink-0${singlePage ? ' director-panel--wide' : ''}`}
       style={{
         background: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)',
         backdropFilter: 'var(--glass-blur-strong)',
@@ -230,6 +232,7 @@ export default function DirectorPanel({
           chatLoading={chatLoading}
           autoGenerate={autoGenerate}
           onCancelAutoGenerate={onCancelAutoGenerate}
+          generating={generating}
         />
       )}
 

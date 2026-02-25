@@ -432,6 +432,39 @@
   box-shadow: 0 0 20px color-mix(in srgb, var(--accent-secondary) 12%, transparent);
 }
 
+/* ── Watching state (during generation) ── */
+.director-voice-orb.watching .voice-orb-inner {
+  color: var(--accent-primary);
+}
+.director-voice-orb.watching .voice-ring-1 {
+  opacity: 0.3;
+  border-color: var(--accent-primary);
+  animation: voiceRingSpin 4s linear infinite;
+}
+.director-voice-orb.watching .voice-ring-2 {
+  opacity: 0.15;
+  border-color: var(--accent-primary);
+  animation: voiceRingSpin 6s linear infinite reverse;
+}
+.director-voice-orb.watching .voice-glow {
+  box-shadow: 0 0 24px color-mix(in srgb, var(--accent-primary) 18%, transparent);
+  animation: voiceWatchPulse 2s ease-in-out infinite;
+}
+.voice-watching {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: voiceWatchEye 2.5s ease-in-out infinite;
+}
+@keyframes voiceWatchPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+@keyframes voiceWatchEye {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
 /* ── Waveform bars ── */
 .voice-wave {
   display: flex;
