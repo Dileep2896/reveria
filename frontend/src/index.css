@@ -161,6 +161,9 @@ body {
 .director-panel {
   width: clamp(260px, 24vw, 380px);
 }
+.director-panel.director-panel--wide {
+  width: clamp(300px, 28vw, 440px);
+}
 
 .director-panel .sticky {
   padding: clamp(0.6rem, 1.5vw, 1rem) clamp(0.75rem, 2vw, 1.25rem);
@@ -365,11 +368,11 @@ body {
 .control-input {
   font-size: clamp(11px, 1.2vw, 14px);
   min-height: clamp(20px, 2.5vw, 30px);
-  max-height: 80px;
-  line-height: clamp(20px, 2.5vw, 30px);
+  max-height: 120px;
+  line-height: 1.4;
   overflow-y: auto;
   font-family: 'Inter', sans-serif;
-  padding: 0;
+  padding: 2px 0;
 }
 
 .control-icon {

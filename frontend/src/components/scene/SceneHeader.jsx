@@ -13,24 +13,14 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
       <div className="flex items-center gap-2">
         <span
           style={{
-            fontSize: `${10 * scale}px`,
-            fontStyle: 'italic',
-            color: 'var(--text-muted)',
-            opacity: 0.5,
-            fontVariantNumeric: 'tabular-nums',
-            minWidth: `${12 * scale}px`,
-          }}
-        >
-          {displayIndex ?? scene.scene_number}
-        </span>
-        <span
-          className="font-bold uppercase tracking-widest rounded-full"
-          style={{
-            fontSize: `${9 * scale}px`,
-            padding: `${3 * scale}px ${8 * scale}px`,
-            background: 'var(--accent-primary-soft)',
+            fontFamily: "'Playfair Display', serif",
+            fontSize: `${8.5 * scale}px`,
+            fontWeight: 600,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
             color: 'var(--accent-primary)',
-            border: '1px solid var(--glass-border-accent)',
+            opacity: 0.85,
+            fontVariantNumeric: 'tabular-nums',
           }}
         >
           Scene {displayIndex ?? scene.scene_number}

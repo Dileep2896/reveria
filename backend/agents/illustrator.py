@@ -1,70 +1,17 @@
 import logging
+import re
 from services.gemini_client import get_client, get_model
 from services.imagen_client import generate_image
 from google.genai import types
 
+from agents.illustrator_prompts import (
+    SCENE_COMPOSER_INSTRUCTION,
+    SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION,
+    CHARACTER_IDENTIFIER_INSTRUCTION,
+    ART_STYLES,
+)
+
 logger = logging.getLogger("storyforge.illustrator")
-
-SCENE_COMPOSER_INSTRUCTION = """You are an image prompt engineer for a storytelling app.
-Write a scene composition for an illustration. Character descriptions and art style
-are handled separately - do NOT describe any characters' appearance and do NOT
-include any art style or rendering instructions.
-
-RULES:
-- Output ONLY the scene composition, nothing else
-- Keep it under 100 words
-- Describe: setting, environment, action/pose, lighting, mood, weather, camera angle
-- Reference characters by name only (e.g., "Alice stands near the window")
-- Do NOT describe character appearance (hair, clothes, age, skin, build, etc.)
-- Do NOT include text, labels, words, or watermarks
-- Do NOT describe dialogue or thoughts
-- Do NOT include art style, rendering style, or medium descriptions
-- Describe ONLY what a camera would capture in a single frame
-
-CONSISTENCY ANCHORS (important for visual continuity):
-- Mention distinguishing accessories, props, or signature items by name (e.g., "Luna's red scarf", "Kai's wooden staff")
-- Reference the same location names across scenes (e.g., "the old oak tree", "the crystal cave")
-- Use consistent time-of-day and weather cues
-"""
-
-CHARACTER_IDENTIFIER_INSTRUCTION = """Given a scene and a list of character names,
-output ONLY the names of characters who physically appear in or are visually
-present in this scene, one per line. If no characters appear, output NONE.
-Do NOT add explanations or extra text."""
-
-
-ART_STYLES = {
-    "cinematic": (
-        "cinematic digital painting, highly detailed, dramatic volumetric lighting, "
-        "depth of field, rich color grading, photorealistic textures, "
-        "8k render quality, concept art style, atmospheric perspective"
-    ),
-    "watercolor": (
-        "traditional watercolor illustration, soft translucent washes, visible paper texture, "
-        "delicate wet-on-wet brushstrokes, gentle color bleeding at edges, "
-        "hand-painted look, luminous highlights, muted pastel palette"
-    ),
-    "comic": (
-        "comic book panel art, bold clean ink outlines, vibrant flat colors with cel shading, "
-        "dynamic composition, halftone dot texture, strong shadows, "
-        "graphic novel style, pop art color palette, action lines"
-    ),
-    "anime": (
-        "anime illustration in Studio Ghibli style, detailed lush backgrounds, "
-        "soft cel shading, expressive large eyes, warm natural lighting, "
-        "hand-drawn line quality, painterly background layers, nostalgic color palette"
-    ),
-    "oil": (
-        "oil painting on textured canvas, rich impasto brushstrokes, classical composition, "
-        "warm golden-hour chiaroscuro lighting, visible palette knife texture, "
-        "old master color harmony, deep shadows, luminous glazing technique"
-    ),
-    "pencil": (
-        "detailed graphite pencil sketch on cream paper, fine cross-hatching for shading, "
-        "precise line weight variation, realistic proportions, "
-        "high contrast black and white, subtle smudge shading, technical illustration quality"
-    ),
-}
 
 
 class Illustrator:
@@ -72,20 +19,30 @@ class Illustrator:
         self._character_sheet: str = ""
         self._art_style: str = "cinematic"
         self._accumulated_story: str = ""
+        self._last_scene_composition: str | None = None
+        self.hero_description: str = ""
+        self.hero_name: str = ""
+        self.trend_style: str | None = None
 
-    def serialize_state(self) -> dict[str, str]:
+    def serialize_state(self) -> dict:
         """Return illustrator state as a plain dict for persistence."""
         return {
             "character_sheet": self._character_sheet,
             "accumulated_story": self._accumulated_story,
             "art_style": self._art_style,
+            "hero_description": self.hero_description,
+            "hero_name": self.hero_name,
+            "trend_style": self.trend_style,
         }
 
-    def restore_state(self, state: dict[str, str]) -> None:
+    def restore_state(self, state: dict) -> None:
         """Restore illustrator state from a persisted dict."""
         self._character_sheet = state.get("character_sheet", "")
         self._accumulated_story = state.get("accumulated_story", "")
         self.art_style = state.get("art_style", "cinematic")
+        self.hero_description = state.get("hero_description", "")
+        self.hero_name = state.get("hero_name", "")
+        self.trend_style = state.get("trend_style")
 
     def accumulate_story(self, batch_text: str) -> None:
         """Append a new batch of story text to the accumulated cross-batch story."""
@@ -104,6 +61,8 @@ class Illustrator:
 
     @property
     def art_style_suffix(self) -> str:
+        if self.trend_style:
+            return ART_STYLES.get(self.trend_style, self.trend_style)
         return ART_STYLES.get(self._art_style, ART_STYLES["cinematic"])
 
     async def extract_characters(self, full_story_text: str) -> None:
@@ -147,6 +106,20 @@ class Illustrator:
             "- If the story implies details, fill them in consistently and inventively\n"
             "- Use concrete visual descriptors, not abstract ones (e.g. 'freckled cheeks' not 'friendly face')\n"
         )
+
+        # Inject Hero description if it exists
+        hero_desc = self.hero_description
+        hero_name = self.hero_name
+        if hero_desc:
+            name_clause = f" The protagonist's name is '{hero_name}'." if hero_name else ""
+            system_instruction += (
+                f"\nIMPORTANT: The protagonist of this story is based on the user's photo.{name_clause} "
+                f"Their FACE and BODY must always match these physical traits: {hero_desc}. "
+                f"Copy these facial/physical features exactly into the protagonist's description. "
+                f"However, their CLOTHING and ACCESSORIES should come from the story context, "
+                f"NOT from the photo description above — invent an outfit that fits the story's setting and tone."
+            )
+
         if self._character_sheet:
             system_instruction += (
                 "\nIMPORTANT: An existing character reference sheet is provided. "
@@ -177,39 +150,41 @@ class Illustrator:
             logger.error("Character extraction failed: %s", e)
             # Keep existing sheet on error rather than clearing it
 
-    async def generate_for_scene(self, scene_text: str) -> tuple[str | None, str | None, int]:
+
+    async def generate_for_scene(self, scene_text: str, uid: str = "__global__") -> tuple[str | None, str | None, int, str | None]:
         """Generate an illustration for a scene.
 
         Uses Gemini to craft an optimal image prompt, then calls Imagen 3.
         Falls back to progressively simpler prompts if safety filter blocks.
-        Returns (data_url, error_reason, tier).
+        Returns (data_url, error_reason, tier, scene_composition).
         Tier 1 = full prompt with characters, 2 = scene-only, 3 = generic atmospheric.
+        scene_composition is the creative brief text (tier 1 only).
         """
         # Attempt 1: full detailed prompt with character sheet
         image_prompt = await self._create_image_prompt(scene_text)
         if image_prompt:
-            logger.info("Image prompt: %s...", image_prompt[:150])
-            data, err = await generate_image(image_prompt)
+            logger.info("Image prompt (full): %s", image_prompt)
+            data, err = await generate_image(image_prompt, uid=uid)
             if data:
-                return data, None, 1
+                return data, None, 1, self._last_scene_composition
             if err and err != "safety_filter":
-                return None, err, 1  # quota/timeout - retrying won't help
+                return None, err, 1, self._last_scene_composition
 
         # Attempt 2: simplified scene-only prompt (no characters, just setting + mood)
         safe_prompt = await self._create_safe_prompt(scene_text)
         if safe_prompt:
             logger.info("Fallback safe prompt: %s...", safe_prompt[:150])
-            data, err = await generate_image(safe_prompt)
+            data, err = await generate_image(safe_prompt, uid=uid)
             if data:
-                return data, None, 2
+                return data, None, 2, None
             if err and err != "safety_filter":
-                return None, err, 2
+                return None, err, 2, None
 
         # Attempt 3: ultra-generic atmospheric prompt (almost never blocked)
         generic = f"A beautiful atmospheric {self.art_style_suffix} landscape illustration, soft lighting, no text, no people"
         logger.info("Fallback generic prompt: %s", generic)
-        data, err = await generate_image(generic)
-        return data, err, 3
+        data, err = await generate_image(generic, uid=uid)
+        return data, err, 3, None
 
     async def _create_safe_prompt(self, scene_text: str) -> str | None:
         """Generate a simplified image prompt focused on setting/mood only (no characters)."""
@@ -304,8 +279,13 @@ class Illustrator:
 
         return "\n".join(descriptions)
 
+    @staticmethod
+    def _strip_hex_codes(text: str) -> str:
+        """Remove hex color codes (e.g. #8B4513) from text — Imagen can't interpret them."""
+        return re.sub(r'\s*#[0-9A-Fa-f]{6}\b', '', text)
+
     async def _create_image_prompt(self, scene_text: str) -> str | None:
-        """Build a hybrid image prompt: verbatim character descriptions + Gemini scene composition + art style suffix."""
+        """Build an image prompt with character appearances woven into the scene composition."""
         client = get_client()
         model = get_model()
 
@@ -313,18 +293,30 @@ class Illustrator:
         scene_characters = await self._identify_scene_characters(scene_text)
         char_block = self._filter_character_descriptions(scene_characters)
 
-        # Step 2: Ask Gemini for scene composition only (no character descriptions, no style)
+        # Step 2: Generate scene composition
+        if char_block:
+            # Strip hex codes — Imagen uses natural language colors, not hex
+            clean_chars = self._strip_hex_codes(char_block)
+            user_input = (
+                f"CHARACTER DESCRIPTIONS:\n{clean_chars}\n\n"
+                f"SCENE TO ILLUSTRATE:\n{scene_text}"
+            )
+            instruction = SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION
+        else:
+            user_input = f"SCENE TO ILLUSTRATE:\n{scene_text}"
+            instruction = SCENE_COMPOSER_INSTRUCTION
+
         try:
             response = await client.aio.models.generate_content(
                 model=model,
                 contents=types.Content(
                     role="user",
-                    parts=[types.Part(text=f"SCENE TO ILLUSTRATE:\n{scene_text}")],
+                    parts=[types.Part(text=user_input)],
                 ),
                 config=types.GenerateContentConfig(
-                    system_instruction=SCENE_COMPOSER_INSTRUCTION,
+                    system_instruction=instruction,
                     temperature=0.3,
-                    max_output_tokens=250,
+                    max_output_tokens=200,
                 ),
             )
             scene_composition = response.text.strip() if response.text else None
@@ -332,20 +324,13 @@ class Illustrator:
             logger.error("Scene composition generation failed: %s", e)
             scene_composition = None
 
+        self._last_scene_composition = scene_composition
+
         if not scene_composition:
             return None
 
-        # Step 3: Concatenate character descriptions + scene composition + art style
-        # Art style suffix is ALWAYS appended programmatically (never rely on Gemini to include it)
-        parts: list[str] = []
-        if char_block:
-            parts.append(char_block)
-            parts.append(
-                "IMPORTANT: Render each character EXACTLY as described above - "
-                "same colors, same outfit, same signature items. "
-                "Do not alter, omit, or reinterpret any character detail."
-            )
-        parts.append(scene_composition)
-        parts.append(self.art_style_suffix)
+        # Strip any hex codes that Gemini may have included in the output
+        scene_composition = self._strip_hex_codes(scene_composition)
 
-        return "\n\n".join(parts)
+        # Step 3: Append art style (always programmatic)
+        return f"{scene_composition}\n\n{self.art_style_suffix}"

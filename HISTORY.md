@@ -736,6 +736,28 @@
   - Added `directorData` hydration loop in both `load()` and initial hydration effect in `useWebSocket.js`
 - Files modified: `frontend/src/components/LibraryPage.jsx`, `frontend/src/hooks/useWebSocket.js`
 
+**Session 58: Director Chat Rewrite — Native Gemini Live API Features**
+
+- **Eliminated 3-5 extra API calls per interaction** by leveraging native Gemini Live API features:
+  - **Native function calling**: Declared `GENERATE_STORY_TOOL` (`types.FunctionDeclaration`) — model decides when brainstorming is done and calls the tool with a story prompt. Replaces `detect_intent()` (separate Gemini Flash call per interaction).
+  - **Native audio transcription**: Enabled `input_audio_transcription` and `output_audio_transcription` in `LiveConnectConfig`. User and Director speech transcriptions arrive in the receive stream alongside audio chunks. Replaces two separate `transcribe_audio()` calls per interaction.
+  - **Context window compression**: Added `ContextWindowCompressionConfig(sliding_window=SlidingWindow())` to handle long brainstorming sessions at the API level. Combined with local `_trim_log()` capping `conversation_log` at 20 non-system entries.
+- **New `_collect_response()` method**: Replaces `_collect_audio()` for Director Chat — collects audio chunks, native input/output transcriptions, AND tool calls from the receive loop. Returns structured dict `{audio_url, input_transcript, output_transcript, tool_calls}`.
+- **New `respond_to_tool_call()` method**: Sends `FunctionResponse` back to the Live session so the model can acknowledge the generation ("Generating your story now!"). Returns follow-up audio response.
+- **New `request_suggestion()` method**: Asks the existing Live session directly for a story prompt — replaces `suggest_prompt()` which made a separate Gemini Flash API call. Used by the manual "Suggest" button fallback.
+- **Updated `start()`**: Uses typed `LiveConnectConfig` (not raw dict) with `tools`, `input_audio_transcription`, `output_audio_transcription`, `context_window_compression`. Returns response dict instead of `str | None`.
+- **Updated `send_audio()` / `send_text()`**: Return full `_collect_response()` dict instead of `str | None`. Self-manage conversation logging from native transcriptions.
+- **Simplified `main.py` WS handlers**:
+  - `director_chat_audio`: Single `send_audio()` call → check `result["tool_calls"]`. No parallel transcription tasks, no intent detection.
+  - `director_chat_text`: Single `send_text()` call → check `result["tool_calls"]`. Same simplification.
+  - `director_chat_cancel_generate`: Just a log message (no flag to reset).
+  - `director_chat_suggest`: Uses `request_suggestion()` via Live session (no separate API call).
+- **Removed dead code**: `detect_intent()`, `suggest_prompt()`, `_build_suggest_prompt_system()`, `SUGGEST_PROMPT_SYSTEM` constant, `generation_triggered` flag.
+- **Edge case mitigation**: Tool calling reliability ~60-70% in audio mode — strong system prompt conditioning + manual "Suggest" button as always-available fallback.
+- **Updated documentation**: ARCHITECTURE.md Director Chat section rewritten, BLOG.md updated with Architecture Evolution section and refactor narrative, MEMORY.md updated.
+- Net code change: main.py handlers shrunk from ~155 to ~95 lines; director_chat.py gained structure but removed more dead code than added.
+- Files modified: `backend/services/director_chat.py`, `backend/main.py`, `ARCHITECTURE.md`, `BLOG.md`
+
 ---
 
 ## Current State (Feb 24, 2026)
@@ -826,16 +848,35 @@
 - **Playful safety redirect** — narrator redirects inappropriate requests in-character instead of hard error toast
 - **Director-as-driver** — Director's per-scene `analyze_scene()` returns a `suggestion` field injected into next batch's Narrator input (proactive creative collaborator)
 - **Delete endpoint resilience** — `decrement_usage` wrapped in try/except to survive transient Firestore gRPC errors
-- **Director Chat** — Real-time voice brainstorming with the Director via Gemini Live API (`gemini-live-2.5-flash-native-audio`), with persistent sessions, intent detection, and prompt suggestion
+- **Director Chat** — Real-time voice brainstorming with the Director via Gemini Live API (`gemini-live-2.5-flash-native-audio`), with native function calling (`generate_story` tool), native audio transcription, context window compression, and zero extra API calls per interaction
 - **VAD auto-send** — Web Audio API `AnalyserNode` detects 1.2s of silence after speech, auto-stops recording for natural conversation flow
 - **Settings Dialog** — Centralized theme + Director voice settings (8 voices: Charon, Kore, Fenrir, Aoede, Puck, Orus, Leda, Zephyr), replaces standalone theme toggle
 - **Language-aware Director Chat** — Director speaks in the story's language; voice selection persisted to localStorage
 - **Powered by Gemini** — Subtle branding badge in Director Chat panel
 - **Voice preview in Settings** — click a Director voice chip to hear a sample
-- **Director-driven intent detection** — Director controls when to trigger generation (explores idea fully before suggesting)
+- **Native tool-driven generation** — Model calls `generate_story` tool when brainstorming is done (replaces external intent detection); manual "Suggest" button as fallback
 - **Token expiry handling** — WS auth failure recovery + REST getValidToken()
 - **404 page** with themed StoryForge design
 - **Error boundary** styled to match app theme
+
+- **Subject Reference Likeness** — Imagen 3 `edit_image` API now uses `[1]` bracket notation in scene composition to bind text to reference photo. `subject_description` extracted from `[USER-CAST]` character sheet lines (~100 chars). `negative_prompt` on `EditImageConfig` discourages likeness drift. `_find_scene_subject_photo()` returns `(photo_b64, char_name, subject_desc)` tuple. `_inject_subject_notation()` inserts `[1]` after character name (case-insensitive regex, prepend fallback for pronouns). `_get_subject_description()` truncates at comma boundary for concise identity anchor.
+- **Separated ControlBar vs Director generation** — `from_director` flag on WS generate message. `SharedPipelineState.director_enabled` gates all Director work: per-scene `_director_live()`, suggestion injection, post-batch `DirectorADKAgent.analyze()`, `generation_wrapup()`. ControlBar generates = narrator + images + audio only (no Director overhead). Director Chat generates = full pipeline with live commentary + proactive comments + wrap-up.
+
+**Session 57: Production Routing & Avatar System**
+
+- **Centralized route constants** — Created `src/routes.js` with `ROUTES` object as single source of truth for all route paths, parameterized path functions (`STORY(id)`, `BOOK(id)`), and prefix constants (`STORY_PREFIX`, `BOOK_PREFIX`)
+- **Full ROUTES migration** — Replaced all hardcoded navigate paths, `<Route path>` definitions, `<Link to>` targets, and `pathname.startsWith()` checks across 10 files (App.jsx, useAppEffects.js, useBookManager.js, AppHeader.jsx, BookDetailsPage.jsx, NotFoundPage.jsx, LibraryPage.jsx, ExplorePage.jsx, AuthScreen.jsx, ProfileMenu.jsx)
+- **SPA navigation fix** — Replaced `<a href="/terms">` with `<Link to={ROUTES.TERMS}>` in AuthScreen to prevent full page reloads
+- **Trailing slash normalization** — `pathname.replace(/\/+$/, '') || '/'` in App.jsx and useAppEffects.js prevents subtle pathname comparison bugs
+- **Marble avatar system** — Created `UserAvatar.jsx` using `boring-avatars` marble variant for deterministic gradient avatars; palette matches app accent theme (`#f59e0b`, `#a78bfa`, `#6366f1`, `#ec4899`, `#14b8a6`); zero network requests (client-side SVG)
+- **Avatar integration** — Replaced plain-initials fallbacks in ProfileMenu (header + dropdown), ExplorePage, BookDetailsPage, BookCommentSection, AdminUserTable, and UserDetailModal with `UserAvatar` component
+- **Removed unused code** — Cleaned up `getInitials` imports from admin components, removed initials computation from ProfileMenu
+
+**Session 56: Full Codebase Audit (29 fixes)**
+
+- **Backend fixes**: Director chat session cleanup on reset, handle_delete_scene -1 sentinel, MIME whitelist + size guard on GCS uploads, comments endpoint is_public check, async handle_reset with director_chat closure
+- **Frontend fixes**: Audio element lifecycle cleanup (DirectorChat, useCompactAudio), director_chat_ended loading reset, null audioUrl guard, dynamic PAGE_SLOTS, pageFlip null guard, stale eslint-disable removal
+- **Testing**: Updated test expectations for new 404 behavior on comments endpoint
 
 ### What Needs to Be Built
 
@@ -847,4 +888,3 @@
 
 - **Book Layout Preference**: Single-page / two-page spread toggle — let users choose their preferred reading layout. With single-page mode, the Director Panel can be wider for better analysis display.
 - **Multi-Voice Narration**: Different voices for narrator vs dialogue characters based on gender and age. Instead of one narrator voice, dialogues get character-appropriate voices for immersive audiobook experience.
-- **Custom Character Portraits from Photos**: Users can upload their own photos to create personalized characters in the story — enabling auto-biographies and self-insert stories with AI-generated illustrations based on real faces. we will also add privacy policy for fair use of personal photo below the image attached section

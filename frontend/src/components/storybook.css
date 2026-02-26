@@ -10,6 +10,7 @@
   align-items: center;
   justify-content: center;
   flex: 1;
+  min-width: 0;
   padding: clamp(0.25rem, 0.5vw, 0.5rem) clamp(0.5rem, 1vw, 1rem) clamp(0.25rem, 0.5vw, 0.5rem);
   overflow: hidden;
 }
@@ -141,7 +142,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  max-width: 520px;
+  max-width: min(520px, calc(100% - 32px));
   margin: 0 auto 8px;
   padding: 6px 18px;
   border-radius: 999px;
@@ -150,6 +151,7 @@
   backdrop-filter: var(--glass-blur);
   color: var(--text-secondary);
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .book-prompt-pill p {
@@ -188,23 +190,28 @@
   z-index: 1;
 }
 
-/* Page inner border */
+/* Page inner border — subtle edge highlight mimics light on paper */
 .book-page::after {
   content: '';
   position: absolute;
   inset: 0;
   border: 1px solid var(--book-page-border);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.04), inset -1px -1px 0 rgba(0,0,0,0.1);
   pointer-events: none;
   z-index: 2;
 }
 
 /* ---- Page gutter shadows (darken toward spine) ---- */
 .book-page-left {
-  box-shadow: inset -40px 0 40px -25px var(--book-edge-shadow);
+  box-shadow:
+    inset -40px 0 40px -25px var(--book-edge-shadow),
+    inset 1px 0 0 rgba(255,255,255,0.03);
 }
 
 .book-page-right {
-  box-shadow: inset 40px 0 40px -25px var(--book-edge-shadow);
+  box-shadow:
+    inset 40px 0 40px -25px var(--book-edge-shadow),
+    inset -1px 0 0 rgba(255,255,255,0.03);
 }
 
 /* ---- Scene Page Content ---- */
@@ -719,15 +726,15 @@
    ============================================ */
 .storybook-entering {
   opacity: 0;
-  transform: translateY(30px) scale(0.95);
+  transform: translateY(16px) scale(0.98);
 }
 
 .storybook-entrance {
-  animation: bookEntrance 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bookEntrance 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes bookEntrance {
-  from { opacity: 0; transform: translateY(30px) scale(0.95); }
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 

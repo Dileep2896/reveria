@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { ROUTES } from '../routes';
 import { db, getDoc, doc, updateDoc } from '../firebase';
 import { API_URL, findFallbackCover } from '../utils/storyHelpers';
 
@@ -15,14 +16,15 @@ export default function useAppEffects({
   scenesRef.current = scenes;
 
   // Sync storyId → URL (skip for /book/ pages, library, explore, subscription, admin)
-  const isBookPage = location.pathname.startsWith('/book/');
-  const isSubscription = location.pathname === '/subscription';
-  const isAdminPage = location.pathname === '/admin';
-  const isTermsPage = location.pathname === '/terms';
+  const pathname = location.pathname.replace(/\/+$/, '') || '/';
+  const isBookPage = pathname.startsWith(ROUTES.BOOK_PREFIX);
+  const isSubscription = pathname === ROUTES.SUBSCRIPTION;
+  const isAdminPage = pathname === ROUTES.ADMIN;
+  const isTermsPage = pathname === ROUTES.TERMS;
   useEffect(() => {
     if (!storyId || isLibrary || isExplore || isBookPage || isSubscription || isAdminPage || isTermsPage) return;
     if (urlStoryId === storyId) return;
-    navigate(`/story/${storyId}`, { replace: true });
+    navigate(ROUTES.STORY(storyId), { replace: true });
   }, [storyId, urlStoryId, isLibrary, isExplore, isBookPage, isSubscription, isAdminPage, isTermsPage, navigate]);
 
   // Reset "Saved!" when new generation starts
@@ -43,7 +45,6 @@ export default function useAppEffects({
         updated_at: new Date(),
       }).catch((err) => console.error('Failed to persist bookMeta:', err));
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookMeta, storyId]);
 
   // Fetch bookmark for current story
@@ -68,8 +69,8 @@ export default function useAppEffects({
 
   // Clear read-only mode when navigating away from story view
   useEffect(() => {
-    if (location.pathname !== '/' && !location.pathname.startsWith('/story/')) setViewingReadOnly(false);
-  }, [location.pathname, setViewingReadOnly]);
+    if (pathname !== ROUTES.HOME && !pathname.startsWith(ROUTES.STORY_PREFIX)) setViewingReadOnly(false);
+  }, [pathname, setViewingReadOnly]);
 
   // Sync storyStatus + artStyle from loaded initial state
   useEffect(() => {
@@ -93,7 +94,7 @@ export default function useAppEffects({
       setArtStyle('cinematic');
       setLanguage('English');
       setBookmarkedSceneIndex(null);
-      navigate('/');
+      navigate(ROUTES.HOME);
       addToast('Story deleted - all scenes were removed', 'info');
     });
   }, [setStoryDeletedHandler, clearState, navigate, addToast, setStoryStatus, setIsPublished, setLanguage, setArtStyle, setBookmarkedSceneIndex]);

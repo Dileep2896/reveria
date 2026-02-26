@@ -52,8 +52,7 @@ export default function EmotionalArcVisual({ values, dominant_emotion, arc_shape
       <svg
         viewBox={`0 0 ${w} ${h}`}
         width="100%"
-        height="auto"
-        style={{ maxHeight: '48px', borderRadius: '6px', overflow: 'visible' }}
+        style={{ height: 'auto', maxHeight: '48px', borderRadius: '6px', overflow: 'visible' }}
       >
         {/* Dashed zero-line */}
         <line

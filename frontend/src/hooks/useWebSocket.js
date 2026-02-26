@@ -13,7 +13,13 @@ export default function useWebSocket(idToken, initialState, addToast) {
 
   const [connected, setConnected] = useState(false);
   const [scenes, setScenes] = useState([]);
-  const [generating, setGenerating] = useState(false);
+  const [generating, _setGenerating] = useState(false);
+  const generatingRef = useRef(false);
+  const setGenerating = useCallback((v) => {
+    const val = typeof v === 'function' ? v(generatingRef.current) : v;
+    generatingRef.current = val;
+    _setGenerating(val);
+  }, []);
   const [userPrompt, setUserPrompt] = useState(null);
   const [error, setError] = useState(null);
   const [directorData, setDirectorData] = useState(null);
@@ -32,9 +38,10 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const [directorChatLoading, setDirectorChatLoading] = useState(false);
   const [directorChatPrompt, setDirectorChatPrompt] = useState(null);
   const [directorAutoGenerate, setDirectorAutoGenerate] = useState(null);
-
+  const [heroMode, setHeroMode] = useState({ active: false, description: '' });
   const storyDeletedRef = useRef(null);
   const controlBarInputRef = useRef(null);
+  const languageDetectedRef = useRef(null);
 
   const idTokenRef = useRef(idToken);
   const prevTokenRef = useRef(idToken);
@@ -68,6 +75,8 @@ export default function useWebSocket(idToken, initialState, addToast) {
       setDirectorLiveNotes,
       setDirectorChatActive, setDirectorChatMessages, setDirectorChatLoading, setDirectorChatPrompt,
       setDirectorAutoGenerate,
+      setHeroMode,
+      onLanguageDetected: (lang) => languageDetectedRef.current?.(lang),
     });
   }
 
@@ -111,12 +120,13 @@ export default function useWebSocket(idToken, initialState, addToast) {
     if (disposed.current || !token) return;
     clearTimeout(reconnectTimer.current);
 
-    // TODO: migrate to first-message auth to avoid token in URL logs
-    const ws = new WebSocket(`${WS_URL}?token=${token}`);
+    const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {
       if (wsRef.current !== ws) return;
+      // First-message auth: send token before any other messages
+      ws.send(JSON.stringify({ type: 'auth', token }));
       setConnected(true);
       reconnectDelay.current = RECONNECT_BASE_MS;
 
@@ -157,7 +167,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
 
       handleMessage.current(data);
     };
-  }, []);
+  }, [setGenerating]);
 
   // Connect when idToken is available AND story state is resolved
   useEffect(() => {
@@ -194,6 +204,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
   }, [idToken, storyResolved, connect]);
 
   const send = useCallback((content, options = {}) => {
+    if (generatingRef.current) return; // prevent duplicate generation
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       setUserPrompt(content);
       setError(null);
@@ -201,12 +212,16 @@ export default function useWebSocket(idToken, initialState, addToast) {
       generationsRef.current.push({ prompt: content, directorData: null, sceneNumbers: [] });
       currentBatchIndexRef.current = generationsRef.current.length - 1;
       setGenerations([...generationsRef.current]);
-      wsRef.current.send(JSON.stringify({
+      const msg = {
         content,
         art_style: options.artStyle || 'cinematic',
         scene_count: options.sceneCount || 1,
         language: options.language || 'English',
-      }));
+      };
+      if (options.fromDirector) {
+        msg.from_director = true;
+      }
+      wsRef.current.send(JSON.stringify(msg));
     }
   }, []);
 
@@ -224,6 +239,20 @@ export default function useWebSocket(idToken, initialState, addToast) {
         audio_data: audioBase64,
         mime_type: mimeType,
       }));
+    }
+  }, []);
+
+  const sendHeroPhoto = useCallback((photoData, mimeType, heroName) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const msg = { type: 'hero_photo', photo_data: photoData, mime_type: mimeType };
+      if (heroName) msg.hero_name = heroName;
+      wsRef.current.send(JSON.stringify(msg));
+    }
+  }, []);
+
+  const sendHeroName = useCallback((name) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'hero_name', name }));
     }
   }, []);
 
@@ -271,6 +300,13 @@ export default function useWebSocket(idToken, initialState, addToast) {
     }
   }, []);
 
+  const cancelDirectorAutoGenerate = useCallback(() => {
+    setDirectorAutoGenerate(null);
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'director_chat_cancel_generate' }));
+    }
+  }, []);
+
   const endDirectorChat = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'director_chat_end' }));
@@ -300,6 +336,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
     setDirectorChatLoading(false);
     setDirectorChatPrompt(null);
     setDirectorAutoGenerate(null);
+    setHeroMode({ active: false, description: '' });
     quotaImageToastFired.current = false;
     setStoryId(null);
     storyIdRef.current = null;
@@ -311,7 +348,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'reset' }));
     }
-  }, []);
+  }, [setGenerating]);
 
   const load = useCallback((state, { skipResume = false } = {}) => {
     hydratedRef.current = true;
@@ -338,6 +375,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
 
   const setStoryDeletedHandler = useCallback((handler) => { storyDeletedRef.current = handler; }, []);
   const setControlBarInputHandler = useCallback((handler) => { controlBarInputRef.current = handler; }, []);
+  const setLanguageDetectedHandler = useCallback((handler) => { languageDetectedRef.current = handler; }, []);
 
-  return { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendSteer, sendAudio, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat };
+  return { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendHeroName, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat };
 }

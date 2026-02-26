@@ -91,11 +91,12 @@ async def handle_auto_recover(
     return active_story_id, total_scene_count, batch_index
 
 
-def handle_reset(
+async def handle_reset(
     narrator: Narrator,
     illustrator: Illustrator,
     director: Director,
     pipeline_tasks: list,
+    director_chat: Any = None,
 ) -> tuple[Any, Any, Illustrator, Director]:
     """Handle reset message. Returns (orchestrator, shared_state, new_illustrator, new_director)."""
     narrator.reset()
@@ -104,5 +105,11 @@ def handle_reset(
     for task in pipeline_tasks:
         if not task.done():
             task.cancel()
+    # Close active Director Chat session to avoid orphaned Live API connections
+    if director_chat:
+        try:
+            await director_chat.close()
+        except Exception:
+            pass
     orchestrator, shared_state = create_story_orchestrator(narrator, new_illustrator, new_director)
     return orchestrator, shared_state, new_illustrator, new_director

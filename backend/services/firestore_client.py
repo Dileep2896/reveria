@@ -119,11 +119,21 @@ async def delete_story(story_id: str, uid: str) -> dict[str, Any] | None:
         logger.warning("UID mismatch on delete for story %s", story_id)
         return None
 
-    # Delete subcollections: scenes, generations, comments, ratings
+    # Delete subcollections in batches (max 450 per batch, Firestore limit 500)
+    _BATCH_SIZE = 450
     for sub in ("scenes", "generations", "comments", "ratings"):
         sub_ref = story_ref.collection(sub)
-        async for sub_doc in sub_ref.stream():
-            await sub_doc.reference.delete()
+        while True:
+            batch = db.batch()
+            count = 0
+            async for sub_doc in sub_ref.limit(_BATCH_SIZE).stream():
+                batch.delete(sub_doc.reference)
+                count += 1
+            if count == 0:
+                break
+            await batch.commit()
+            if count < _BATCH_SIZE:
+                break
 
     # Delete the story document itself
     await story_ref.delete()

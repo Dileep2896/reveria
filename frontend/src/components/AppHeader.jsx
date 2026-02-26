@@ -1,5 +1,6 @@
 import Logo from './Logo';
 import ProfileMenu from './ProfileMenu';
+import { ROUTES } from '../routes';
 import { API_URL } from '../utils/storyHelpers';
 
 export default function AppHeader({
@@ -36,7 +37,7 @@ export default function AppHeader({
           boxShadow: 'var(--shadow-glass)',
         }}
       >
-        <div onClick={() => navigate('/admin')} style={{ cursor: 'pointer' }}>
+        <div onClick={() => navigate(ROUTES.ADMIN)} style={{ cursor: 'pointer' }}>
           <Logo size="compact" />
         </div>
         <div className="flex items-center header-actions">
@@ -74,7 +75,7 @@ export default function AppHeader({
         boxShadow: 'var(--shadow-glass)',
       }}
     >
-      <div onClick={() => navigate(storyId ? `/story/${storyId}` : '/')} style={{ cursor: 'pointer' }}>
+      <div onClick={() => navigate(storyId ? ROUTES.STORY(storyId) : ROUTES.HOME)} style={{ cursor: 'pointer' }}>
         <Logo size="compact" />
       </div>
 
@@ -110,7 +111,7 @@ export default function AppHeader({
         {/* New Story - only visible when there's content in story view */}
         {!isNonStoryPage && !viewingReadOnly && scenes.length > 0 && !generating && (
           <button
-            onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate('/'); }}
+            onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate(ROUTES.HOME); }}
             disabled={saving || generatingCover}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
@@ -168,7 +169,7 @@ export default function AppHeader({
         {/* Publish - navigates to Book Details pre-publish page */}
         {!isNonStoryPage && !viewingReadOnly && storyStatus === 'completed' && storyId && !isPublished && (
           <button
-            onClick={() => navigate(`/book/${storyId}`, { state: { prepublish: true } })}
+            onClick={() => navigate(ROUTES.BOOK(storyId), { state: { prepublish: true } })}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
               background: 'var(--glass-bg)',
@@ -183,7 +184,7 @@ export default function AppHeader({
         {/* Published - "Book Page" button to navigate to /book/:storyId */}
         {!isNonStoryPage && !viewingReadOnly && storyStatus === 'completed' && storyId && isPublished && (
           <button
-            onClick={() => navigate(`/book/${storyId}`)}
+            onClick={() => navigate(ROUTES.BOOK(storyId))}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
               background: 'var(--accent-primary-soft)',
@@ -255,7 +256,7 @@ export default function AppHeader({
               if (!isLibrary && storyId && scenes.length > 0 && !generating) {
                 await autoSaveCurrent();
               }
-              navigate(isLibrary ? (storyId ? `/story/${storyId}` : '/') : '/library');
+              navigate(isLibrary ? (storyId ? ROUTES.STORY(storyId) : ROUTES.HOME) : ROUTES.LIBRARY);
             }}
             className={`header-nav-seg${isLibrary ? ' header-nav-seg--active' : ''}`}
           >
@@ -266,7 +267,7 @@ export default function AppHeader({
               if (!isExplore && storyId && scenes.length > 0 && !generating) {
                 await autoSaveCurrent();
               }
-              navigate(isExplore ? (storyId ? `/story/${storyId}` : '/') : '/explore');
+              navigate(isExplore ? (storyId ? ROUTES.STORY(storyId) : ROUTES.HOME) : ROUTES.EXPLORE);
             }}
             className={`header-nav-seg${isExplore ? ' header-nav-seg--active' : ''}`}
           >

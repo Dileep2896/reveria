@@ -55,12 +55,13 @@ async def gen_cover(
     full_text: str, art_style: str, story_id: str,
     character_sheet: str = "",
 ) -> str | None:
-    """Generate a portrait book cover using the hybrid prompt architecture.
+    """Generate a portrait book cover using the character-focused prompt architecture.
 
-    Uses the same character-consistent approach as scene images:
-    character descriptions prepended verbatim + scene composition from Gemini.
+    Same approach as scene images: Gemini weaves character appearance directly
+    into the prompt (Imagen can't parse separate character sheets).
     """
-    from agents.illustrator import ART_STYLES as ILLUSTRATOR_ART_STYLES
+    from agents.illustrator_prompts import ART_STYLES as ILLUSTRATOR_ART_STYLES
+    from agents.illustrator import Illustrator
     art_style_suffix = ILLUSTRATOR_ART_STYLES.get(art_style, ILLUSTRATOR_ART_STYLES["cinematic"])
 
     try:
@@ -73,46 +74,75 @@ async def gen_cover(
         client = get_gemini_client()
         model = get_gemini_model()
 
-        # Gemini writes ONLY the cover composition — no character appearance
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=types.Content(
-                role="user",
-                parts=[types.Part(text=(
-                    f"Here is a story:\n\n{full_text}\n\n"
-                    f"Generate a single image prompt for a book cover illustration.\n"
-                    f"Describe ONLY: setting, environment, character poses/actions, "
-                    f"lighting, mood, atmosphere, camera angle, and composition.\n"
-                    f"Do NOT describe any character's appearance (hair, clothes, skin, "
-                    f"age, build, etc.) — character details are handled separately.\n"
-                    f"Reference characters by name only (e.g., 'Elara stands in the doorway').\n"
-                    f"Keep it under 100 words.\n"
-                    f"End with: {art_style_suffix}\n"
-                    f"Do NOT include any text, titles, words, or lettering in the image.\n"
-                    f"Output only the image prompt, nothing else."
-                ))],
-            ),
-            config=types.GenerateContentConfig(
-                temperature=0.3,
-                max_output_tokens=200,
-            ),
-        )
-        scene_composition = response.text.strip() if response.text else None
-        if not scene_composition:
+        # Strip hex codes — Imagen uses natural language colors, not hex
+        clean_chars = Illustrator._strip_hex_codes(character_sheet) if character_sheet else ""
+
+        if clean_chars:
+            # Character-focused: Gemini weaves protagonist appearance INTO the prompt
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=types.Content(
+                    role="user",
+                    parts=[types.Part(text=(
+                        f"CHARACTER DESCRIPTIONS:\n{clean_chars}\n\n"
+                        f"STORY:\n{full_text}"
+                    ))],
+                ),
+                config=types.GenerateContentConfig(
+                    system_instruction=(
+                        "You are an image prompt engineer. Write a character-focused BOOK COVER image prompt.\n\n"
+                        "THE PROTAGONIST IS THE SUBJECT of the cover.\n\n"
+                        "STRUCTURE (follow this order):\n"
+                        "1. Start with 'Full body portrait of' or 'Medium shot portrait of'\n"
+                        "2. CHARACTER: Describe the protagonist's full physical appearance — gender, age, "
+                        "skin tone, hair color+style, eye color, facial features, clothing, accessories. "
+                        "Copy details EXACTLY from the provided character descriptions. "
+                        "Use natural color words (e.g., 'warm brown skin'), NOT hex codes.\n"
+                        "3. POSE: A heroic or evocative book-cover pose\n"
+                        "4. SETTING: Brief background suggesting the story's world (2-3 details, blurry)\n"
+                        "5. LIGHTING: One dramatic lighting detail\n\n"
+                        "RULES:\n"
+                        "- Under 80 words total\n"
+                        "- Character appearance must take at least HALF the prompt\n"
+                        "- No hex color codes, no character names — appearance only\n"
+                        "- No text, titles, words, lettering, watermarks, or art style instructions\n"
+                        "- Output ONLY the prompt, nothing else"
+                    ),
+                    temperature=0.3,
+                    max_output_tokens=200,
+                ),
+            )
+        else:
+            # No characters — atmospheric/setting-only cover
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=types.Content(
+                    role="user",
+                    parts=[types.Part(text=(
+                        f"Here is a story:\n\n{full_text}\n\n"
+                        f"Generate a single image prompt for a book cover illustration.\n"
+                        f"Describe ONLY: setting, environment, lighting, mood, atmosphere, "
+                        f"camera angle, and composition.\n"
+                        f"Do NOT include any people, characters, faces, or figures.\n"
+                        f"Keep it under 80 words.\n"
+                        f"Do NOT include any text, titles, words, lettering, or art style.\n"
+                        f"Output only the image prompt, nothing else."
+                    ))],
+                ),
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    max_output_tokens=200,
+                ),
+            )
+
+        cover_composition = response.text.strip() if response.text else None
+        if not cover_composition:
             return None
 
-        # Build hybrid prompt: character DNA + anti-drift + scene composition
-        if character_sheet:
-            anti_drift = (
-                "IMPORTANT: Render each character EXACTLY as described above - "
-                "same colors, same outfit, same signature items. "
-                "Do not alter, omit, or reinterpret any character detail."
-            )
-            cover_prompt = f"{character_sheet}\n\n{anti_drift}\n\n{scene_composition}"
-        else:
-            cover_prompt = scene_composition
+        # Strip any hex codes Gemini may have included, append art style
+        cover_prompt = f"{Illustrator._strip_hex_codes(cover_composition)}\n\n{art_style_suffix}"
 
-        logger.info("Cover prompt: %s...", cover_prompt[:200])
+        logger.info("Cover prompt: %s", cover_prompt[:300])
 
         cover_data = None
         for attempt in range(3):

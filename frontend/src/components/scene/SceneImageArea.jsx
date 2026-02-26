@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useSceneActions } from '../../contexts/SceneActionsContext';
 import IconBtn from '../IconBtn';
 
-export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, isBusy, showError, preloaded, skip, wasRegenerated }) {
+export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, isBusy, showError, preloaded, skip, wasRegenerated, singlePage }) {
   const { regenImage, isReadOnly, canRegen } = useSceneActions();
+  const [showBrief, setShowBrief] = useState(false);
 
   // Collapsed error / no-image indicator
   if (showError || (preloaded && !scene.image_url)) {
@@ -42,14 +44,16 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
 
   return (
     <div
-      className="scene-image-wrap rounded-lg overflow-hidden"
+      className="scene-image-wrap overflow-hidden"
       style={{
-        flex: '0 0 35%',
+        flex: singlePage ? '0 0 48%' : '0 0 35%',
         flexShrink: 0,
         marginBottom: `${6 * scale}px`,
         background: 'var(--book-page-bg)',
         position: 'relative',
-        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08), 0 2px 8px rgba(0,0,0,0.3)',
+        borderRadius: `${4 * scale}px`,
+        border: '1px solid rgba(255,255,255,0.06)',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(0,0,0,0.15)',
       }}
     >
       <>
@@ -137,6 +141,61 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
         />
         )}
       </>
+
+      {/* Creative Brief overlay */}
+      {scene.image_brief && imageLoaded && (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowBrief(v => !v); }}
+            className="creative-brief-toggle"
+            style={{
+              position: 'absolute', top: 4*scale, left: 4*scale, zIndex: 12,
+              width: 22*scale, height: 22*scale, borderRadius: '50%',
+              background: showBrief ? 'var(--accent-secondary-soft)' : 'rgba(0,0,0,0.4)',
+              border: `1px solid ${showBrief ? 'var(--glass-border-secondary)' : 'rgba(255,255,255,0.15)'}`,
+              color: showBrief ? 'var(--accent-secondary)' : 'rgba(255,255,255,0.7)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backdropFilter: 'blur(8px)', padding: 0,
+            }}
+          >
+            <svg width={11*scale} height={11*scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          </button>
+
+          {showBrief && (
+            <div style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 11,
+              maxHeight: '50%', overflow: 'auto',
+              background: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(12px)',
+              borderTop: '1px solid var(--glass-border-secondary)',
+              padding: `${8*scale}px ${10*scale}px`,
+              animation: 'briefSlideUp 0.3s ease-out',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4*scale, marginBottom: 4*scale }}>
+                <svg width={9*scale} height={9*scale} viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                </svg>
+                <span style={{ fontSize: 8*scale, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent-secondary)' }}>
+                  Creative Brief
+                </span>
+                {scene.image_tier && (
+                  <span style={{ fontSize: 7*scale, fontWeight: 600, padding: '1px 5px', borderRadius: 999, background: 'var(--accent-primary-soft)', color: 'var(--accent-primary)', border: '1px solid var(--glass-border-accent)', marginLeft: 'auto' }}>
+                    Tier {scene.image_tier}
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: 9*scale, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)', margin: 0 }}>
+                {scene.image_brief}
+              </p>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Busy overlay - shimmer + icon */}
       {isBusy && (

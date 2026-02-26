@@ -235,7 +235,7 @@ Key design choices:
 - **Dominant palette** (3-4 hex colors) gives the image model a color scheme to work with.
 - **"Passed VERBATIM to an image generator"** -- telling Gemini that the output will be used literally prevents it from writing prose-style descriptions.
 - **Temperature 0.1** -- low temperature for maximum consistency across extractions.
-- **Max 1000 tokens** -- enough for a full cast but prevents runaway output.
+- **Max 1000 tokens** -- enough for a full character roster but prevents runaway output.
 
 For subsequent batches, the sheet is incrementally updated:
 
@@ -283,7 +283,7 @@ The hybrid architecture produces dramatically more consistent characters across 
 
 **File:** `backend/agents/director.py`
 
-The Director serves two roles: batch-level story analysis (9-category breakdown) and per-scene live commentary that also steers the narrative.
+The Director serves two roles: batch-level story analysis (9-category breakdown) and per-scene live commentary that also steers the narrative. **Note:** Director only fires during Director-triggered generation (`director_enabled=True`), not ControlBar generation.
 
 ### Live Scene Analysis Prompt
 

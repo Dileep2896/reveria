@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from google.cloud.firestore_v1 import Increment
+from google.cloud import firestore as _firestore
 from services.firestore_client import get_db
 
 logger = logging.getLogger("storyforge.usage")
@@ -107,55 +107,67 @@ async def check_limit(uid: str, action: str) -> tuple[bool, str | None, dict[str
 
 
 async def increment_usage(uid: str, action: str) -> dict[str, Any]:
-    """Increment the counter for *action*, resetting daily fields if new day."""
+    """Atomically increment the counter for *action* using a Firestore transaction.
+
+    Resets daily fields if a new day has started. The transaction ensures
+    concurrent increments don't race (e.g. two generation requests arriving
+    close together).
+    """
     db = get_db()
     ref = db.collection("users").document(uid)
     field = _ACTION_FIELD.get(action)
     if not field:
         return await get_usage(uid)
 
-    today = _today_utc()
-    doc = await ref.get()
-    data = doc.to_dict() if doc.exists else {}
-    stored_date = data.get("usage_date", "")
+    transaction = db.transaction()
 
-    if stored_date != today:
-        # Reset daily counters and set the new date
-        reset: dict[str, Any] = {f: 0 for f in _DAILY_FIELDS}
-        reset["usage_date"] = today
-        reset["updated_at"] = datetime.now(timezone.utc)
-        if field in _DAILY_FIELDS:
-            reset[field] = 1  # this is the first usage today
+    @_firestore.async_transactional
+    async def _txn_increment(txn):
+        doc = await ref.get(transaction=txn)
+        data = doc.to_dict() if doc.exists else {}
+        today = _today_utc()
+        stored_date = data.get("usage_date", "")
+
+        update: dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
+
+        if stored_date != today:
+            # New day: reset daily counters
+            for f in _DAILY_FIELDS:
+                update[f] = 0
+            update["usage_date"] = today
+            if field in _DAILY_FIELDS:
+                update[field] = 1  # first usage today
+            else:
+                update[field] = data.get(field, 0) + 1
         else:
-            reset[field] = Increment(1)
-        await ref.set(reset, merge=True)
-    else:
-        await ref.set(
-            {field: Increment(1), "updated_at": datetime.now(timezone.utc)},
-            merge=True,
-        )
+            update[field] = data.get(field, 0) + 1
 
+        txn.set(ref, update, merge=True)
+
+    await _txn_increment(transaction)
     return await get_usage(uid)
 
 
 async def decrement_usage(uid: str, action: str) -> dict[str, Any]:
-    """Decrement a lifetime counter (e.g. on story delete or unpublish)."""
+    """Atomically decrement a lifetime counter (e.g. on story delete or unpublish)."""
     db = get_db()
     ref = db.collection("users").document(uid)
     field = _ACTION_FIELD.get(action)
     if not field or field in _DAILY_FIELDS:
         return await get_usage(uid)
 
-    doc = await ref.get()
-    if doc.exists:
-        current = (doc.to_dict() or {}).get(field, 0)
-        if current <= 0:
-            return await get_usage(uid)
+    transaction = db.transaction()
 
-    await ref.set(
-        {field: Increment(-1), "updated_at": datetime.now(timezone.utc)},
-        merge=True,
-    )
+    @_firestore.async_transactional
+    async def _txn_decrement(txn):
+        doc = await ref.get(transaction=txn)
+        data = doc.to_dict() if doc.exists else {}
+        current = data.get(field, 0)
+        if current <= 0:
+            return  # nothing to decrement
+        txn.set(ref, {field: current - 1, "updated_at": datetime.now(timezone.utc)}, merge=True)
+
+    await _txn_decrement(transaction)
     return await get_usage(uid)
 
 

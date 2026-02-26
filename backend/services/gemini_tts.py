@@ -2,12 +2,11 @@
 
 import asyncio
 import base64
-import io
 import logging
-import struct
 
 from google.genai import types
 from services.gemini_client import get_client
+from utils.audio_helpers import pcm_to_wav
 
 logger = logging.getLogger("storyforge.gemini_tts")
 
@@ -34,50 +33,21 @@ NARRATION_SYSTEM = (
 )
 
 
-def _pcm_to_wav(
-    pcm_data: bytes,
-    sample_rate: int = 24000,
-    bits_per_sample: int = 16,
-    channels: int = 1,
-) -> bytes:
-    """Wrap raw PCM bytes in a WAV header for browser playback."""
-    buf = io.BytesIO()
-    data_size = len(pcm_data)
-    byte_rate = sample_rate * channels * bits_per_sample // 8
-    block_align = channels * bits_per_sample // 8
-    buf.write(b"RIFF")
-    buf.write(struct.pack("<I", 36 + data_size))
-    buf.write(b"WAVE")
-    buf.write(b"fmt ")
-    buf.write(struct.pack("<I", 16))
-    buf.write(struct.pack("<H", 1))
-    buf.write(struct.pack("<H", channels))
-    buf.write(struct.pack("<I", sample_rate))
-    buf.write(struct.pack("<I", byte_rate))
-    buf.write(struct.pack("<H", block_align))
-    buf.write(struct.pack("<H", bits_per_sample))
-    buf.write(b"data")
-    buf.write(struct.pack("<I", data_size))
-    buf.write(pcm_data)
-    return buf.getvalue()
+_pcm_to_wav = pcm_to_wav  # backward-compat alias
 
 
-async def synthesize_speech(
+async def synthesize_speech_pcm(
     text: str,
-    voice_name: str | None = None,
-    language: str | None = None,
-) -> tuple[str | None, None]:
-    """Synthesize narration using Gemini native audio.
+    voice_name: str = "Kore",
+    system_prompt: str | None = None,
+) -> bytes | None:
+    """Generate raw PCM audio bytes (24kHz 16-bit mono) for a text segment.
 
-    Returns (data_url, None) — second element is None since Gemini Live
-    doesn't provide word-level timestamps (ReadingMode uses heuristic fallback).
+    This is the low-level building block used by both single-voice and
+    multi-voice pipelines. Returns None on failure.
     """
     if not text or not text.strip():
-        return None, None
-
-    if not voice_name and language:
-        voice_name = LANGUAGE_VOICES.get(language.lower(), "Kore")
-    voice_name = voice_name or "Kore"
+        return None
 
     client = get_client()
     config = {
@@ -87,7 +57,7 @@ async def synthesize_speech(
                 "prebuilt_voice_config": {"voice_name": voice_name}
             }
         },
-        "system_instruction": NARRATION_SYSTEM,
+        "system_instruction": system_prompt or NARRATION_SYSTEM,
     }
 
     try:
@@ -101,22 +71,44 @@ async def synthesize_speech(
             audio_chunks = await asyncio.wait_for(_collect_audio(session), timeout=60.0)
 
             if not audio_chunks:
-                logger.warning("Gemini TTS returned no audio for text: %s...", text[:50])
-                return None, None
+                logger.warning("Gemini TTS PCM returned no audio for text: %s...", text[:50])
+                return None
 
             pcm_data = b"".join(audio_chunks)
-            wav_bytes = _pcm_to_wav(pcm_data)
-            b64 = base64.b64encode(wav_bytes).decode("utf-8")
-            data_url = f"data:audio/wav;base64,{b64}"
-            logger.info("Gemini TTS audio generated (%dKB) voice=%s", len(b64) // 1024, voice_name)
-            return data_url, None
+            logger.info("Gemini TTS PCM generated (%dKB) voice=%s", len(pcm_data) // 1024, voice_name)
+            return pcm_data
 
     except asyncio.TimeoutError:
-        logger.error("Gemini TTS timed out for text: %s...", text[:50])
+        logger.error("Gemini TTS PCM timed out for text: %s...", text[:50])
     except Exception as e:
-        logger.error("Gemini TTS failed: %s", e)
+        logger.error("Gemini TTS PCM failed: %s", e)
 
-    return None, None
+    return None
+
+
+async def synthesize_speech(
+    text: str,
+    voice_name: str | None = None,
+    language: str | None = None,
+) -> tuple[str | None, None]:
+    """Synthesize narration using Gemini native audio.
+
+    Returns (data_url, None) — second element is None since Gemini Live
+    doesn't provide word-level timestamps (ReadingMode uses heuristic fallback).
+    """
+    if not voice_name and language:
+        voice_name = LANGUAGE_VOICES.get(language.lower(), "Kore")
+    voice_name = voice_name or "Kore"
+
+    pcm = await synthesize_speech_pcm(text, voice_name)
+    if not pcm:
+        return None, None
+
+    wav_bytes = _pcm_to_wav(pcm)
+    b64 = base64.b64encode(wav_bytes).decode("utf-8")
+    data_url = f"data:audio/wav;base64,{b64}"
+    logger.info("Gemini TTS audio generated (%dKB) voice=%s", len(b64) // 1024, voice_name)
+    return data_url, None
 
 
 async def _collect_audio(session) -> list[bytes]:

@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { ROUTES } from '../routes';
+import UserAvatar from './UserAvatar';
 
 export default function ProfileMenu({ user, onSignOut, onNavigate, isAdmin, userTier }) {
   const [open, setOpen] = useState(false);
@@ -29,13 +31,6 @@ export default function ProfileMenu({ user, onSignOut, onNavigate, isAdmin, user
   const photoURL = user?.photoURL;
   const displayName = user?.displayName || 'User';
   const email = user?.email || '';
-  const initials = displayName
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
   const tier = userTier || 'free';
 
   // Tier-based avatar border & glow
@@ -62,25 +57,15 @@ export default function ProfileMenu({ user, onSignOut, onNavigate, isAdmin, user
         style={{
           width: '32px',
           height: '32px',
-          background: photoURL ? 'transparent' : 'var(--accent-primary)',
           border: avatarBorder,
           boxShadow: avatarShadow,
           animation: avatarAnimation,
+          padding: 0,
+          background: 'transparent',
         }}
         title={displayName}
       >
-        {photoURL ? (
-          <img
-            src={photoURL}
-            alt={displayName}
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <span style={{ color: 'white', fontSize: '12px', fontWeight: 600 }}>
-            {initials}
-          </span>
-        )}
+        <UserAvatar photoURL={photoURL} name={displayName} size={28} />
       </button>
 
       {/* Dropdown */}
@@ -104,7 +89,6 @@ export default function ProfileMenu({ user, onSignOut, onNavigate, isAdmin, user
               style={{
                 width: '40px',
                 height: '40px',
-                background: 'var(--accent-primary)',
                 border: tier === 'pro'
                   ? '2px solid var(--accent-primary)'
                   : tier === 'standard'
@@ -117,20 +101,7 @@ export default function ProfileMenu({ user, onSignOut, onNavigate, isAdmin, user
                     : 'none',
               }}
             >
-              {photoURL ? (
-                <img
-                  src={photoURL}
-                  alt={displayName}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <span style={{ color: 'white', fontSize: '14px', fontWeight: 600 }}>
-                    {initials}
-                  </span>
-                </div>
-              )}
+              <UserAvatar photoURL={photoURL} name={displayName} size={36} />
             </div>
             <div className="min-w-0">
               <p
@@ -179,7 +150,7 @@ export default function ProfileMenu({ user, onSignOut, onNavigate, isAdmin, user
             <button
               onClick={() => {
                 setOpen(false);
-                onNavigate?.('/subscription');
+                onNavigate?.(ROUTES.SUBSCRIPTION);
               }}
               className="w-full flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer"
               style={{ color: 'var(--text-secondary)', background: 'transparent' }}

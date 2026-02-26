@@ -8,14 +8,14 @@ export function spreadLeftPage(pageIndex) {
   return pageIndex % 2 === 0 ? pageIndex - 1 : pageIndex;
 }
 
-export default function useStoryNavigation({ bookRef, currentPage, setCurrentPage, maxPage, scenes, storyId, onPageChange }) {
+export default function useStoryNavigation({ bookRef, currentPage, setCurrentPage, maxPage, scenes, storyId, onPageChange, singlePage = false }) {
   /* ── Track current page + clamp to content ── */
   const onFlip = useCallback((e) => {
     const page = e.data;
     setCurrentPage(page);
     // If user swiped/dragged past content, bounce back (instant, no animation)
     if (page > maxPage && bookRef.current) {
-      const target = spreadLeftPage(maxPage);
+      const target = singlePage ? maxPage : spreadLeftPage(maxPage);
       setTimeout(() => {
         try { bookRef.current.pageFlip().turnToPage(target); } catch {}
       }, 0);
@@ -26,15 +26,15 @@ export default function useStoryNavigation({ bookRef, currentPage, setCurrentPag
         try { bookRef.current.pageFlip().turnToPage(1); } catch {}
       }, 0);
     }
-  }, [maxPage, scenes.length, bookRef, setCurrentPage]);
+  }, [maxPage, scenes.length, bookRef, setCurrentPage, singlePage]);
 
   /* ── Navigation - clamp to content pages ── */
   const goNext = useCallback(() => {
     if (!bookRef.current) return;
     const cur = bookRef.current.pageFlip().getCurrentPageIndex();
-    if (cur + 2 > maxPage) return;
+    if (singlePage ? cur >= maxPage : cur + 2 > maxPage) return;
     bookRef.current.pageFlip().flipNext();
-  }, [maxPage, bookRef]);
+  }, [maxPage, bookRef, singlePage]);
 
   const goPrev = useCallback(() => {
     if (!bookRef.current) return;
@@ -43,13 +43,15 @@ export default function useStoryNavigation({ bookRef, currentPage, setCurrentPag
     bookRef.current.pageFlip().flipPrev();
   }, [scenes.length, bookRef]);
 
-  const goTo = useCallback((spreadIndex) => {
+  const goTo = useCallback((idx) => {
     if (!bookRef.current) return;
-    const pageIndex = spreadIndex === 0 ? 0 : (spreadIndex - 1) * 2 + 1;
+    const pageIndex = singlePage
+      ? idx
+      : (idx === 0 ? 0 : (idx - 1) * 2 + 1);
     if (pageIndex > maxPage) return;
     if (pageIndex === 0 && scenes.length > 0) return;
     bookRef.current.pageFlip().flip(pageIndex);
-  }, [maxPage, scenes.length, bookRef]);
+  }, [maxPage, scenes.length, bookRef, singlePage]);
 
   /* ── Keyboard (skip when user is typing in an input/textarea) ── */
   useEffect(() => {

@@ -187,6 +187,14 @@ async def list_comments(story_id: str) -> dict[str, Any]:
     db = get_db()
     story_ref = db.collection("stories").document(story_id)
 
+    # Verify story exists and is public
+    story_snap = await story_ref.get()
+    if not story_snap.exists:
+        raise HTTPException(status_code=404, detail="Story not found")
+    story_data = story_snap.to_dict() or {}
+    if not story_data.get("is_public"):
+        raise HTTPException(status_code=404, detail="Story not found")
+
     comments_ref = story_ref.collection("comments")
     q = comments_ref.order_by("created_at", direction="DESCENDING").limit(50)
 
@@ -233,7 +241,14 @@ async def delete_comment(
         raise HTTPException(status_code=403, detail="Not your comment")
 
     await comment_ref.delete()
-    current_count = (story_data or {}).get("comment_count", 0)
-    if current_count > 0:
+    # Use Increment(-1) unconditionally — Firestore handles atomicity.
+    # Guard against going below zero with a follow-up clamp if needed.
+    try:
         await story_ref.update({"comment_count": Increment(-1)})
+        # Clamp to zero if it went negative (race between concurrent deletes)
+        refreshed = await story_ref.get()
+        if refreshed.exists and (refreshed.to_dict() or {}).get("comment_count", 0) < 0:
+            await story_ref.update({"comment_count": 0})
+    except Exception:
+        pass  # Non-critical: count will self-correct on next comment add
     return {"status": "deleted"}

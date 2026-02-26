@@ -5,6 +5,30 @@
 
 let _msgId = 0;
 
+/**
+ * Detect story language from transcript text via Unicode script ranges.
+ * Returns a supported language key or null if Latin/ambiguous.
+ */
+function detectScriptLanguage(text) {
+  if (!text || text.length < 3) return null;
+  // Count characters in each script range
+  let devanagari = 0, cjk = 0, hiraganaKatakana = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0);
+    if (cp >= 0x0900 && cp <= 0x097F) devanagari++;
+    else if (cp >= 0x4E00 && cp <= 0x9FFF) cjk++;
+    else if ((cp >= 0x3040 && cp <= 0x309F) || (cp >= 0x30A0 && cp <= 0x30FF)) hiraganaKatakana++;
+  }
+  const total = text.replace(/\s/g, '').length;
+  if (!total) return null;
+  const threshold = 0.3; // 30% of non-space chars
+  if (devanagari / total > threshold) return 'Hindi';
+  if (hiraganaKatakana / total > threshold) return 'Japanese';
+  if (cjk / total > threshold) return 'Chinese';
+  // Spanish/French/German/Portuguese can't be detected by script alone (all Latin)
+  return null;
+}
+
 export function createWsHandlers({
   setScenes, setGenerating, setUserPrompt, setError, setDirectorData,
   setStoryId, storyIdRef, setQuotaCooldown, setSceneBusy, setBookMeta,
@@ -16,6 +40,8 @@ export function createWsHandlers({
   setDirectorLiveNotes,
   setDirectorChatActive, setDirectorChatMessages, setDirectorChatLoading, setDirectorChatPrompt,
   setDirectorAutoGenerate,
+  setHeroMode,
+  onLanguageDetected,
 }) {
   return function handleMessage(data) {
     switch (data.type) {
@@ -71,7 +97,7 @@ export function createWsHandlers({
         setScenes((prev) =>
           prev.map((scene) =>
             scene.scene_number === data.scene_number
-              ? { ...scene, image_url: data.content, image_tier: data.tier || 1 }
+              ? { ...scene, image_url: data.content, image_tier: data.tier || 1, image_brief: data.image_brief || null }
               : scene,
           ),
         );
@@ -260,6 +286,16 @@ export function createWsHandlers({
         if (setUsage) setUsage({ usage: data.usage, limits: data.limits });
         return true;
 
+      case 'hero_status':
+        if (setHeroMode) setHeroMode(prev => ({
+          active: !!data.enabled, description: data.description || '', heroName: data.hero_name || prev?.heroName || '',
+        }));
+        // Only toast on fresh activation, not on resume restore
+        if (data.enabled && !data.restored) {
+          addToastRef.current?.('Hero Mode active!', 'success');
+        }
+        return true;
+
       case 'error':
         setError(data.content);
         addToastRef.current?.(data.content, 'error');
@@ -282,7 +318,7 @@ export function createWsHandlers({
 
       case 'director_chat_response':
         if (setDirectorChatLoading) setDirectorChatLoading(false);
-        if (setDirectorChatMessages) {
+        if (setDirectorChatMessages && data.audio_url) {
           setDirectorChatMessages(prev => [...prev, {
             id: `director-${++_msgId}`,
             role: 'director',
@@ -306,6 +342,11 @@ export function createWsHandlers({
             return updated;
           });
         }
+        // Auto-detect language from script (Hindi, Japanese, Chinese)
+        if (onLanguageDetected) {
+          const detected = detectScriptLanguage(data.content);
+          if (detected) onLanguageDetected(detected);
+        }
         return true;
 
       case 'director_chat_suggestion':
@@ -316,6 +357,7 @@ export function createWsHandlers({
       case 'director_chat_ended':
         if (setDirectorChatActive) setDirectorChatActive(false);
         if (setDirectorChatMessages) setDirectorChatMessages([]);
+        if (setDirectorChatLoading) setDirectorChatLoading(false);
         if (setDirectorChatPrompt) setDirectorChatPrompt(null);
         return true;
 
@@ -332,6 +374,10 @@ export function createWsHandlers({
 
       case 'director_chat_error':
         if (setDirectorChatLoading) setDirectorChatLoading(false);
+        // If error arrives before any messages, the session never started — reset active state
+        if (setDirectorChatActive) setDirectorChatActive(false);
+        if (setDirectorChatMessages) setDirectorChatMessages([]);
+        if (setDirectorChatPrompt) setDirectorChatPrompt(null);
         addToastRef.current?.(data.content || 'Director chat error', 'error');
         return true;
 

@@ -120,7 +120,7 @@ The background task starts automatically after the first generation batch comple
 
 ### Art Style as a First-Class Citizen
 
-We offer 6 art styles: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, and Pencil Sketch. Each has a rich suffix with rendering-specific details (20-25 words):
+We offer 10 art styles: Cinematic, Watercolor, Comic Book, Anime, Pixar 3D, Studio Ghibli, Marvel Comic, Cyberpunk, Oil Painting, and Pencil Sketch. Each has a rich suffix with rendering-specific details (20-25 words):
 
 ```python
 ART_STYLES = {
@@ -638,9 +638,42 @@ Our Director agent started as a purely reactive observer: it analyzed scenes aft
 
 Our first Director Chat implementation required two taps per turn: tap to start recording, tap again to send. Users found this clunky — it broke the conversational flow. Web Audio's `AnalyserNode` was the solution: compute RMS from `getFloatTimeDomainData()` on a fast polling interval, detect when speech transitions to silence, and auto-stop the recorder. The conversation becomes: speak → pause → message sends → Director responds → speak again. One tap to start, zero taps per subsequent turn.
 
-### 19. Use Native API Features Before Building Workarounds
+### 19. Centralize Routes — Every Hardcoded Path is a Future Bug
 
-Our Director Chat initially used 3-5 separate Gemini API calls per interaction: the Live session for conversation, `transcribe_audio()` for user speech, `transcribe_audio()` again for the Director's response, `detect_intent()` via Gemini Flash, and `suggest_prompt()` via Gemini Flash. This worked, but was slow, expensive, and fragile (a racy boolean flag, unbounded conversation logs, lossy transcription feeding intent detection).
+We started with hardcoded paths everywhere — `navigate('/')`, `navigate('/library')`, `navigate(\`/story/${id}\`)` scattered across 10+ files. Each path was a string literal repeated in multiple places. One typo in one place? Silent navigation failure.
+
+The fix was a centralized `ROUTES` constant in `src/routes.js`:
+
+```js
+export const ROUTES = {
+  HOME: '/',
+  STORY: (id) => `/story/${id}`,
+  STORY_PREFIX: '/story/',
+  LIBRARY: '/library',
+  EXPLORE: '/explore',
+  BOOK: (id) => `/book/${id}`,
+  BOOK_PREFIX: '/book/',
+  SUBSCRIPTION: '/subscription',
+  TERMS: '/terms',
+  ADMIN: '/admin',
+};
+```
+
+Every `navigate()` call, `<Route path>`, `<Link to>`, and `pathname.startsWith()` check now references this object. Change a route path in one place, it updates everywhere. The `_PREFIX` constants handle `startsWith()` checks without exposing raw path strings.
+
+We also caught a subtle bug: `<a href="/terms">` in AuthScreen caused a full page reload instead of SPA navigation. Replacing with `<Link to={ROUTES.TERMS}>` fixed it. And trailing slash normalization (`pathname.replace(/\/+$/, '') || '/'`) prevents `/library/` from not matching `ROUTES.LIBRARY`.
+
+### 20. Avatar Fallbacks Should Be Beautiful, Not Boring
+
+Default user avatars showing plain initials ("DS") on a solid color circle are functional but forgettable. We replaced them with **Boring Avatars' marble variant** — organic gradient blobs that are deterministic (same name always generates the same unique pattern) and visually stunning against our glassmorphism UI.
+
+The key insight: avatars appear in 6+ places (header, dropdown, explore cards, book details, comments, admin panel) with different sizes. Creating a single `UserAvatar` component that handles both photo and fallback cases eliminated duplicated conditional rendering across the codebase. The marble colors (`#f59e0b`, `#a78bfa`, `#6366f1`, `#ec4899`, `#14b8a6`) are drawn from our theme's accent palette, so avatars feel native to the design.
+
+Best part: zero network requests. Boring Avatars generates SVGs client-side. No API dependency, no latency, no reliability concerns.
+
+### 21. Use Native API Features Before Building Workarounds
+
+(Originally lesson 19.) Our Director Chat initially used 3-5 separate Gemini API calls per interaction: the Live session for conversation, `transcribe_audio()` for user speech, `transcribe_audio()` again for the Director's response, `detect_intent()` via Gemini Flash, and `suggest_prompt()` via Gemini Flash. This worked, but was slow, expensive, and fragile (a racy boolean flag, unbounded conversation logs, lossy transcription feeding intent detection).
 
 The Gemini Live API natively supports `input_audio_transcription`, `output_audio_transcription`, function calling via `tools`, and `context_window_compression`. Enabling these four config options eliminated every extra API call and replaced our brittle intent detection with the model's own judgment. The lesson: before building workarounds (separate STT calls, external classifiers, manual context management), check if the API you're already using has native support. The platform team usually thought of it first.
 
@@ -714,7 +747,7 @@ The result: **zero extra API calls per interaction** (was 3-5), no race conditio
 - **Polish & edge cases** — Final round of UX polish, error handling hardening, and mobile responsiveness tuning
 - **Book layout preferences** — Let users choose between single-page and two-page spread layouts for different reading experiences
 - **Multi-voice narration** — Character-specific voices so dialogue scenes sound like distinct people, not one narrator doing all the parts
-- **Custom character portraits from user photos** — Upload a selfie or reference image and have your characters rendered in the story's art style
+- **Face mesh control** — `ControlReferenceImage` with `CONTROL_TYPE_FACE_MESH` for even stronger likeness preservation (deferred due to pose constraints in dynamic story scenes)
 
 ---
 

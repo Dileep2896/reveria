@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { ROUTES } from './routes';
 import { useTheme } from './contexts/ThemeContext';
 import { useAuth } from './contexts/AuthContext';
 import { useToast } from './contexts/ToastContext';
@@ -9,7 +10,9 @@ import useActiveStory from './hooks/useActiveStory';
 import useStoryActions from './hooks/useStoryActions';
 import useBookManager from './hooks/useBookManager';
 import useAppEffects from './hooks/useAppEffects';
-import { API_URL } from './utils/storyHelpers';
+import useMoodTheming from './hooks/useMoodTheming';
+import useDirectorAutoGenerate from './hooks/useDirectorAutoGenerate';
+import usePublicStory from './hooks/usePublicStory';
 
 import Logo from './components/Logo';
 import StoryCanvas from './components/StoryCanvas';
@@ -41,7 +44,15 @@ export default function App() {
 
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId);
   const { addToast } = useToast();
-  const { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, send, sendSteer, sendAudio, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat } = useWebSocket(idToken, initialState, addToast);
+  const { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, suggestDirectorPrompt, endDirectorChat } = useWebSocket(idToken, initialState, addToast);
+  // Stable canvas key: freeze during generation so backend assigning story_id
+  // doesn't cause a full StoryCanvas remount mid-generation.
+  // Once a storyId is assigned, never revert to 'new' — prevents remount
+  // when generation ends and the key would change from 'new' to the storyId.
+  const canvasKeyRef = useRef(storyId || 'new');
+  if (!generating && storyId) canvasKeyRef.current = storyId;
+  const canvasKey = canvasKeyRef.current;
+
   const { theme, toggleTheme } = useTheme();
   const [directorOpen, setDirectorOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -49,10 +60,14 @@ export default function App() {
   const handleSetDirectorVoice = useCallback((v) => { setDirectorVoice(v); localStorage.setItem('storyforge-director-voice', v); }, []);
   const [controlBarInput, setControlBarInput] = useState('');
   useEffect(() => { setControlBarInputHandler(setControlBarInput); }, [setControlBarInputHandler]);
+  const [bookLayout, setBookLayout] = useState(() => localStorage.getItem('storyforge-book-layout') || 'spread');
+  const handleSetBookLayout = useCallback((v) => { setBookLayout(v); localStorage.setItem('storyforge-book-layout', v); }, []);
+  const singlePage = bookLayout === 'single';
   const [artStyle, setArtStyle] = useState('cinematic');
   const [languageRaw, setLanguageRaw] = useState('English');
   const setLanguage = useCallback((lang) => { setLanguageRaw(lang); setControlBarInput(''); }, []);
   const language = languageRaw;
+  useEffect(() => { setLanguageDetectedHandler(setLanguage); }, [setLanguageDetectedHandler, setLanguage]);
   const [currentSceneNumber, setCurrentSceneNumber] = useState(null);
   const {
     saving, saved, generatingCover,
@@ -66,10 +81,11 @@ export default function App() {
   const [readingMode, setReadingMode] = useState(false);
   const [bookmarkedSceneIndex, setBookmarkedSceneIndex] = useState(null);
 
-  const isLibrary = location.pathname === '/library';
-  const isExplore = location.pathname === '/explore';
-  const isBookPage = location.pathname.startsWith('/book/');
-  const isStoryRoute = location.pathname === '/' || location.pathname.startsWith('/story/');
+  const pathname = location.pathname.replace(/\/+$/, '') || '/';
+  const isLibrary = pathname === ROUTES.LIBRARY;
+  const isExplore = pathname === ROUTES.EXPLORE;
+  const isBookPage = pathname.startsWith(ROUTES.BOOK_PREFIX);
+  const isStoryRoute = pathname === ROUTES.HOME || pathname.startsWith(ROUTES.STORY_PREFIX);
   const [viewingReadOnly, setViewingReadOnly] = useState(false);
 
   // Auto-end Director Chat when navigating away from story canvas
@@ -78,6 +94,9 @@ export default function App() {
       endDirectorChat();
     }
   }, [isStoryRoute, directorChatActive, endDirectorChat]);
+
+  // Dynamic mood theming — apply latest Director mood to document root
+  useMoodTheming(directorLiveNotes);
 
   // Per-scene action callbacks
   const handleRegenImage = useCallback((sceneNumber, sceneText) => {
@@ -137,19 +156,8 @@ export default function App() {
     location,
   });
 
-  // Director auto-generation with 3-second countdown
-  useEffect(() => {
-    if (!directorAutoGenerate) return;
-    const timer = setTimeout(() => {
-      send(directorAutoGenerate.prompt, {
-        artStyle: directorAutoGenerate.artStyle,
-        sceneCount: directorAutoGenerate.sceneCount,
-        language: directorAutoGenerate.language,
-      });
-      setDirectorAutoGenerate(null);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [directorAutoGenerate, send, setDirectorAutoGenerate]);
+  // Director auto-generation with 5-second countdown
+  useDirectorAutoGenerate(directorAutoGenerate, send, setDirectorAutoGenerate, generating);
 
   // Derive per-scene image tier info for DirectorPanel
   const imageTiers = useMemo(() =>
@@ -170,18 +178,7 @@ export default function App() {
   }, [currentSceneNumber, scenes, userPrompt]);
 
   // Public story viewing for unauthenticated users
-  const [publicStory, setPublicStory] = useState(null);
-  const [publicLoading, setPublicLoading] = useState(false);
-  useEffect(() => {
-    if (!authLoading && !user && urlStoryId && !publicStory && !publicLoading) {
-      setPublicLoading(true);
-      fetch(`${API_URL}/api/public/stories/${urlStoryId}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(data => { if (data) setPublicStory(data); })
-        .catch(() => {})
-        .finally(() => setPublicLoading(false));
-    }
-  }, [authLoading, user, urlStoryId, publicStory, publicLoading]);
+  const { publicStory } = usePublicStory(authLoading, user, urlStoryId);
 
   // Loading splash
   const showSplash = authLoading || (user && storyLoading) || (user && initialState === undefined) || (user && isHydrating);
@@ -207,18 +204,18 @@ export default function App() {
             <div className="absolute inset-0" style={{ background: 'var(--orb-3)' }} />
           </div>
           <header className="relative z-20 flex items-center justify-between header-bar" style={{ background: 'var(--glass-bg-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', borderBottom: '1px solid var(--glass-border)', boxShadow: 'var(--shadow-glass)' }}>
-            <div style={{ cursor: 'pointer' }} onClick={() => navigate('/')}>
+            <div style={{ cursor: 'pointer' }} onClick={() => navigate(ROUTES.HOME)}>
               <Logo size="compact" />
             </div>
             <div className="flex items-center header-actions">
-              <button onClick={() => navigate('/')} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
+              <button onClick={() => navigate(ROUTES.HOME)} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
                 Sign in to create
               </button>
             </div>
           </header>
           <div className="flex flex-1 overflow-hidden relative z-10">
             <Routes>
-              <Route path="/book/:storyId" element={<BookDetailsPage user={null} />} />
+              <Route path={ROUTES.BOOK(':storyId')} element={<BookDetailsPage user={null} />} />
             </Routes>
           </div>
         </div>
@@ -245,7 +242,7 @@ export default function App() {
                   Read
                 </button>
               )}
-              <button onClick={() => navigate('/')} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
+              <button onClick={() => navigate(ROUTES.HOME)} className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn" style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', boxShadow: 'var(--shadow-glow-primary)' }}>
                 Sign in to create
               </button>
             </div>
@@ -262,7 +259,7 @@ export default function App() {
       );
     }
     // Terms page accessible without login
-    if (location.pathname === '/terms') {
+    if (pathname === ROUTES.TERMS) {
       return <TermsPage />;
     }
 
@@ -293,7 +290,7 @@ export default function App() {
           <AdminDashboard idToken={idToken} addToast={addToast} />
         </div>
         {settingsOpen && (
-          <SettingsDialog onClose={() => setSettingsOpen(false)} theme={theme} toggleTheme={toggleTheme} directorVoice={directorVoice} setDirectorVoice={handleSetDirectorVoice} />
+          <SettingsDialog onClose={() => setSettingsOpen(false)} theme={theme} toggleTheme={toggleTheme} directorVoice={directorVoice} setDirectorVoice={handleSetDirectorVoice} bookLayout={bookLayout} setBookLayout={handleSetBookLayout} />
         )}
       </div>
     );
@@ -368,15 +365,15 @@ export default function App() {
 
       <Routes>
         <Route
-          path="/library"
+          path={ROUTES.LIBRARY}
           element={
             <div className="flex flex-1 overflow-hidden relative z-10">
-              <LibraryPage user={user} onOpenBook={handleOpenBook} bookMeta={bookMeta} activeStoryId={storyId} onActiveStoryDeleted={() => { clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate('/'); }} onNewStory={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate('/'); }} />
+              <LibraryPage user={user} onOpenBook={handleOpenBook} bookMeta={bookMeta} activeStoryId={storyId} onActiveStoryDeleted={() => { clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate(ROUTES.HOME); }} onNewStory={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate(ROUTES.HOME); }} />
             </div>
           }
         />
         <Route
-          path="/explore"
+          path={ROUTES.EXPLORE}
           element={
             <div className="flex flex-1 overflow-hidden relative z-10">
               <ExplorePage user={user} onOpenBook={handleOpenPublicBook} />
@@ -384,7 +381,7 @@ export default function App() {
           }
         />
         <Route
-          path="/book/:storyId"
+          path={ROUTES.BOOK(':storyId')}
           element={
             <div className="flex flex-1 overflow-hidden relative z-10">
               <BookDetailsPage user={user} setAppIsPublished={setIsPublished} onOpenBook={handleOpenBook} onOpenPublicBook={handleOpenPublicBook} />
@@ -392,16 +389,16 @@ export default function App() {
           }
         />
         <Route
-          path="/subscription"
+          path={ROUTES.SUBSCRIPTION}
           element={
             <div className="flex flex-1 overflow-hidden relative z-10">
               <SubscriptionPage idToken={idToken} addToast={addToast} />
             </div>
           }
         />
-        <Route path="/terms" element={<TermsPage />} />
+        <Route path={ROUTES.TERMS} element={<TermsPage />} />
         <Route
-          path="/admin"
+          path={ROUTES.ADMIN}
           element={
             isAdmin ? (
               <div className="flex flex-1 overflow-hidden relative z-10">
@@ -416,20 +413,20 @@ export default function App() {
             )
           }
         />
-        {['/', '/story/:storyId'].map((path) => (
+        {[ROUTES.HOME, ROUTES.STORY(':storyId')].map((path) => (
           <Route
             key={path}
             path={path}
             element={
               <SceneActionsContext.Provider value={sceneActionsValue}>
                 <div className="flex flex-1 overflow-hidden relative z-10">
-                  <div className="flex-1 relative flex flex-col">
-                    <StoryCanvas key={storyId || 'new'} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={viewingReadOnly ? null : displayPrompt} spreadPrompts={viewingReadOnly ? null : spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} onLanguageChange={scenes.length === 0 ? setLanguage : undefined} />
+                  <div className="flex-1 relative flex flex-col min-w-0">
+                    <StoryCanvas key={canvasKey} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onGenreClick={handleGenreClick} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={viewingReadOnly ? null : displayPrompt} spreadPrompts={viewingReadOnly ? null : spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} onLanguageChange={scenes.length === 0 ? setLanguage : undefined} singlePage={singlePage} />
                     {!viewingReadOnly && storyStatus !== 'completed' && (
-                      <ControlBar onSend={(text, opts) => send(text, opts)} onSendAudio={(b64, mime) => sendAudio(b64, mime)} onSteer={sendSteer} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} usage={usage} />
+                      <ControlBar onSend={(text, opts) => send(text, opts)} onSendAudio={(b64, mime) => sendAudio(b64, mime)} onSteer={sendSteer} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} usage={usage} onHeroPhoto={sendHeroPhoto} heroMode={heroMode} />
                     )}
                   </div>
-                  {directorOpen && !viewingReadOnly && <DirectorPanel data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} sceneTitles={activeBatchSceneTitles} imageTiers={imageTiers} portraits={portraits} portraitsLoading={portraitsLoading} language={language} liveNotes={directorLiveNotes} chatActive={directorChatActive} chatMessages={directorChatMessages} chatLoading={directorChatLoading} chatPrompt={directorChatPrompt} autoGenerate={directorAutoGenerate} onCancelAutoGenerate={() => setDirectorAutoGenerate(null)} onStartChat={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; startDirectorChat(ctx, { language, voiceName: directorVoice }); }} onEndChat={endDirectorChat} onChatAudio={sendDirectorChatAudio} onChatSuggest={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; suggestDirectorPrompt(ctx); }} onUsePrompt={(prompt) => { setControlBarInput(prompt); }} />}
+                  {directorOpen && !viewingReadOnly && <DirectorPanel singlePage={singlePage} heroMode={heroMode} data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} sceneTitles={activeBatchSceneTitles} imageTiers={imageTiers} portraits={portraits} portraitsLoading={portraitsLoading} language={language} liveNotes={directorLiveNotes} chatActive={directorChatActive} chatMessages={directorChatMessages} chatLoading={directorChatLoading} chatPrompt={directorChatPrompt} autoGenerate={directorAutoGenerate} onCancelAutoGenerate={cancelDirectorAutoGenerate} onStartChat={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; startDirectorChat(ctx, { language, voiceName: directorVoice }); }} onEndChat={endDirectorChat} onChatAudio={sendDirectorChatAudio} onChatSuggest={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; suggestDirectorPrompt(ctx); }} onUsePrompt={(prompt) => { setControlBarInput(prompt); }} />}
                 </div>
               </SceneActionsContext.Provider>
             }
@@ -447,7 +444,7 @@ export default function App() {
       )}
 
       {settingsOpen && (
-        <SettingsDialog onClose={() => setSettingsOpen(false)} theme={theme} toggleTheme={toggleTheme} directorVoice={directorVoice} setDirectorVoice={handleSetDirectorVoice} />
+        <SettingsDialog onClose={() => setSettingsOpen(false)} theme={theme} toggleTheme={toggleTheme} directorVoice={directorVoice} setDirectorVoice={handleSetDirectorVoice} bookLayout={bookLayout} setBookLayout={handleSetBookLayout} />
       )}
     </div>
   );

@@ -35,7 +35,12 @@ export default function useCompactAudio(src) {
       }
     };
     window.addEventListener('storyforge:audio:play', onOtherPlay);
-    return () => window.removeEventListener('storyforge:audio:play', onOtherPlay);
+    return () => {
+      window.removeEventListener('storyforge:audio:play', onOtherPlay);
+      // Pause audio on unmount to prevent orphaned playback
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      audioRef.current?.pause();
+    };
   }, []);
 
   const togglePlay = () => {

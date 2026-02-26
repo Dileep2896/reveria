@@ -1,0 +1,19 @@
+import { useEffect } from 'react';
+
+export default function useDirectorAutoGenerate(directorAutoGenerate, send, setDirectorAutoGenerate, generating) {
+  useEffect(() => {
+    if (!directorAutoGenerate) return;
+    // Don't fire if already generating — would be rejected by backend anyway
+    if (generating) return;
+    const timer = setTimeout(() => {
+      send(directorAutoGenerate.prompt, {
+        artStyle: directorAutoGenerate.artStyle,
+        sceneCount: directorAutoGenerate.sceneCount,
+        language: directorAutoGenerate.language,
+        fromDirector: true,
+      });
+      setDirectorAutoGenerate(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [directorAutoGenerate, send, setDirectorAutoGenerate, generating]);
+}

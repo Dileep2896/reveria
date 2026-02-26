@@ -15,7 +15,7 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Multimodal Storytelling** - Text, images, and audio stream together in real-time as an interactive flipbook
 - **Voice Input** - Hold-to-talk voice capture using Web Audio API for hands-free story steering
 - **Audio Narration** - Gemini native audio (via Live API) narrates each scene with expressive, mood-adaptive voiceover
-- **Art Style Selection** - Choose from 6 visual styles: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, Pencil Sketch
+- **Art Style Selection** - Choose from 10 visual styles: Cinematic, Watercolor, Comic Book, Anime, Pixar 3D, Studio Ghibli, Marvel Comic, Cyberpunk, Oil Painting, Pencil Sketch (4 trend styles unlock with Hero Mode)
 - **Genre Quick-Start** - Click a genre pill (Mystery, Fantasy, Sci-Fi, Horror, Children's) to populate a starter prompt
 - **Story Continuation & Steering** - Send follow-up prompts to continue, redirect, or reshape the story mid-flow
 - **Per-Scene Streaming** - Images and audio generate per-scene as text completes, not after all scenes. Scene 1's image paints in while Scene 2 is still being written.
@@ -65,8 +65,14 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Powered by Gemini** - Subtle branding badge in Director Chat with Gemini gradient sparkle icon
 - **Voice Preview** - Hear a sample of each Director voice before selecting in Settings
 - **Director-Driven Intent Detection** - Director controls when to generate scenes, exploring ideas fully before suggesting
+- **Character Consistency** - Automatic character reference sheet extraction with hex color codes, signature items, and anti-drift anchoring ensures characters look the same across every scene illustration
+- **Separated Generation Modes** - ControlBar generates stories with narrator + images + audio only (fast, no Director overhead). Director Chat triggers full Director pipeline with live commentary, proactive scene reactions, and creative suggestions
 - **Token Expiry Recovery** - Automatic WebSocket reconnection and REST token refresh on auth failure
 - **404 Page** - Themed not-found page with navigation to create or explore stories
+- **Hero Mode** - Upload a selfie to become the protagonist; Gemini Vision extracts Visual DNA, injected into character sheets for personalized illustrations in trend art styles (Pixar 3D, Studio Ghibli, Marvel Comic, Cyberpunk)
+- **Centralized Route Constants** - All navigation paths defined in `src/routes.js` as a single source of truth; eliminates hardcoded path strings across the codebase
+- **Marble Avatar Fallbacks** - Users without profile photos get unique deterministic marble gradient avatars (via `boring-avatars`) instead of plain initials; color palette matches the app's accent theme
+- **Production-Grade Routing** - SPA-friendly navigation with `<Link>` components, trailing-slash normalization, and centralized route prefixes for pathname matching
 
 ---
 
@@ -304,7 +310,7 @@ pytest -v
 | `test_health_returns_ok` | `GET /health` → 200, `{status: ok, adk: true}` |
 | `test_public_story_not_found` | `GET /api/public/stories/<id>` → 404 for missing story |
 | `test_social_stats_not_found` | `GET /api/public/stories/<id>/social` → 404 |
-| `test_list_comments_empty` | `GET /api/public/stories/<id>/comments` → empty list |
+| `test_list_comments_nonexistent_story` | `GET /api/public/stories/<id>/comments` → 404 for non-public/missing story |
 | `test_delete_story_no_auth` | `DELETE /api/stories/<id>` without auth → 422 |
 | `test_get_usage_no_auth` | `GET /api/usage` without auth → 422 |
 | `test_bookmark_returns_null_for_missing` | Auth'd bookmark request → `{scene_index: null}` |
@@ -412,7 +418,7 @@ Step 3: Image Generation (Imagen 3)
 - On subsequent batches, it **merges** new characters into the existing sheet while preserving existing descriptions unchanged
 - The accumulated story text (all batches separated by `---`) is used for extraction, not just the current batch
 
-**Art styles** are appended as suffixes to the image prompt. Six styles are available: Cinematic, Watercolor, Comic Book, Anime, Oil Painting, and Pencil Sketch.
+**Art styles** are appended as suffixes to the image prompt. Ten styles are available: Cinematic, Watercolor, Comic Book, Anime, Pixar 3D, Studio Ghibli, Marvel Comic, Cyberpunk, Oil Painting, and Pencil Sketch. The four trend styles (Pixar 3D, Studio Ghibli, Marvel Comic, Cyberpunk) are highlighted in a grouped dropdown when Hero Mode is active.
 
 #### 3. Director Agent
 
@@ -674,7 +680,9 @@ storyforge/
 │   ├── src/
 │   │   ├── App.jsx                    # Main app - routing, header, save/complete/publish flows
 │   │   ├── firebase.js                # Firebase config and Firestore exports
+│   │   ├── routes.js                    # Centralized route path constants (ROUTES object)
 │   │   ├── components/
+│   │   │   ├── UserAvatar.jsx          # Reusable avatar with marble gradient fallback (boring-avatars)
 │   │   │   ├── Logo.jsx + Logo.css    # Animated StoryForge logo
 │   │   │   ├── StoryCanvas.jsx        # Flipbook with page-turn animation
 │   │   │   ├── SceneCard.jsx          # Scene: image + text + audio with drop cap
@@ -899,7 +907,7 @@ VITE_WS_URL=ws://localhost:8000/ws
 
 - **Book Layout Preference** — Single-page / two-page spread toggle for personalized reading experience
 - **Multi-Voice Narration** — Character-specific voices based on gender and age for immersive audiobook narration
-- **Custom Character Portraits** — Upload your own photos to create personalized characters, enabling auto-biographies and self-insert stories
+- **Face Mesh Control** — `ControlReferenceImage` with `CONTROL_TYPE_FACE_MESH` for even stronger likeness (deferred due to pose constraints)
 
 ---
 

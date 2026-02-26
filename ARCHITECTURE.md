@@ -32,18 +32,42 @@
 When `title_generated` is true, NEVER overwrite `title` or `cover_image_url`. Only update `status` and `updated_at`.
 
 ## Routing
+
+All route paths are centralized in `src/routes.js` as the `ROUTES` constant — single source of truth for all navigation, `<Route path>` definitions, `navigate()` calls, `<Link to>` targets, and `pathname.startsWith()` checks.
+
+```js
+export const ROUTES = {
+  HOME: '/',
+  STORY: (id) => `/story/${id}`,
+  STORY_PREFIX: '/story/',
+  LIBRARY: '/library',
+  EXPLORE: '/explore',
+  BOOK: (id) => `/book/${id}`,
+  BOOK_PREFIX: '/book/',
+  SUBSCRIPTION: '/subscription',
+  TERMS: '/terms',
+  ADMIN: '/admin',
+};
+```
+
 - `/` — Empty canvas (new story prompt)
 - `/story/:storyId` — Story view (redirected here automatically when storyId is set)
 - `/story/:storyId?page=N` — Story at specific page (persists across reload)
 - `/library` — User's saved/draft stories
 - `/explore` — Public stories from all users
+- `/book/:storyId` — Public BookDetailsPage (likes, ratings, comments)
+- `/subscription` — Subscription tier page
+- `/terms` — Terms of Service
+- `/admin` — Admin dashboard (admin-only)
 
 ### URL ↔ State Sync
-- **storyId → URL**: Effect in App.jsx navigates to `/story/:id` when storyId changes (replace)
+- **storyId → URL**: Effect in useAppEffects.js navigates to `ROUTES.STORY(storyId)` when storyId changes (replace)
 - **URL → story load**: `useActiveStory(user, urlStoryId)` loads story from URL on boot
 - **Page → URL**: `StoryCanvas` updates `?page=N` via `history.replaceState` on every flip
 - **URL → page**: `initialPageRef` reads `?page` on mount → sets `startPage` + `currentPage` (no flash)
-- Navigation: Library/Explore back buttons → `/story/:id`, New Story → `/`, Logo → `/story/:id`
+- **Trailing slash normalization**: `pathname.replace(/\/+$/, '') || '/'` applied in App.jsx and useAppEffects.js
+- **SPA navigation**: All internal links use `<Link>` or `navigate()` (no `<a href>` causing full page reloads)
+- Navigation: Library/Explore back buttons → `ROUTES.STORY(id)`, New Story → `ROUTES.HOME`, Logo → `ROUTES.STORY(id)`
 
 ## Image Error Handling
 
@@ -62,7 +86,7 @@ When `title_generated` is true, NEVER overwrite `title` or `cover_image_url`. On
 
 ## WebSocket Reconnection
 - `storyIdRef` in `useWebSocket` tracks current story ID (stays in sync via `story_id` message + `load()` + `reset()`)
-- On `ws.onopen`, sends `resume` with `storyIdRef.current` (handles reconnects for newly created stories)
+- On `ws.onopen`, sends `{type:'auth', token}` first (first-message auth), then `resume` with `storyIdRef.current` (handles reconnects for newly created stories)
 
 ## Firestore Document Structure (stories collection)
 
@@ -111,6 +135,15 @@ When `title_generated` is true, NEVER overwrite `title` or `cover_image_url`. On
 - Scene media: `stories/{story_id}/scenes/{scene_number}/{image|audio}.{ext}`
 - Book cover: `stories/{story_id}/cover.png`
 
+## User Avatar System
+
+`UserAvatar.jsx` — reusable component for all avatar displays across the app:
+- If `photoURL` exists → renders `<img>` with the photo
+- If no photo → renders a `boring-avatars` marble gradient SVG, seeded by user's display name (deterministic — same name = same avatar)
+- Color palette: `['#f59e0b', '#a78bfa', '#6366f1', '#ec4899', '#14b8a6']` — matches app accent theme
+- Used in: ProfileMenu (header 28px + dropdown 36px), ExplorePage (24px), BookDetailsPage (28px), BookCommentSection (28px), AdminUserTable (32px), UserDetailModal (56px)
+- Zero network requests — renders client-side as SVG via the `boring-avatars` package
+
 ## Per-Scene Streaming Pipeline (Session 54)
 
 ### Pipeline Structure
@@ -123,28 +156,36 @@ When `title_generated` is true, NEVER overwrite `title` or `cover_image_url`. On
 2. For each completed scene → `_on_scene_ready()`:
    a. Send scene text via `ws_callback`
    b. Extract characters once (first scene only) via `illustrator.extract_characters()`
-   c. `asyncio.create_task(_generate_image(scene))` — rate-limited by `Semaphore(1)`
+   c. `asyncio.create_task(_generate_image(scene))` — rate-limited by module-level `Semaphore(1)` in `imagen_client.py`
    d. `asyncio.create_task(_generate_audio(scene))`
-   e. `asyncio.create_task(_director_live(scene))` — per-scene commentary
+   e. `asyncio.create_task(_director_live(scene))` — **only when `director_enabled=True`**
 3. After narrator loop: `await asyncio.gather(*pending_tasks)`
-4. Between scenes: check `steering_queue`, inject into narrator history
+4. Between scenes: check `steering_queue` (`asyncio.Queue`), inject into narrator history
 
 ### Mid-Generation Steering
 - Frontend sends `{ type: "steer", content: text }` via WebSocket
-- `main.py` pushes to `shared_state.steering_queue` and sends `steer_ack`
-- `NarratorADKAgent` pops from queue between scenes, injects `types.Content(role="user")` into narrator history
+- `main.py` pushes to `shared_state.steering_queue` (`asyncio.Queue`) via `.put_nowait()` and sends `steer_ack`
+- `NarratorADKAgent` checks queue between scenes with `.get_nowait()`, injects `types.Content(role="user")` into narrator history
 - Next scene picks up steering via history-based continuity
 - ControlBar stays active during generation (steer mode with compass icon)
 
-### Live Director Commentary (Director-as-Driver)
+### Live Director Commentary (Director-as-Driver) — Director-Triggered Only
+- **Only fires when `SharedPipelineState.director_enabled=True`** (set from `from_director` message flag)
 - `director.analyze_scene(scene_text, scene_number, user_prompt, art_style, story_context)`
 - Returns JSON: `{ scene_number, thought, mood, tension_level, craft_note, emoji, suggestion }`
 - `suggestion`: bold creative direction for what should happen next (cross-batch influence)
 - Uses `gemini-2.0-flash`, temp 0.3, 300 max tokens, `response_mime_type="application/json"`
 - Sent as `director_live` WS message; frontend shows animated cards in DirectorPanel
-- Full director analysis still runs post-batch via `DirectorADKAgent`
-- **Cross-batch influence**: `suggestion` stored on `SharedPipelineState.director_suggestion`. At the start of each new batch, `NarratorADKAgent._run_async_impl` prepends `[Director's creative direction: ...]` to narrator input if set, then clears it. Director analysis of batch N shapes batch N+1.
+- Full director analysis still runs post-batch via `DirectorADKAgent` (also gated on `director_enabled`)
+- **Cross-batch influence**: `suggestion` stored on `SharedPipelineState.director_suggestion`. Injected into narrator input at start of next batch only when `director_enabled` is True.
 - **Director Chat routing**: When `director_chat_session` is active, `_director_live()` skips standalone `live_commentary()` and routes voice through `proactive_comment()` instead. Structured data (`director_live` WS message) still sent either way.
+
+### ControlBar vs Director Generation (Separated)
+- **ControlBar generation** (`from_director=false`, default): Narrator + Illustrator + TTS only. No Director involvement — no `analyze_scene()`, no `live_commentary()`, no post-batch `analyze()`, no `proactive_comment()`, no `generation_wrapup()`.
+- **Director-triggered generation** (`from_director=true`): Full pipeline with all Director features.
+- Frontend: `directorAutoGenerate` effect in `App.jsx` sends `fromDirector: true` in send options → `useWebSocket.js` maps to `msg.from_director` in the WS message.
+- Backend: `main.py` reads `from_director` from message, passes as `director_enabled` kwarg to `_run_adk_pipeline()`. Sets `shared_state.director_enabled` and only passes `director_chat_session` when enabled.
+- Gating points: suggestion injection (orchestrator), `_director_live()` task creation, `DirectorADKAgent._run_async_impl`, `generation_wrapup` in main.py.
 
 ### WS Message Types (New)
 - `director_live`: per-scene director commentary during generation
@@ -210,7 +251,7 @@ When `title_generated` is true, NEVER overwrite `title` or `cover_image_url`. On
 
 ### Seamless Director Chat During Generation
 
-When Director Chat is active and the user triggers generation (via `generate_story` tool call), the Director stays engaged throughout:
+When Director Chat is active and the user triggers generation (via `generate_story` tool call, which sets `from_director=true`), the Director stays engaged throughout:
 
 #### Flow
 ```
@@ -227,9 +268,10 @@ Director Chat active → generate_story tool fires → generation starts
 ```
 
 #### Backend Changes
-- `SharedPipelineState.director_chat_session`: Set by `main.py` before pipeline run
-- `_director_live()` in orchestrator: checks `s.director_chat_session`; if active, routes voice through `proactive_comment()` instead of `live_commentary()`. Falls back to standalone on failure.
-- `main.py`: passes `director_chat=director_chat` kwarg to `_run_adk_pipeline()`; calls `generation_wrapup()` after persist + batch_index increment
+- `SharedPipelineState.director_enabled`: Set from `from_director` message flag; gates all Director work
+- `SharedPipelineState.director_chat_session`: Only set when `director_enabled=True`
+- `_director_live()` in orchestrator: only fires when `director_enabled=True`. Checks `s.director_chat_session`; if active, routes voice through `proactive_comment()` instead of `live_commentary()`. Falls back to standalone on failure.
+- `main.py`: passes `director_chat=director_chat` + `director_enabled=from_director` kwargs to `_run_adk_pipeline()`; calls `generation_wrapup()` after persist + batch_index increment (only when `from_director=True`)
 
 #### Frontend Changes
 - `DirectorChat.jsx`: new `generating` prop → `watching` orbState; auto-resume suppressed during generation; auto-resumes 800ms after generation ends via `prevGenerating` ref
@@ -237,7 +279,8 @@ Director Chat active → generate_story tool fires → generation starts
 - `director-panel.css`: `.watching` orb styles — accent-primary rings, spinning animation, pulsing glow, eye icon animation
 
 #### Edge Cases
-- Director Chat NOT active: zero changes — existing `analyze_scene()` + `live_commentary()` flow unchanged
+- ControlBar generation (`from_director=false`): zero Director involvement — just narrator + images + audio
+- Director Chat NOT active but `from_director=true`: standalone `analyze_scene()` + `live_commentary()` flow runs
 - `proactive_comment()` failure: falls back to standalone `live_commentary()` for that scene
 - Accidental tool calls during proactive comment: stripped from result (`result["tool_calls"] = []`)
 - Session lock contention: scenes queue up rather than racing
@@ -276,3 +319,90 @@ Director Chat active → generate_story tool fires → generation starts
 - `NotFoundPage.jsx`: Themed 404 with book icon, "Write a new story" / "Explore stories" buttons
 - `ErrorBoundary.jsx`: CSS variable theming with hardcoded fallbacks (theme context may not be available), background orbs, glass card
 - Route: Explicit `<Route path="*">` catch-all separate from story canvas routes
+
+## Backend Resilience (Session 55)
+
+### Non-Blocking WebSocket Loop
+- `handle_generate` runs as `asyncio.create_task()` — WS loop continues processing steer/director/regen messages during generation
+- `generation_task` tracked in WS handler scope; duplicate requests rejected if task still running
+- Scene actions (`regen_image`, `regen_scene`, `delete_scene`) accept `is_generating` kwarg — return error if True
+- `generation_task` cancelled in `finally` block on disconnect
+
+### Per-User Imagen Circuit Breaker
+- `imagen_client._user_quota_exhausted: dict[str, float]` — per-user circuit breaker (keyed by uid, default `"__global__"`)
+- On quota exhaustion: `_user_quota_exhausted[uid] = time.monotonic()`. On success: `.pop(uid, None)`
+- Retry jitter: `delay = base * (2 ** attempt) + random.uniform(0, base * 0.3)`
+- `uid` threaded: `SharedPipelineState.uid` → `NarratorADKAgent` → `illustrator.generate_for_scene(uid=)` → `generate_image(uid=)`
+
+### Centralized Imagen Semaphore
+- Module-level lazy `asyncio.Semaphore(1)` in `imagen_client.py` via `_get_semaphore()`
+- Wraps entire `generate_image()` body — all callers (narrator, portraits, scene regen, cover) serialized
+- Removed: instance `_image_sem` from `NarratorADKAgent`
+
+### Retry Infrastructure
+- `utils/retry.py`: `is_transient(exc)` (429/500/503/unavailable/deadline), `with_retries(coro_factory, attempts, skip_exc_types)`
+- `gemini_client.py`: `generate_stream` has 3-attempt retry loop for transient errors (NOT `ContentBlockedError`); `transcribe_audio` wrapped in `with_retries()`
+- `storage_client.py`: `gcs_retry.Retry(deadline=60.0)` on all `upload_from_string()` and `blob.delete()` calls
+
+### GCS Robustness
+- `_make_public_or_sign(blob)`: tries `make_public()`, falls back to 7-day signed URL via `generate_signed_url(version="v4")`
+- `delete_story_media`: deletes blobs individually with retry (not batch `bucket.delete_blobs()`)
+
+### Thread-Safe SharedPipelineState
+- `steering_queue`: `asyncio.Queue[str]` (was `list[str]`) — `.put_nowait()` in `main.py`, `.get_nowait()` in narrator
+- `_live_notes_lock`: `asyncio.Lock()` guards `director_live_notes.append()` and snapshot before `persist_story()`
+
+### Atomic Usage Tracking
+- `increment_usage` / `decrement_usage` use `@firestore.async_transactional` — read+check+write inside transaction
+- Automatic contention retry (Firestore transactions retry up to 5 times by default)
+
+### Batched Firestore Deletions
+- `delete_story` subcollection deletion: 450-doc batches via `db.batch()` (Firestore max 500)
+- Loop: stream → `batch.delete(ref)` → `batch.commit()` → break when < 450 docs
+
+### TTS Silence Insertion
+- `multi_voice_tts._generate_silence_pcm(duration_ms, sample_rate=24000)` — silent 16-bit LE PCM
+- On segment failure: insert proportional silence (`min(max(word_count * 100, 300), 3000)` ms) instead of skipping
+- ALL segments fail → single-voice fallback still works
+
+### Efficient Scene Counting
+- `scene_actions.py` handle_delete_scene: `.select([]).stream()` for counting remaining scenes (downloads doc refs only, no field data)
+
+## WebSocket Authentication
+
+### First-Message Auth (Preferred)
+- Frontend: `new WebSocket(WS_URL)` (no token in URL). In `onopen`, sends `{type:'auth', token}` before resume message.
+- Backend: Accepts connection first. If no `?token` query param, waits up to 10s for `{type:'auth', token:'...'}` first message.
+- Validates token via `verify_token(token, full=True)`. Closes with 4003 on failure.
+
+### Query Param Auth (Legacy, Backward Compat)
+- Backend still checks `websocket.query_params.get("token")` first.
+- If present, uses it directly (no first-message wait).
+- Deploy order: backend first (supports both), then frontend.
+
+## Director Chat Security Enhancements
+
+### Audio Screening Tool-Call Suppression
+- `director_chat.py` `send_audio()`: When post-screening fails AND `result["tool_calls"]` is non-empty, calls `_reject_tool_call()` for each tool call, returns with `tool_calls: []`
+- `_reject_tool_call(tc)`: Sends rejection `FunctionResponse` + consumes model's ack. Called inside `_session_lock`.
+
+### Tool Call Prompt Screening
+- `director_chat_handlers.py`: Before processing `generate_story` tool call, runs `_screen_input()` on the prompt argument.
+- If flagged: rejects via `respond_to_tool_call(tc, success=False)` — model gets cancellation reason.
+- Applied to both `handle_director_chat_audio` and `handle_director_chat_text`.
+
+## Future Work
+
+### Floating Director Orb for Mobile
+- Move DirectorChat voice orb out of sidebar into a floating FAB (bottom-right) on mobile
+- Tap to expand into bottom-sheet drawer showing live transcript
+- Voice input is most natural on mobile — ensures Director Mode is accessible on phones
+- Requires: responsive breakpoint detection, draggable FAB component, bottom-sheet animation
+
+### Cinematic Video Scenes (Veo 2)
+- Use Google Veo 2 API to generate short video clips for high-tension climax scenes
+- Trigger: tension_level >= 8 from Director's analyze_scene()
+- Wrap `<video>` in animated golden "Cinematic" border
+- Auto-play on page flip, seamless loop, cross-fade over blurred placeholder
+- Distinguish video scenes from static illustrations as a narrative reward
+- Requires: Veo 2 API integration, video upload to GCS, new WS message type, video player component

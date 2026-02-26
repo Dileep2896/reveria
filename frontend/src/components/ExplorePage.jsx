@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '../routes';
+import UserAvatar from './UserAvatar';
 import {
   db,
   collection,
@@ -109,18 +111,7 @@ function PublicBookCard({ book, onOpen, onToggleLike, userId }) {
       {/* Author + like row below book */}
       <div className="explore-book-footer">
         <div className="explore-book-author">
-          {book.author_photo_url ? (
-            <img
-              className="explore-book-avatar"
-              src={book.author_photo_url}
-              alt={book.author_name}
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <div className="explore-book-avatar explore-book-avatar--fallback">
-              {(book.author_name || '?')[0].toUpperCase()}
-            </div>
-          )}
+          <UserAvatar photoURL={book.author_photo_url} name={book.author_name || '?'} size={24} />
           <span className="explore-book-author-name">{book.author_name}</span>
         </div>
 
@@ -218,7 +209,7 @@ export default function ExplorePage({ user }) {
   }, [books, searchQuery, sortBy, showLiked, user]);
 
   const handleOpen = useCallback((book) => {
-    navigate(`/book/${book.id}`, { state: { from: 'explore' } });
+    navigate(ROUTES.BOOK(book.id), { state: { from: 'explore' } });
   }, [navigate]);
 
   const stickyHeader = (compact) => (

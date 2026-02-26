@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
 const WS_URL_BASE = (import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws').replace(/\/ws\/?$/, '').replace(/^ws/, 'http');
 
@@ -13,7 +14,8 @@ const VOICES = [
   { id: 'Zephyr', label: 'Zephyr', desc: 'Breezy & casual' },
 ];
 
-export default function SettingsDialog({ onClose, theme, toggleTheme, directorVoice, setDirectorVoice }) {
+export default function SettingsDialog({ onClose, theme, toggleTheme, directorVoice, setDirectorVoice, bookLayout, setBookLayout }) {
+  const { idToken } = useAuth();
   const [previewLoading, setPreviewLoading] = useState(null);
   const [previewPlaying, setPreviewPlaying] = useState(null);
   const audioRef = useRef(null);
@@ -49,7 +51,10 @@ export default function SettingsDialog({ onClose, theme, toggleTheme, directorVo
     abortRef.current = controller;
 
     try {
-      const res = await fetch(`${WS_URL_BASE}/api/voice-preview/${voiceId}`, { signal: controller.signal });
+      const res = await fetch(`${WS_URL_BASE}/api/voice-preview/${voiceId}`, {
+        signal: controller.signal,
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+      });
       const data = await res.json();
       if (controller.signal.aborted) return;
 
@@ -67,7 +72,7 @@ export default function SettingsDialog({ onClose, theme, toggleTheme, directorVo
     } catch {
       if (!controller.signal.aborted) setPreviewLoading(null);
     }
-  }, [setDirectorVoice]);
+  }, [setDirectorVoice, idToken]);
 
   return (
     <div
@@ -205,6 +210,79 @@ export default function SettingsDialog({ onClose, theme, toggleTheme, directorVo
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
               </svg>
               Dark
+            </button>
+          </div>
+        </div>
+
+        {/* ── Book Layout ── */}
+        <div style={{ marginBottom: '1.4rem' }}>
+          <div style={{
+            fontSize: '9px',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'var(--text-muted)',
+            marginBottom: '8px',
+          }}>
+            Book Layout
+          </div>
+          <div style={{
+            display: 'flex',
+            gap: '6px',
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: '999px',
+            padding: '3px',
+          }}>
+            <button
+              onClick={() => setBookLayout?.('single')}
+              style={{
+                flex: 1,
+                padding: '6px 0',
+                borderRadius: '999px',
+                border: 'none',
+                background: bookLayout === 'single' ? 'var(--accent-primary)' : 'transparent',
+                color: bookLayout === 'single' ? '#fff' : 'var(--text-muted)',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15z" />
+              </svg>
+              Single
+            </button>
+            <button
+              onClick={() => setBookLayout?.('spread')}
+              style={{
+                flex: 1,
+                padding: '6px 0',
+                borderRadius: '999px',
+                border: 'none',
+                background: bookLayout === 'spread' ? 'var(--accent-primary)' : 'transparent',
+                color: bookLayout === 'spread' ? '#fff' : 'var(--text-muted)',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+              Spread
             </button>
           </div>
         </div>

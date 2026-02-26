@@ -465,6 +465,33 @@
   50% { transform: scale(1.08); opacity: 1; }
 }
 
+/* ── Waiting (cast upload) state ── */
+.director-voice-orb.waiting {
+  cursor: default;
+}
+.director-voice-orb.waiting .voice-orb-inner {
+  color: var(--accent-secondary);
+  opacity: 0.7;
+}
+.director-voice-orb.waiting .voice-ring-1 {
+  opacity: 0.25;
+  border-color: var(--accent-secondary);
+  animation: voiceRingSpin 5s linear infinite;
+}
+.director-voice-orb.waiting .voice-ring-2 {
+  opacity: 0.12;
+  border-color: var(--accent-secondary);
+  animation: voiceRingSpin 7s linear infinite reverse;
+}
+.director-voice-orb.waiting .voice-glow {
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-secondary) 15%, transparent);
+  animation: voiceWaitPulse 3s ease-in-out infinite;
+}
+@keyframes voiceWaitPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
 /* ── Waveform bars ── */
 .voice-wave {
   display: flex;

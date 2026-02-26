@@ -8,7 +8,7 @@ import SceneImageArea from './scene/SceneImageArea';
 import SceneTextArea from './scene/SceneTextArea';
 
 /* ── Revealed scene with cinematic animation ── */
-function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
+function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePage }) {
   const { sceneBusy } = useSceneActions();
   const isBusy = sceneBusy.has(scene.scene_number);
 
@@ -101,6 +101,9 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
   const skip = hasAnimated.current && !isRegen;
   const animateText = (showText && !hasAnimated.current) || isRegen;
 
+  // Capture at mount: is this a fresh scene arriving during generation?
+  const isTypewriterRef = useRef(!preloaded && !cached && !isError);
+
   const audio = useCompactAudio(scene.audio_url);
 
   return (
@@ -123,7 +126,7 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
         scene={scene} scale={scale} displayIndex={displayIndex}
         imageLoaded={imageLoaded} imageFailed={imageFailed} isBusy={isBusy}
         showError={showError} preloaded={preloaded} skip={skip}
-        wasRegenerated={wasRegenerated}
+        wasRegenerated={wasRegenerated} singlePage={singlePage}
       />
 
       <SceneTextArea
@@ -131,19 +134,20 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
         animateText={animateText} isRegen={isRegen} textRegenKey={textRegenKey}
         textWasRegenerated={textWasRegenerated}
         rewriting={awaitingTextRegen}
+        isTypewriter={isTypewriterRef.current && !isRegen}
       />
     </div>
   );
 }
 
 /* ── Main SceneCard: decides composing vs revealed ── */
-export default function SceneCard({ scene, scale = 1, displayIndex, isBookmarked }) {
+export default function SceneCard({ scene, scale = 1, displayIndex, isBookmarked, singlePage }) {
   const wrapperStyle = scene._deleting
     ? { animation: 'sceneDeleteOut 0.5s ease-in forwards', height: '100%' }
     : { height: '100%' };
 
   const content = scene.text
-    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} />
+    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} singlePage={singlePage} />
     : <SceneComposing sceneNumber={scene.scene_number} displayIndex={displayIndex} scale={scale} />;
 
   return <div style={wrapperStyle}>{content}</div>;

@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '../routes';
 
 export default function NotFoundPage() {
   const navigate = useNavigate();
@@ -52,7 +53,7 @@ export default function NotFoundPage() {
       </p>
       <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate(ROUTES.HOME)}
           style={{
             padding: '0.6rem 1.5rem',
             borderRadius: '999px',
@@ -70,7 +71,7 @@ export default function NotFoundPage() {
           Write a new story
         </button>
         <button
-          onClick={() => navigate('/explore')}
+          onClick={() => navigate(ROUTES.EXPLORE)}
           style={{
             padding: '0.6rem 1.5rem',
             borderRadius: '999px',

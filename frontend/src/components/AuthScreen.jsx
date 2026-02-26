@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ROUTES } from '../routes';
 import Logo from './Logo';
 import './AuthScreen.css';
 
@@ -333,7 +335,7 @@ export default function AuthScreen({ onSignInWithGoogle, onSignInWithEmail, onSi
 
             <p className="auth-footer">
               By continuing, you agree to StoryForge's{' '}
-              <a href="/terms" className="auth-footer-link">Terms of Service</a>
+              <Link to={ROUTES.TERMS} className="auth-footer-link">Terms of Service</Link>
             </p>
           </div>
         </div>

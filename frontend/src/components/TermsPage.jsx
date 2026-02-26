@@ -149,6 +149,17 @@ export default function TermsPage() {
                 We even built an admin dashboard with user management (tier changes, account
                 deletion with cascade) because we believe in doing things properly.
               </p>
+              
+              <h3>5.1 Cast Character Photos (Privacy & Safety)</h3>
+              <p>
+                If you use the "Cast Character" feature to upload a photo of yourself or others:
+              </p>
+              <ul className="terms-list">
+                <li><strong>Analysis Only:</strong> The photo is sent securely to Google Gemini Vision strictly to extract a text-based physical description (e.g., hair color, skin tone hex, glasses).</li>
+                <li><strong>No Deepfakes:</strong> The photo is <strong>never</strong> used as a direct image-to-image reference for generation. The system only uses the text description to generate a stylized character illustration.</li>
+                <li><strong>Ephemeral Storage:</strong> The uploaded image file is processed in memory and is <strong>not stored</strong> on our servers, databases, or cloud storage buckets after the description is generated.</li>
+                <li><strong>Consent & Safety:</strong> By uploading a photo, you confirm you have the right and consent to process that individual's likeness. Photos are subject to Google Cloud's safety filters and will be rejected if they contain prohibited content.</li>
+              </ul>
             </section>
 
             <section className="terms-section">

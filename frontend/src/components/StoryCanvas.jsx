@@ -10,7 +10,7 @@ import GeneratingContent from './storybook/GeneratingContent';
 import useBookSize from '../hooks/useBookSize';
 import useStoryNavigation, { spreadLeftPage } from '../hooks/useStoryNavigation';
 
-const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWithinSpread, pageNum, scale, hasScenes, displayIndex, isBookmarked }, ref) {
+const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWithinSpread, pageNum, scale, hasScenes, displayIndex, isBookmarked, singlePage }, ref) {
   const showAsPage = scene || isGenerating || isWithinSpread;
   const isEmpty = showAsPage && !scene && !isGenerating && hasScenes;
 
@@ -18,7 +18,7 @@ const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWit
     <div ref={ref} className={showAsPage ? `book-page ${pageNum % 2 === 1 ? 'book-page-left' : 'book-page-right'}` : 'book-page-slot'}>
       {scene ? (
         <div className="book-page-inner">
-          <SceneCard scene={scene} scale={scale || 1} displayIndex={displayIndex} isBookmarked={isBookmarked} />
+          <SceneCard scene={scene} scale={scale || 1} displayIndex={displayIndex} isBookmarked={isBookmarked} singlePage={singlePage} />
         </div>
       ) : isGenerating ? (
         <GeneratingContent />
@@ -84,9 +84,9 @@ function CoverLanguagePicker({ language, onChange }) {
   );
 }
 
-const PAGE_SLOTS = 21;
+const MIN_PAGE_SLOTS = 21;
 
-function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English', onLanguageChange }) {
+function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English', onLanguageChange, singlePage = false }) {
   const { theme } = useTheme();
   const lang = getLangData(language);
   const bookRef = useRef(null);
@@ -98,7 +98,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
   });
   if (typeof initialPageRef.current === 'function') initialPageRef.current = initialPageRef.current();
   const [currentPage, setCurrentPage] = useState(initialPageRef.current);
-  const bookSize = useBookSize(wrapperRef);
+  const bookSize = useBookSize(wrapperRef, singlePage);
 
   const hasComposing = scenes.some((s) => s.image_url === null);
   const showGenerating = generating && !hasComposing;
@@ -119,7 +119,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
     if (!bookRef.current) return;
 
     if (generating && !prevGenerating.current && scenes.length > 0) {
-      const target = spreadLeftPage(scenes.length + 1);
+      const target = singlePage ? scenes.length + 1 : spreadLeftPage(scenes.length + 1);
       lastFlipTarget.current = target;
       setTimeout(() => {
         try { bookRef.current.pageFlip().flip(target); } catch {}
@@ -127,11 +127,12 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
     }
 
     if (generating && scenes.length > 0) {
-      const currentIdx = bookRef.current.pageFlip().getCurrentPageIndex();
+      let currentIdx;
+      try { currentIdx = bookRef.current.pageFlip().getCurrentPageIndex(); } catch { currentIdx = 0; }
       const newScenePage = scenes.length;
-      const currentSpreadEnd = currentIdx + 1;
+      const currentSpreadEnd = singlePage ? currentIdx : currentIdx + 1;
       if (newScenePage > currentSpreadEnd) {
-        const target = spreadLeftPage(newScenePage);
+        const target = singlePage ? newScenePage : spreadLeftPage(newScenePage);
         if (target !== lastFlipTarget.current) {
           lastFlipTarget.current = target;
           setTimeout(() => {
@@ -146,7 +147,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
     }
 
     prevGenerating.current = generating;
-  }, [generating, scenes.length]);
+  }, [generating, scenes.length, singlePage]);
 
   /* ── Clamp to content when page exceeds available scenes ── */
   const clampedRef = useRef(false);
@@ -162,7 +163,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
       clampedRef.current = true;
       return;
     }
-    const target = spreadLeftPage(maxValid);
+    const target = singlePage ? maxValid : spreadLeftPage(maxValid);
     const raf = requestAnimationFrame(() => {
       setTimeout(() => {
         if (!bookRef.current) return;
@@ -172,7 +173,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
       }, clampedRef.current ? 50 : 400);
     });
     return () => cancelAnimationFrame(raf);
-  }, [scenes.length, currentPage, bookSize, generating]);
+  }, [scenes.length, currentPage, bookSize, generating, singlePage]);
 
   /* ── Auto-flip to bookmarked page on initial load ── */
   const bookmarkFlipped = useRef(false);
@@ -180,32 +181,33 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
     if (!bookmarkPage || bookmarkFlipped.current || !bookRef.current || !bookSize) return;
     if (!scenes.length) return;
     bookmarkFlipped.current = true;
-    const target = spreadLeftPage(bookmarkPage);
+    const target = singlePage ? bookmarkPage : spreadLeftPage(bookmarkPage);
     setTimeout(() => {
       try { bookRef.current.pageFlip().flip(target); } catch {}
     }, 400);
-  }, [bookmarkPage, bookSize, scenes.length]);
+  }, [bookmarkPage, bookSize, scenes.length, singlePage]);
 
   const lastFilledPage = showGenerating ? scenes.length + 1 : scenes.length;
-  const maxPage = lastFilledPage + (lastFilledPage % 2 !== 0 ? 1 : 0);
+  const maxPage = singlePage ? lastFilledPage : lastFilledPage + (lastFilledPage % 2 !== 0 ? 1 : 0);
 
   const { onFlip, goNext, goPrev, goTo } = useStoryNavigation({
-    bookRef, currentPage, setCurrentPage, maxPage, scenes, storyId, onPageChange,
+    bookRef, currentPage, setCurrentPage, maxPage, scenes, storyId, onPageChange, singlePage,
   });
 
   /* ── Navigation dots ── */
   const lastContentIndex = showGenerating ? scenes.length + 1 : scenes.length;
   const contentForDots = Math.max(lastContentIndex, 0);
   const paddedContent = contentForDots % 2 !== 0 ? contentForDots + 1 : contentForDots;
-  const spreadIndex = currentPage === 0 ? 0 : Math.ceil(currentPage / 2);
-  const dotCount = Math.max(1, 1 + Math.ceil(paddedContent / 2));
+  const spreadIndex = singlePage ? currentPage : (currentPage === 0 ? 0 : Math.ceil(currentPage / 2));
+  const dotCount = singlePage ? Math.max(1, 1 + contentForDots) : Math.max(1, 1 + Math.ceil(paddedContent / 2));
 
   const pageScale = bookSize ? bookSize.h / 640 : 1;
 
   /* ── Build fixed page array ── */
+  const pageSlots = Math.max(MIN_PAGE_SLOTS, scenes.length + 2);
   const pages = [
     <CoverPage key="cover" onGenreClick={onGenreClick} lang={lang} />,
-    ...Array.from({ length: PAGE_SLOTS }, (_, i) => {
+    ...Array.from({ length: pageSlots }, (_, i) => {
       const pageIndex = i + 1;
       return (
         <ContentPage
@@ -218,6 +220,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
           scale={pageScale}
           hasScenes={scenes.length > 0}
           isBookmarked={!!(bookmarkPage && i + 1 === bookmarkPage)}
+          singlePage={singlePage}
         />
       );
     }),
@@ -282,7 +285,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
         {displayPrompt && (() => {
           const leftPrompt = spreadPrompts?.left || displayPrompt;
           const rightPrompt = spreadPrompts?.right;
-          const showTwo = rightPrompt && rightPrompt !== leftPrompt;
+          const showTwo = !singlePage && rightPrompt && rightPrompt !== leftPrompt;
           const pillIcon = (
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.5 }}>
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -315,34 +318,37 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
             </svg>
           </button>
 
-          <HTMLFlipBook
-            ref={bookRef}
-            width={bookSize.w}
-            height={bookSize.h}
-            size="fixed"
-            showCover={true}
-            startPage={initialPageRef.current}
-            drawShadow={true}
-            maxShadowOpacity={theme === 'light' ? 0.12 : 0.5}
-            flippingTime={800}
-            usePortrait={false}
-            startZIndex={0}
-            autoSize={true}
-            mobileScrollSupport={true}
-            disableFlipByClick={true}
-            clickEventForward={true}
-            useMouseEvents={false}
-            swipeDistance={30}
-            onFlip={onFlip}
-            className="storybook"
-          >
-            {pages}
-          </HTMLFlipBook>
+          <div style={singlePage ? { maxWidth: bookSize.w + 1, margin: '0 auto' } : undefined}>
+            <HTMLFlipBook
+              key={singlePage ? 'portrait' : 'landscape'}
+              ref={bookRef}
+              width={bookSize.w}
+              height={bookSize.h}
+              size="fixed"
+              showCover={true}
+              startPage={initialPageRef.current}
+              drawShadow={true}
+              maxShadowOpacity={theme === 'light' ? 0.12 : 0.5}
+              flippingTime={500}
+              usePortrait={singlePage}
+              startZIndex={0}
+              autoSize={true}
+              mobileScrollSupport={true}
+              disableFlipByClick={false}
+              clickEventForward={true}
+              useMouseEvents={false}
+              swipeDistance={30}
+              onFlip={onFlip}
+              className="storybook"
+            >
+              {pages}
+            </HTMLFlipBook>
+          </div>
 
           <button
             className="book-nav-overlay book-nav-overlay-right"
             onClick={goNext}
-            disabled={currentPage + 2 > maxPage}
+            disabled={singlePage ? currentPage >= maxPage : currentPage + 2 > maxPage}
             aria-label="Next page"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -354,7 +360,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
       )}
 
       {dotCount > 1 && (() => {
-        const bookmarkSpread = bookmarkPage ? Math.ceil(bookmarkPage / 2) : null;
+        const bookmarkSpread = bookmarkPage ? (singlePage ? bookmarkPage : Math.ceil(bookmarkPage / 2)) : null;
         return (
           <div className="book-nav-dots-bar">
             {Array.from({ length: dotCount }, (_, i) => (

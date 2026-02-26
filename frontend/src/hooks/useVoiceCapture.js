@@ -193,6 +193,21 @@ export default function useVoiceCapture({ onAudioCaptured }) {
     }
   }, [cleanup, cleanupVAD]);
 
+  // Abort recording WITHOUT sending audio (discard captured data)
+  const abortRecording = useCallback(() => {
+    abortedRef.current = true;
+    cleanupVAD();
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      // Detach handlers so onstop doesn't fire onAudioCaptured
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+    }
+    // Full cleanup: release mic tracks, clear chunks, set recording=false
+    cleanup();
+  }, [cleanup, cleanupVAD]);
+
   useEffect(() => {
     return () => {
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
@@ -202,5 +217,5 @@ export default function useVoiceCapture({ onAudioCaptured }) {
     };
   }, []);
 
-  return { recording, startRecording, stopRecording };
+  return { recording, startRecording, stopRecording, abortRecording };
 }

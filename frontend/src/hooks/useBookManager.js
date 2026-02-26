@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { ROUTES } from '../routes';
 import { db, doc, updateDoc } from '../firebase';
 
 export default function useBookManager({
@@ -38,7 +39,7 @@ export default function useBookManager({
 
     setTimeout(() => {
       load(bookData, { skipResume: isCompleted });
-      navigate(`/story/${bookData.storyId}`);
+      navigate(ROUTES.STORY(bookData.storyId));
     }, 50);
   }, [storyId, autoSaveCurrent, reset, load, navigate, setViewingReadOnly, setStoryStatus, setIsPublished, setArtStyle, setLanguage]);
 
@@ -49,7 +50,7 @@ export default function useBookManager({
       setViewingReadOnly(true);
       setTimeout(() => {
         load(bookData, { skipResume: true });
-        navigate(`/story/${bookData.storyId}`);
+        navigate(ROUTES.STORY(bookData.storyId));
       }, 50);
     } else if (bookData.status === 'completed') {
       // Own completed book - view only, no WS resume
@@ -58,7 +59,7 @@ export default function useBookManager({
       setIsPublished(bookData.is_public || false);
       setTimeout(() => {
         load(bookData, { skipResume: true });
-        navigate(`/story/${bookData.storyId}`);
+        navigate(ROUTES.STORY(bookData.storyId));
       }, 50);
     } else {
       handleOpenBook(bookData);
