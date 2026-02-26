@@ -115,14 +115,28 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
 
   /* ── Auto-advance during generation ── */
   const lastFlipTarget = useRef(-1);
+  const scenesAtGenStart = useRef(0);
   useEffect(() => {
     if (!bookRef.current) return;
+
+    // Track how many scenes existed when generation started
+    if (generating && !prevGenerating.current) {
+      scenesAtGenStart.current = scenes.length;
+    }
 
     if (generating && !prevGenerating.current && scenes.length > 0) {
       const target = singlePage ? scenes.length + 1 : spreadLeftPage(scenes.length + 1);
       lastFlipTarget.current = target;
+      // First-ever generation (no prior scenes): jump instantly without flip animation
+      const isFirstGeneration = scenesAtGenStart.current === 0;
       setTimeout(() => {
-        try { bookRef.current.pageFlip().flip(target); } catch {}
+        try {
+          if (isFirstGeneration) {
+            bookRef.current.pageFlip().turnToPage(target);
+          } else {
+            bookRef.current.pageFlip().flip(target);
+          }
+        } catch {}
       }, 200);
     }
 
@@ -135,8 +149,16 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
         const target = singlePage ? newScenePage : spreadLeftPage(newScenePage);
         if (target !== lastFlipTarget.current) {
           lastFlipTarget.current = target;
+          // First generation: instant page turn, no flip animation
+          const isFirstGeneration = scenesAtGenStart.current === 0;
           setTimeout(() => {
-            try { bookRef.current.pageFlip().flip(target); } catch {}
+            try {
+              if (isFirstGeneration) {
+                bookRef.current.pageFlip().turnToPage(target);
+              } else {
+                bookRef.current.pageFlip().flip(target);
+              }
+            } catch {}
           }, 300);
         }
       }
