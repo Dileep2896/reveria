@@ -402,6 +402,37 @@ Director Chat active → generate_story tool fires → generation starts
 - If present, uses it directly (no first-message wait).
 - Deploy order: backend first (supports both), then frontend.
 
+## Interaction-Flow Resilience (Session 59 Audit)
+
+### Director Tool Call During Generation
+- When `state.is_generating` is true and Director issues `generate_story` tool call, handlers MUST reject with `respond_to_tool_call(tc, success=False)` — silently dropping corrupts the Gemini Live session (model expects `FunctionResponse` for every tool call)
+- Applied to both `handle_director_chat_audio` and `handle_director_chat_text`
+
+### Director Session Expiry Detection
+- `send_audio()` / `send_text()` exception handlers set `self._session = None` and return `{"session_dead": True}`
+- WS handlers check `result.get("session_dead")` → send `{"type": "director_chat_error", "content": "...", "fatal": True}`
+- Frontend `director_chat_error` handler: only tears down chat UI when `data.fatal` is true (transient errors just show toast)
+
+### Non-Blocking Hero Photo Analysis
+- `handle_hero_photo` runs as `asyncio.create_task()` — WS loop stays responsive during 30s photo analysis
+- Backend version counter (`hero_version`) discards stale analysis results if user removed hero mode while analyzing
+- Every exit path (success, failure, timeout, version mismatch) sends `hero_status` WS message to prevent stuck UI
+- 30-second `asyncio.wait_for()` timeout on Gemini Vision API call
+
+### Usage Counter Leak Prevention
+- `handle_generate` catches `asyncio.CancelledError` (inherits from `BaseException`, not `Exception`) to rollback usage counters on disconnect
+- Pre-incremented `generate` and `create_story` usage both decremented in `CancelledError` handler
+
+### Stale Message Guards
+- After `reset()`, `storyIdRef.current` is null — all scene-scoped WS handlers (`text`, `image`, `audio`, `scene_deleted`) check this before applying data
+- Prevents wrong-story scene data from rendering after story switch
+
+### Frontend Race Condition Guards
+- `useSaveStory.js`: Synchronous `saveLockRef` (useRef) prevents double-click save — set before any async work, cleared in `finally`
+- `useWebSocket.js`: `sceneBusy` state (regen spinners) cleared on WS disconnect to prevent stuck indicators
+- `generation_flow.py`: `shared_state.director_live_notes = []` cleared at pipeline start to prevent cross-batch note duplication
+- `DirectorChat.jsx`: 2-second fallback timer auto-resumes recording if browser autoplay policy blocks Director audio
+
 ## Director Chat Security Enhancements
 
 ### Audio Screening Tool-Call Suppression

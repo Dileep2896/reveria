@@ -859,6 +859,15 @@
 - **404 page** with themed StoryForge design
 - **Error boundary** styled to match app theme
 
+- **Interaction-flow resilience** (deep audit, 9 fixes):
+  - Director tool call rejection during generation (prevents Live session corruption)
+  - Director session expiry detection with fatal/transient error distinction
+  - Non-blocking hero photo analysis with version counter and timeout
+  - Usage counter leak prevention on disconnect (CancelledError handling)
+  - Stale scene message guards after story switch
+  - Save double-click race prevention, sceneBusy cleanup on disconnect
+  - Director live notes cleared per pipeline run, audio playback auto-resume fallback
+- **Hero Mode UX** — server-driven state, spinning ring loading animation, Director wait mode during photo analysis, ControlBar disabled during analysis, art style auto-reset on deactivation
 - **Subject Reference Likeness** — Imagen 3 `edit_image` API now uses `[1]` bracket notation in scene composition to bind text to reference photo. `subject_description` extracted from `[USER-CAST]` character sheet lines (~100 chars). `negative_prompt` on `EditImageConfig` discourages likeness drift. `_find_scene_subject_photo()` returns `(photo_b64, char_name, subject_desc)` tuple. `_inject_subject_notation()` inserts `[1]` after character name (case-insensitive regex, prepend fallback for pronouns). `_get_subject_description()` truncates at comma boundary for concise identity anchor.
 - **Separated ControlBar vs Director generation** — `from_director` flag on WS generate message. `SharedPipelineState.director_enabled` gates all Director work: per-scene `_director_live()`, suggestion injection, post-batch `DirectorADKAgent.analyze()`, `generation_wrapup()`. ControlBar generates = narrator + images + audio only (no Director overhead). Director Chat generates = full pipeline with live commentary + proactive comments + wrap-up.
 
@@ -885,6 +894,33 @@
 - **Backend fixes**: Director chat session cleanup on reset, handle_delete_scene -1 sentinel, MIME whitelist + size guard on GCS uploads, comments endpoint is_public check, async handle_reset with director_chat closure
 - **Frontend fixes**: Audio element lifecycle cleanup (DirectorChat, useCompactAudio), director_chat_ended loading reset, null audioUrl guard, dynamic PAGE_SLOTS, pageFlip null guard, stale eslint-disable removal
 - **Testing**: Updated test expectations for new 404 behavior on comments endpoint
+
+**Session 59: Hero Mode UX Fixes**
+
+- **Art style reset on hero deactivation** — When closing hero mode, art style stayed on trend style (e.g. Pixar). Now auto-resets to 'cinematic' if current style is a trend style when hero mode deactivates.
+- **Hero mode race condition** — Backend `hero_status: enabled` from stale photo analysis arrived after user already dismissed hero mode. Fixed with backend version counter (`hero_version`) to discard stale results + every backend exit path now sends `hero_status` (enabled or disabled).
+- **Server-driven hero state** — Changed `heroActive` from `heroMode?.active || !!heroPhoto` to purely `!!heroMode?.active` (server-driven). X button only appears after backend confirms hero mode active.
+- **Hero photo loading animation** — Replaced static loading state with animated conic gradient spinning ring around photo thumbnail.
+- **Hero photo analysis timeout** — Added 30-second `asyncio.wait_for()` timeout on Gemini Vision API call in `analyze_hero_photo()`.
+- **Director wait mode during hero analysis** — Director Chat now pauses recording and shows "Analyzing hero photo..." with user icon during hero photo upload. ControlBar dims (50% opacity, pointerEvents: none) until analysis completes.
+
+**Session 59: Deep Interaction-Flow Audit (9 fixes)**
+
+Comprehensive audit of all major user flows (generation, Director Chat, save/library, hero/scene actions) uncovered 9 bugs ranging from critical to low severity:
+
+- **[Critical] Director tool call corruption** — When generation was already running and Director issued `generate_story` tool call, it was silently dropped without sending `FunctionResponse`, corrupting the Gemini Live session. Fixed: always reject with `respond_to_tool_call(tc, success=False)` when `is_generating`.
+- **[High] Hero photo blocks WS loop** — `handle_hero_photo` was `await`ed directly in the WS message loop, blocking all messages for up to 30s. Fixed: wrapped in `asyncio.create_task()`.
+- **[High] is_generating not cleared on reset** — WS `reset` handler didn't clear `is_generating` flag, leaving the connection permanently stuck. Fixed: clear `is_generating`, `generation_task`, `pipeline_tasks`, and `hero_description` on reset.
+- **[High] Director session expiry = silent dead chat** — When Gemini Live session dies mid-conversation, `send_audio`/`send_text` would throw and the frontend never knew. Fixed: exception handlers set `self._session = None` and return `session_dead: True`; WS handlers detect this and send fatal `director_chat_error`.
+- **[Medium] director_chat_error kills chat on transient error** — Any `director_chat_error` WS message tore down the entire chat UI. Fixed: only tear down on `data.fatal` errors, not transient ones.
+- **[Medium] Usage leak on disconnect** — `asyncio.CancelledError` inherits from `BaseException`, not `Exception`, so the `except Exception` block in `handle_generate` didn't catch it — usage counters were never decremented. Fixed: added `except asyncio.CancelledError` block to rollback usage.
+- **[Medium] Stale scene data after story switch** — After `reset()`, `storyIdRef.current` is null, but scene-scoped WS messages (text, image, audio, scene_deleted) applied data without checking. Fixed: null guard on `storyIdRef.current` for all scene messages.
+- **[Low] Double-click Save race** — React `useState` setters are async, so rapid clicks could trigger concurrent saves. Fixed: synchronous `saveLockRef` guard in `useSaveStory.js`.
+- **[Low] sceneBusy not cleared on disconnect** — Scene busy indicators (regen spinners) stuck after WS reconnect. Fixed: `setSceneBusy(new Set())` in `ws.onclose`.
+- **[Low] Director live notes duplication** — Notes accumulated across batches because `shared_state.director_live_notes` was never cleared per pipeline run. Fixed: `shared_state.director_live_notes = []` at start of `_run_adk_pipeline()`.
+- **[Low] Audio playback auto-resume** — If browser autoplay policy blocked Director audio (onplay never fires), recording never auto-resumed. Fixed: 2-second fallback timer resumes recording if audio doesn't start playing.
+
+- Files modified (11): `backend/handlers/director_chat_handlers.py`, `backend/handlers/generation_flow.py`, `backend/main.py`, `backend/services/director_chat.py`, `backend/services/hero_service.py`, `frontend/src/components/ControlBar.jsx`, `frontend/src/components/DirectorChat.jsx`, `frontend/src/components/DirectorPanel.jsx`, `frontend/src/hooks/useSaveStory.js`, `frontend/src/hooks/useWebSocket.js`, `frontend/src/hooks/wsHandlers.js`
 
 ### What Needs to Be Built
 

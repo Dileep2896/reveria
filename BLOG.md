@@ -679,6 +679,16 @@ The result: every scene was a close-up portrait of the user. When the story said
 
 The lesson: when you have a consistency mechanism (character DNA), you don't also need the composition prompt to obsess over character appearance. Let the DNA handle likeness; let the scene composition handle storytelling.
 
+### 23. Code Audits Find Patterns, Flow Audits Find Crashes
+
+Our Session 56 codebase audit found 29 issues — stale eslint-disables, missing null guards, lifecycle cleanup. Useful, but all were code-level patterns. When we ran a deeper *interaction-flow audit* — "what happens if the user uploads a hero photo and immediately closes it?", "what happens if the Director calls generate_story while generation is already running?", "what happens if the WebSocket disconnects mid-generation?" — we found 9 bugs that a code-level scan would never catch.
+
+The critical one: silently dropping a Gemini Live API tool call. The Director Chat uses native function calling — the model calls `generate_story` when brainstorming is done. If generation was already running, we logged "ignoring tool call" and moved on. But the Live API protocol *requires* a `FunctionResponse` for every tool call. Dropping it corrupted the session — the model would stop responding or behave erratically. The fix was a single line: `respond_to_tool_call(tc, success=False)`.
+
+Another was `asyncio.CancelledError` — Python's cancellation exception inherits from `BaseException`, not `Exception`. Our `except Exception` blocks in `handle_generate` caught pipeline errors and rolled back usage counters, but a WebSocket disconnect triggers `CancelledError`, which sailed past the handler. Users lost generation quota for stories that never completed.
+
+The lesson: auditing code quality catches bugs in what you *wrote*. Auditing interaction flows catches bugs in what you *forgot*. Both are necessary — but if you only have time for one, test the flows a real user would take, especially the interrupted and concurrent ones.
+
 ### 21. Use Native API Features Before Building Workarounds
 
 (Originally lesson 19.) Our Director Chat initially used 3-5 separate Gemini API calls per interaction: the Live session for conversation, `transcribe_audio()` for user speech, `transcribe_audio()` again for the Director's response, `detect_intent()` via Gemini Flash, and `suggest_prompt()` via Gemini Flash. This worked, but was slow, expensive, and fragile (a racy boolean flag, unbounded conversation logs, lossy transcription feeding intent detection).
