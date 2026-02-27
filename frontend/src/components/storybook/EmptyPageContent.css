@@ -44,7 +44,7 @@
   pointer-events: none;
 }
 
-/* ---- Glassmorphic card ---- */
+/* ---- Glassmorphic card (matches Director Panel glass tokens) ---- */
 .empty-page-card {
   position: relative;
   z-index: 1;
@@ -52,13 +52,12 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15),
-              inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--shadow-glass);
 }
 
 /* ---- + icon circle ---- */
@@ -137,10 +136,9 @@
 }
 
 [data-theme="light"] .empty-page-card {
-  background: rgba(0, 0, 0, 0.02);
-  border-color: rgba(0, 0, 0, 0.06);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06),
-              inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow-glass);
 }
 
 [data-theme="light"] .empty-page-icon {
