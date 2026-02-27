@@ -862,6 +862,14 @@
 - **Subject Reference Likeness** — Imagen 3 `edit_image` API now uses `[1]` bracket notation in scene composition to bind text to reference photo. `subject_description` extracted from `[USER-CAST]` character sheet lines (~100 chars). `negative_prompt` on `EditImageConfig` discourages likeness drift. `_find_scene_subject_photo()` returns `(photo_b64, char_name, subject_desc)` tuple. `_inject_subject_notation()` inserts `[1]` after character name (case-insensitive regex, prepend fallback for pronouns). `_get_subject_description()` truncates at comma boundary for concise identity anchor.
 - **Separated ControlBar vs Director generation** — `from_director` flag on WS generate message. `SharedPipelineState.director_enabled` gates all Director work: per-scene `_director_live()`, suggestion injection, post-batch `DirectorADKAgent.analyze()`, `generation_wrapup()`. ControlBar generates = narrator + images + audio only (no Director overhead). Director Chat generates = full pipeline with live commentary + proactive comments + wrap-up.
 
+**Session 58: Hero Mode Scene Composition & Page Flip Polish**
+
+- **Scene composition rewrite** — Rewrote `SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION` to prioritize story action and environment over character portraits. Old prompt forced every image into "Medium shot portrait of..." framing; new prompt uses structured approach: SCENE FRAMING → ENVIRONMENT & ACTION → CHARACTERS IN SCENE → MOOD & LIGHTING. Characters woven naturally into scenes rather than every image being a close-up portrait.
+- **Story-moment-first philosophy** — New rules: "Show what the STORY describes — if the text mentions an object, screen, letter, place, vehicle, etc., that object should be prominently visible." Scene/environment/action must take at least half the prompt. Camera angles and compositions vary across scenes.
+- **Word limit increase** — Scene composition increased from 80 to 100 words for richer environmental detail
+- **Hero Mode visual storytelling** — Fixes the issue where Hero Mode generated every scene as a portrait of the user. Now user's Visual DNA still ensures likeness, but scenes show actual story moments (emails on screens, chase sequences, locations) with the user appearing naturally within
+- **First-generation page flip fix** — StoryCanvas now uses instant `turnToPage()` instead of animated `flip()` when generating from empty canvas (0 scenes). Tracks `scenesAtGenStart` ref to distinguish first generation from continuation. Subsequent scene additions during generation still use animated `flip()` for visual continuity.
+
 **Session 57: Production Routing & Avatar System**
 
 - **Centralized route constants** — Created `src/routes.js` with `ROUTES` object as single source of truth for all route paths, parameterized path functions (`STORY(id)`, `BOOK(id)`), and prefix constants (`STORY_PREFIX`, `BOOK_PREFIX`)

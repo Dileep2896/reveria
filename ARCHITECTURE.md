@@ -162,6 +162,28 @@ export const ROUTES = {
 3. After narrator loop: `await asyncio.gather(*pending_tasks)`
 4. Between scenes: check `steering_queue` (`asyncio.Queue`), inject into narrator history
 
+### Image Composition Strategy
+The image pipeline separates character definition from scene composition:
+
+**Character DNA (one-time extraction)**
+- `illustrator.extract_characters()` runs once on first scene completion
+- Gemini analyzes full narrative → character descriptions (hex color codes, face shape, signature items, dominant palette)
+- Character sheet extracted once per story to maintain visual consistency across all scenes
+
+**Scene Composition (per-scene)**
+- `SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION` balances two goals:
+  1. Show what the narrative describes: if text mentions an email, show the screen; if a chase, show the streets
+  2. Weave character appearance naturally into the scene, not as an isolated portrait
+- Structured prompt: SCENE FRAMING → ENVIRONMENT & ACTION → CHARACTERS IN SCENE → MOOD & LIGHTING
+- Word limit: 100 words (environment/action ≥ 50% of prompt)
+- Prevents portrait bloat: "Do NOT make every image a portrait or close-up of a character's face"
+- Encourages compositional variety: camera angles, framing, and environmental focus shift per scene
+
+**Imagen Execution**
+- Character DNA prepended verbatim to scene composition prompt
+- Anti-drift anchor between character block and scene composition
+- Per-user Imagen semaphore serializes all calls (prevents quota contention)
+
 ### Mid-Generation Steering
 - Frontend sends `{ type: "steer", content: text }` via WebSocket
 - `main.py` pushes to `shared_state.steering_queue` (`asyncio.Queue`) via `.put_nowait()` and sends `steer_ack`

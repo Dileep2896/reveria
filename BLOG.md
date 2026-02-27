@@ -671,6 +671,14 @@ The key insight: avatars appear in 6+ places (header, dropdown, explore cards, b
 
 Best part: zero network requests. Boring Avatars generates SVGs client-side. No API dependency, no latency, no reliability concerns.
 
+### 22. Scene Composition Should Tell the Story, Not Frame a Portrait
+
+Our Hero Mode lets users upload a selfie so their Visual DNA (appearance, build, clothing) gets injected into every scene's character sheet. But the original `SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION` was written to prioritize character appearance — every prompt started with "Medium shot portrait of..." and the character description took at least half the prompt, with the setting reduced to "2-3 details max."
+
+The result: every scene was a close-up portrait of the user. When the story said "show the suspicious email," the image showed... the user's face, again. The fix was inverting the priority: scenes now follow SCENE FRAMING → ENVIRONMENT & ACTION → CHARACTERS IN SCENE → MOOD & LIGHTING. The story moment comes first. If the narrative mentions a laptop with a cryptic email, that laptop should be the visual anchor — the character appears in the scene, not *as* the scene.
+
+The lesson: when you have a consistency mechanism (character DNA), you don't also need the composition prompt to obsess over character appearance. Let the DNA handle likeness; let the scene composition handle storytelling.
+
 ### 21. Use Native API Features Before Building Workarounds
 
 (Originally lesson 19.) Our Director Chat initially used 3-5 separate Gemini API calls per interaction: the Live session for conversation, `transcribe_audio()` for user speech, `transcribe_audio()` again for the Director's response, `detect_intent()` via Gemini Flash, and `suggest_prompt()` via Gemini Flash. This worked, but was slow, expensive, and fragile (a racy boolean flag, unbounded conversation logs, lossy transcription feeding intent detection).
