@@ -1,82 +1,86 @@
-import { memo } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import './EmptyPageContent.css';
 
-const EmptyPageContent = memo(({ scale = 1 }) => (
-  <div className="empty-page" style={{ padding: `${24 * scale}px` }}>
-    {/* Static edge vignette (darkens corners) */}
-    <div className="empty-page-vignette-edge" />
-    {/* Breathing center glow */}
-    <div className="empty-page-vignette" />
+const PROMPTS = [
+  'Meanwhile, in a distant land\u2026',
+  'The door creaked open\u2026',
+  'She never looked back\u2026',
+  'In the silence, a voice whispered\u2026',
+  'Beyond the horizon, something stirred\u2026',
+  'And then, everything changed\u2026',
+];
 
-    {/* StoryForge watermark */}
-    <div className="empty-page-watermark">
-      <svg width="100%" height="100%" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {/* Open book */}
-        <path d="M30 45 Q60 35 60 75 Q30 65 30 45Z" fill="currentColor" opacity="0.5" />
-        <path d="M90 45 Q60 35 60 75 Q90 65 90 45Z" fill="currentColor" opacity="0.4" />
-        <line x1="60" y1="38" x2="60" y2="75" stroke="currentColor" strokeWidth="1" opacity="0.6" />
-        {/* Forge sparks */}
-        <circle cx="50" cy="32" r="2" fill="currentColor" opacity="0.5" />
-        <circle cx="70" cy="30" r="1.5" fill="currentColor" opacity="0.4" />
-        <circle cx="58" cy="26" r="1.8" fill="currentColor" opacity="0.45" />
-        <circle cx="65" cy="34" r="1.2" fill="currentColor" opacity="0.35" />
-        <circle cx="45" cy="28" r="1" fill="currentColor" opacity="0.3" />
-      </svg>
-    </div>
+const TYPE_SPEED = 60;   // ms per character typing
+const HOLD_TIME = 2200;  // ms to hold full text
+const ERASE_SPEED = 35;  // ms per character erasing
+const PAUSE_TIME = 600;  // ms pause between prompts
 
-    {/* Glassmorphic card */}
-    <div className="empty-page-card" style={{ padding: `${20 * scale}px ${28 * scale}px` }}>
-      {/* + icon */}
-      <div
-        className="empty-page-icon"
-        style={{
-          width: `${44 * scale}px`,
-          height: `${44 * scale}px`,
-          marginBottom: `${14 * scale}px`,
-        }}
-      >
-        <svg
-          width={18 * scale} height={18 * scale} viewBox="0 0 24 24" fill="none"
-          stroke="var(--accent-primary)" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round"
+const EmptyPageContent = memo(({ scale = 1 }) => {
+  const [promptIdx, setPromptIdx] = useState(0);
+  const [displayed, setDisplayed] = useState('');
+  const [phase, setPhase] = useState('typing'); // typing | holding | erasing | pausing
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    const prompt = PROMPTS[promptIdx];
+
+    if (phase === 'typing') {
+      if (displayed.length < prompt.length) {
+        timerRef.current = setTimeout(() => {
+          setDisplayed(prompt.slice(0, displayed.length + 1));
+        }, TYPE_SPEED);
+      } else {
+        timerRef.current = setTimeout(() => setPhase('holding'), 0);
+      }
+    } else if (phase === 'holding') {
+      timerRef.current = setTimeout(() => setPhase('erasing'), HOLD_TIME);
+    } else if (phase === 'erasing') {
+      if (displayed.length > 0) {
+        timerRef.current = setTimeout(() => {
+          setDisplayed(displayed.slice(0, -1));
+        }, ERASE_SPEED);
+      } else {
+        timerRef.current = setTimeout(() => setPhase('pausing'), 0);
+      }
+    } else if (phase === 'pausing') {
+      timerRef.current = setTimeout(() => {
+        setPromptIdx((promptIdx + 1) % PROMPTS.length);
+        setPhase('typing');
+      }, PAUSE_TIME);
+    }
+
+    return () => clearTimeout(timerRef.current);
+  }, [displayed, phase, promptIdx]);
+
+  return (
+    <div className="empty-page" style={{ padding: `${24 * scale}px` }}>
+      {/* Typewriter text */}
+      <div className="empty-page-typewriter">
+        <span
+          className="empty-page-typed"
+          style={{ fontSize: `${Math.max(11, 13 * scale)}px` }}
         >
-          <path d="M12 5v14" />
-          <path d="M5 12h14" />
-        </svg>
+          {displayed}
+        </span>
+        <span className="empty-page-cursor" style={{ height: `${Math.max(14, 16 * scale)}px` }} />
       </div>
 
-      {/* Literary text */}
-      <p
-        className="empty-page-title"
-        style={{
-          fontSize: `${14 * scale}px`,
-          marginBottom: `${10 * scale}px`,
-        }}
-      >
-        The story continues&hellip;
-      </p>
-
       {/* Ornamental flourish */}
-      <div className="empty-page-flourish" style={{ marginBottom: `${10 * scale}px` }}>
-        <span className="empty-page-flourish-dot">✦</span>
+      <div className="empty-page-flourish" style={{ marginTop: `${16 * scale}px`, marginBottom: `${12 * scale}px` }}>
         <span className="empty-page-flourish-line" />
-        <span className="empty-page-flourish-diamond">❖</span>
+        <span className="empty-page-flourish-dot">&diams;</span>
         <span className="empty-page-flourish-line" />
-        <span className="empty-page-flourish-dot">✦</span>
       </div>
 
       {/* Subtitle */}
       <p
         className="empty-page-subtitle"
-        style={{
-          fontSize: `${9 * scale}px`,
-          maxWidth: `${200 * scale}px`,
-        }}
+        style={{ fontSize: `${Math.max(8, 9 * scale)}px` }}
       >
-        Type a prompt to add more scenes to your story
+        Type a prompt to continue the story
       </p>
     </div>
-  </div>
-));
+  );
+});
 
 export default EmptyPageContent;

@@ -1,5 +1,5 @@
 /* ============================================
-   EmptyPageContent — literary empty page
+   EmptyPageContent — Typewriter Reveal
    ============================================ */
 
 .empty-page {
@@ -10,120 +10,62 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
 }
 
-/* ---- Breathing vignette glow ---- */
-.empty-page-vignette {
-  position: absolute;
-  inset: -20%;
-  pointer-events: none;
-  background:
-    radial-gradient(
-      ellipse 50% 45% at 50% 50%,
-      rgba(245, 158, 11, 0.18) 0%,
-      rgba(139, 92, 246, 0.08) 35%,
-      transparent 65%
-    );
-  animation: emptyPageBreathe 4s ease-in-out infinite;
-}
-
-.empty-page-vignette-edge {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 75% 75% at 50% 50%,
-    transparent 30%,
-    rgba(0, 0, 0, 0.35) 100%
-  );
-}
-
-@keyframes emptyPageBreathe {
-  0%, 100% { opacity: 0.5; }
-  50%      { opacity: 1; }
-}
-
-/* ---- StoryForge watermark ---- */
-.empty-page-watermark {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 40%;
-  height: 40%;
-  transform: translate(-50%, -50%);
-  color: var(--text-muted);
-  opacity: 0.08;
-  pointer-events: none;
-}
-
-/* ---- Glassmorphic card (matches Director Panel glass tokens) ---- */
-.empty-page-card {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-glass);
-}
-
-/* ---- + icon circle ---- */
-.empty-page-icon {
+/* ---- Typewriter text + cursor ---- */
+.empty-page-typewriter {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: rgba(245, 158, 11, 0.06);
-  border: 1px solid rgba(245, 158, 11, 0.12);
+  min-height: 1.5em;
 }
 
-/* ---- Literary title ---- */
-.empty-page-title {
-  margin: 0;
+.empty-page-typed {
   font-family: 'Playfair Display', 'Georgia', 'Times New Roman', serif;
   font-style: italic;
   font-weight: 400;
   color: var(--text-secondary);
   letter-spacing: 0.03em;
   line-height: 1.4;
+  text-shadow: 0 0 24px rgba(245, 158, 11, 0.10);
+}
+
+.empty-page-cursor {
+  display: inline-block;
+  width: 2px;
+  margin-left: 1px;
+  background: rgba(245, 158, 11, 0.7);
+  border-radius: 1px;
+  animation: cursorBlink 0.9s step-end infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
 }
 
 /* ---- Ornamental flourish ---- */
 .empty-page-flourish {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.empty-page-flourish-dot {
-  font-size: 7px;
-  color: var(--accent-primary);
-  opacity: 0.5;
-  line-height: 1;
+  gap: 8px;
 }
 
 .empty-page-flourish-line {
   display: inline-block;
-  width: 28px;
+  width: 32px;
   height: 1px;
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(245, 158, 11, 0.25),
+    rgba(245, 158, 11, 0.20),
     transparent
   );
 }
 
-.empty-page-flourish-diamond {
-  font-size: 9px;
+.empty-page-flourish-dot {
+  font-size: 8px;
   color: var(--accent-primary);
-  opacity: 0.4;
+  opacity: 0.3;
   line-height: 1;
 }
 
@@ -133,37 +75,18 @@
   font-family: 'Inter', system-ui, sans-serif;
   font-weight: 400;
   color: var(--text-muted);
+  opacity: 0.5;
   letter-spacing: 0.02em;
   line-height: 1.5;
 }
 
 /* ============================================
-   Light mode overrides
+   Light mode
    ============================================ */
-[data-theme="light"] .empty-page-vignette {
-  background: radial-gradient(
-    ellipse 50% 45% at 50% 50%,
-    rgba(139, 92, 246, 0.12) 0%,
-    rgba(245, 158, 11, 0.04) 35%,
-    transparent 65%
-  );
+[data-theme="light"] .empty-page-typed {
+  text-shadow: none;
 }
 
-[data-theme="light"] .empty-page-vignette-edge {
-  background: radial-gradient(
-    ellipse 75% 75% at 50% 50%,
-    transparent 30%,
-    rgba(0, 0, 0, 0.06) 100%
-  );
-}
-
-[data-theme="light"] .empty-page-card {
-  background: var(--glass-bg);
-  border-color: var(--glass-border);
-  box-shadow: var(--shadow-glass);
-}
-
-[data-theme="light"] .empty-page-icon {
-  background: rgba(139, 92, 246, 0.06);
-  border-color: rgba(139, 92, 246, 0.12);
+[data-theme="light"] .empty-page-cursor {
+  background: rgba(139, 92, 246, 0.7);
 }
