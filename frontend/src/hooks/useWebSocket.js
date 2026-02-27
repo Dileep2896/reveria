@@ -140,6 +140,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
       if (wsRef.current !== ws) return;
       setConnected(false);
       setGenerating(false);
+      setSceneBusy(new Set());
       if (!disposed.current) {
         // Auth failure (4003) — wait for token refresh from AuthContext, don't spam reconnect
         if (e.code === 4003) {

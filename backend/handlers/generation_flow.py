@@ -62,6 +62,7 @@ async def _run_adk_pipeline(
     shared_state.total_scene_count = total_scene_count
     shared_state.scenes = []
     shared_state.full_story = ""
+    shared_state.director_live_notes = []
     shared_state.story_id = story_id
     shared_state.uid = kwargs.get("uid", "")
     shared_state.hero_description = kwargs.get("hero_description", "")
@@ -147,6 +148,7 @@ async def handle_hero_photo(
         state.hero_description = ""
         state.hero_name = ""
         state.trend_style = None
+        state.hero_version = getattr(state, 'hero_version', 0) + 1
         state.illustrator.hero_description = ""
         state.illustrator.hero_name = ""
         state.illustrator.trend_style = None
@@ -154,6 +156,7 @@ async def handle_hero_photo(
             state.shared_state.hero_description = ""
             state.shared_state.hero_name = ""
         logger.info("Hero Mode disabled for user %s", state.uid)
+        await _safe_send(websocket, {"type": "hero_status", "enabled": False})
         return
 
     # Validate photo size (max ~10MB base64 ≈ ~7.5MB image)
@@ -167,9 +170,19 @@ async def handle_hero_photo(
         if "," in photo_data:
             photo_data = photo_data.split(",")[1]
 
+        # Track version so stale photo analysis results are discarded
+        state.hero_version = getattr(state, 'hero_version', 0) + 1
+        my_version = state.hero_version
+
         await _safe_send(websocket, {"type": "status", "content": "analyzing_photo"})
         description = await analyze_hero_photo(photo_data, mime_type)
-        
+
+        # If user removed hero mode while we were analyzing, discard result
+        if getattr(state, 'hero_version', 0) != my_version:
+            logger.info("Hero photo analysis discarded (version mismatch: %d vs %d)", my_version, state.hero_version)
+            await _safe_send(websocket, {"type": "hero_status", "enabled": False})
+            return
+
         if description:
             state.hero_description = description
             state.hero_name = hero_name
@@ -202,10 +215,12 @@ async def handle_hero_photo(
                 except Exception:
                     pass
         else:
+            await _safe_send(websocket, {"type": "hero_status", "enabled": False})
             await _safe_send(websocket, {"type": "error", "content": "Could not analyze photo. Please try another one."})
-            
+
     except Exception as e:
         logger.error("handle_hero_photo error: %s", e)
+        await _safe_send(websocket, {"type": "hero_status", "enabled": False})
         await _safe_send(websocket, {"type": "error", "content": "Photo analysis failed."})
     finally:
         await _safe_send(websocket, {"type": "status", "content": "done"})
@@ -401,5 +416,17 @@ async def handle_generate(
         state.scene_count_current = scene_count
         state.language_current = language
         await _safe_send(websocket, {"type": "status", "content": "done"})
+    except asyncio.CancelledError:
+        logger.info("Generation cancelled (disconnect or reset)")
+        if usage_incremented:
+            try:
+                await decrement_usage(state.uid, "generate")
+            except Exception:
+                pass
+        if story_incremented:
+            try:
+                await decrement_usage(state.uid, "create_story")
+            except Exception:
+                pass
     finally:
         state.is_generating = False

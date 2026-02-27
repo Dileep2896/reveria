@@ -31,7 +31,7 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
 
-  const heroActive = heroMode?.active || !!heroPhoto;
+  const heroActive = !!heroMode?.active;
   const prevHeroActive = useRef(false);
 
   // Auto-switch to trend style when hero mode activates
@@ -46,6 +46,9 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
     if (!heroActive && prevHeroActive.current) {
       setHeroLoading(false);
       setHeroName('');
+      // Reset to default style when hero mode deactivates
+      const isTrend = ART_STYLES.find(s => s.key === artStyle)?.trend;
+      if (isTrend) setArtStyle('cinematic');
     }
     prevHeroActive.current = heroActive;
   }, [heroActive, artStyle, setArtStyle, heroMode?.heroName, setHeroName]);
@@ -120,7 +123,8 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
     },
   });
 
-  const isDisabled = !connected || (!generating && quotaCooldown > 0);
+  const heroAnalyzing = !!heroMode?.analyzing || heroLoading;
+  const isDisabled = !connected || (!generating && quotaCooldown > 0) || heroAnalyzing;
   const isSteerMode = generating && connected;
 
   const handleSubmit = (e) => {
@@ -150,7 +154,8 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
             position: 'relative',
             background: 'var(--glass-bg-input)',
             border: `1px solid ${quotaCooldown > 0 ? 'var(--status-error, #ef4444)' : generating ? 'var(--glass-border-accent)' : focused ? 'var(--glass-border-accent)' : 'var(--glass-border)'}`,
-            opacity: quotaCooldown > 0 ? 0.6 : 1,
+            opacity: heroAnalyzing ? 0.5 : quotaCooldown > 0 ? 0.6 : 1,
+            pointerEvents: heroAnalyzing ? 'none' : undefined,
             boxShadow: focused ? 'var(--shadow-glow-primary)' : 'var(--shadow-glass)',
             backdropFilter: 'var(--glass-blur)',
             WebkitBackdropFilter: 'var(--glass-blur)',
@@ -224,34 +229,42 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
               style={{ display: 'none' }}
             />
             {heroLoading && !heroActive ? (
-              /* Loading state — photo uploaded, analysis in progress */
+              /* Loading state — animated border around photo while analyzing */
               <div
-                className="flex items-center gap-1.5 p-1 px-2 rounded-lg"
+                className="flex items-center"
                 style={{
                   background: 'var(--accent-primary-soft)',
                   border: '1px solid var(--glass-border-accent)',
-                  animation: 'heroShimmer 1.5s ease-in-out infinite',
+                  borderRadius: '9999px',
+                  padding: '2px 10px 2px 2px',
+                  gap: '6px',
                 }}
               >
-                {heroPhoto && (
-                  <div style={{ width: '24px', height: '24px', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--accent-primary)', opacity: 0.7, flexShrink: 0 }}>
-                    <img src={heroPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'relative', width: '24px', height: '24px', flexShrink: 0 }}>
+                  {/* Spinning conic gradient ring */}
+                  <div style={{
+                    position: 'absolute', inset: '-3px', borderRadius: '50%',
+                    background: 'conic-gradient(from 0deg, var(--accent-primary), var(--accent-secondary, #a855f7), transparent)',
+                    animation: 'heroRingSpin 1.2s linear infinite',
+                  }} />
+                  <div style={{
+                    position: 'absolute', inset: '0', borderRadius: '50%',
+                    overflow: 'hidden', border: '2px solid var(--bg-primary)',
+                  }}>
+                    {heroPhoto ? (
+                      <img src={heroPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', background: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      </div>
+                    )}
                   </div>
-                )}
-                <div
-                  style={{
-                    width: '12px',
-                    height: '12px',
-                    border: '2px solid var(--glass-border-accent)',
-                    borderTopColor: 'var(--accent-primary)',
-                    borderRadius: '50%',
-                    animation: 'spin 0.8s linear infinite',
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Analyzing...</span>
+                </div>
+                <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Analyzing...
+                </span>
               </div>
-            ) : heroActive || heroPhoto ? (
+            ) : heroActive ? (
               /* Active hero pill: circular avatar + name + X */
               <div
                 className="flex items-center"

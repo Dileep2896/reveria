@@ -1,5 +1,6 @@
 """Hero Service — uses Gemini 2.0 Flash (Vision) to extract 'Visual DNA' from a user photo."""
 
+import asyncio
 import logging
 from google.genai import types
 from services.gemini_client import get_client, get_model
@@ -37,19 +38,22 @@ async def analyze_hero_photo(image_base64: str, mime_type: str = "image/jpeg") -
         import base64
         image_bytes = base64.b64decode(image_base64)
 
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=types.Content(
-                role="user",
-                parts=[
-                    types.Part(inline_data=types.Blob(mime_type=mime_type, data=image_bytes)),
-                    types.Part(text=HERO_ANALYSIS_PROMPT),
-                ],
+        response = await asyncio.wait_for(
+            client.aio.models.generate_content(
+                model=model,
+                contents=types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(inline_data=types.Blob(mime_type=mime_type, data=image_bytes)),
+                        types.Part(text=HERO_ANALYSIS_PROMPT),
+                    ],
+                ),
+                config=types.GenerateContentConfig(
+                    temperature=0.4,
+                    max_output_tokens=150,
+                ),
             ),
-            config=types.GenerateContentConfig(
-                temperature=0.4,
-                max_output_tokens=150,
-            ),
+            timeout=30,
         )
 
         if response.text:

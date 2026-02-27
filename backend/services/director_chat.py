@@ -255,7 +255,8 @@ class DirectorChatSession:
 
             except Exception as e:
                 logger.error("Director chat send_audio failed: %s", e)
-                return dict(_EMPTY_RESPONSE)
+                self._session = None  # Mark session as dead
+                return {**_EMPTY_RESPONSE, "session_dead": True}
 
     async def send_text(self, text: str) -> dict:
         """Send user text to the Live session, return full response dict.
@@ -304,7 +305,8 @@ class DirectorChatSession:
 
             except Exception as e:
                 logger.error("Director chat send_text failed: %s", e)
-                return dict(_EMPTY_RESPONSE)
+                self._session = None  # Mark session as dead
+                return {**_EMPTY_RESPONSE, "session_dead": True}
 
     # ── Tool call handling ────────────────────────────────────────────────
 

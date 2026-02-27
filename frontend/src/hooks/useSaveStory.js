@@ -17,6 +17,7 @@ export default function useSaveStory({
   const [saved, setSaved] = useState(false);
   const [generatingCover, setGeneratingCover] = useState(false);
   const [storyStatus, setStoryStatus] = useState(null);
+  const saveLockRef = useRef(false);
 
   const autoSaveCurrent = useCallback(async () => {
     if (!storyId || scenes.length === 0 || storyStatus === 'completed') return;
@@ -54,7 +55,8 @@ export default function useSaveStory({
   }, [storyId, scenes, generations, storyStatus, bookMeta]);
 
   const handleSave = useCallback(async () => {
-    if (!storyId || saving || generatingCover || storyStatus === 'completed') return;
+    if (!storyId || saving || generatingCover || storyStatus === 'completed' || saveLockRef.current) return;
+    saveLockRef.current = true;
     const capturedStoryId = storyId;
 
     try {
@@ -131,6 +133,7 @@ export default function useSaveStory({
       setGeneratingCover(false);
     } finally {
       setSaving(false);
+      saveLockRef.current = false;
     }
   }, [storyId, saving, generatingCover, storyStatus, generations, scenes, bookMeta, generateBookMeta, addToast]);
 

@@ -61,9 +61,15 @@ export function createWsHandlers({
           setError(null);
           if (setDirectorLiveNotes) setDirectorLiveNotes([]);
         }
+        // Track hero photo analysis in progress
+        if (data.content === 'analyzing_photo' && setHeroMode) {
+          setHeroMode(prev => ({ ...prev, analyzing: true }));
+        }
         return true;
 
       case 'text': {
+        // Discard stale scene data after reset (story switched)
+        if (!storyIdRef.current) return true;
         if (data.is_regen) {
           setScenes((prev) =>
             prev.map((scene) =>
@@ -94,6 +100,7 @@ export function createWsHandlers({
       }
 
       case 'image':
+        if (!storyIdRef.current) return true;
         setScenes((prev) =>
           prev.map((scene) =>
             scene.scene_number === data.scene_number
@@ -104,6 +111,7 @@ export function createWsHandlers({
         return true;
 
       case 'audio':
+        if (!storyIdRef.current) return true;
         setScenes((prev) =>
           prev.map((scene) =>
             scene.scene_number === data.scene_number
@@ -214,6 +222,7 @@ export function createWsHandlers({
         return true;
 
       case 'scene_deleted':
+        if (!storyIdRef.current) return true;
         setScenes((prev) => prev.map((s) =>
           s.scene_number === data.scene_number ? { ...s, _deleting: true } : s
         ));
@@ -288,7 +297,7 @@ export function createWsHandlers({
 
       case 'hero_status':
         if (setHeroMode) setHeroMode(prev => ({
-          active: !!data.enabled, description: data.description || '', heroName: data.hero_name || prev?.heroName || '',
+          active: !!data.enabled, description: data.description || '', heroName: data.hero_name || prev?.heroName || '', analyzing: false,
         }));
         // Only toast on fresh activation, not on resume restore
         if (data.enabled && !data.restored) {
@@ -374,11 +383,13 @@ export function createWsHandlers({
 
       case 'director_chat_error':
         if (setDirectorChatLoading) setDirectorChatLoading(false);
-        // If error arrives before any messages, the session never started — reset active state
-        if (setDirectorChatActive) setDirectorChatActive(false);
-        if (setDirectorChatMessages) setDirectorChatMessages([]);
-        if (setDirectorChatPrompt) setDirectorChatPrompt(null);
         addToastRef.current?.(data.content || 'Director chat error', 'error');
+        // Only tear down chat on fatal errors or if session never started (no messages)
+        if (data.fatal) {
+          if (setDirectorChatActive) setDirectorChatActive(false);
+          if (setDirectorChatMessages) setDirectorChatMessages([]);
+          if (setDirectorChatPrompt) setDirectorChatPrompt(null);
+        }
         return true;
 
       default:

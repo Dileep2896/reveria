@@ -78,6 +78,10 @@ async def handle_director_chat_audio(
         mime_type = message.get("mime_type", "audio/webm")
         audio_bytes = base64.b64decode(audio_data) if audio_data else b""
         result = await state.director_chat.send_audio(audio_bytes, mime_type)
+        if result.get("session_dead"):
+            await _safe_send(websocket, {"type": "director_chat_error", "content": "Director session expired. Please restart.", "fatal": True})
+            state.director_chat = None
+            return
         # Send native transcripts to frontend
         if result["input_transcript"]:
             await _safe_send(websocket, {"type": "director_chat_user_transcript", "content": result["input_transcript"]})
@@ -86,10 +90,19 @@ async def handle_director_chat_audio(
             "audio_url": result["audio_url"],
         })
         # Handle tool calls (model decided brainstorming is done)
-        if result["tool_calls"] and not state.is_generating:
+        if result["tool_calls"]:
             tc = result["tool_calls"][0]
             prompt = tc.get("args", {}).get("prompt", "").strip()
-            if prompt and tc["name"] == "generate_story":
+            if state.is_generating:
+                # Must respond to tool call to keep Live session consistent
+                logger.info("Rejecting Director tool call — generation already in progress")
+                try:
+                    rejection = await state.director_chat.respond_to_tool_call(tc, success=False)
+                    if rejection.get("audio_url"):
+                        await _safe_send(websocket, {"type": "director_chat_response", "audio_url": rejection["audio_url"]})
+                except Exception:
+                    pass
+            elif prompt and tc["name"] == "generate_story":
                 # Screen the generated prompt before executing
                 safe, category = _screen_input(prompt)
                 if not safe:
@@ -143,15 +156,27 @@ async def handle_director_chat_text(
         text_content = message.get("content", "").strip()
         if text_content:
             result = await state.director_chat.send_text(text_content)
+            if result.get("session_dead"):
+                await _safe_send(websocket, {"type": "director_chat_error", "content": "Director session expired. Please restart.", "fatal": True})
+                state.director_chat = None
+                return
             await _safe_send(websocket, {
                 "type": "director_chat_response",
                 "audio_url": result["audio_url"],
             })
             # Handle tool calls (model decided brainstorming is done)
-            if result["tool_calls"] and not state.is_generating:
+            if result["tool_calls"]:
                 tc = result["tool_calls"][0]
                 prompt = tc.get("args", {}).get("prompt", "").strip()
-                if prompt and tc["name"] == "generate_story":
+                if state.is_generating:
+                    logger.info("Rejecting Director tool call (text) — generation already in progress")
+                    try:
+                        rejection = await state.director_chat.respond_to_tool_call(tc, success=False)
+                        if rejection.get("audio_url"):
+                            await _safe_send(websocket, {"type": "director_chat_response", "audio_url": rejection["audio_url"]})
+                    except Exception:
+                        pass
+                elif prompt and tc["name"] == "generate_story":
                     # Screen the generated prompt before executing
                     safe, category = _screen_input(prompt)
                     if not safe:

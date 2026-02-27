@@ -188,6 +188,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 st.batch_index = 0
                 st.director_result = None
                 st.pipeline_tasks = []
+                st.is_generating = False
+                generation_task = None
                 st.hero_description = ""
                 st.hero_name = ""
                 st.trend_style = None
@@ -279,7 +281,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
 
             if msg_type == "hero_photo":
-                await handle_hero_photo(websocket, message, st)
+                asyncio.create_task(handle_hero_photo(websocket, message, st))
                 continue
 
             if msg_type == "hero_name":

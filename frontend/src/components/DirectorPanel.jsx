@@ -165,7 +165,7 @@ export default function DirectorPanel({
           autoGenerate={autoGenerate}
           onCancelAutoGenerate={onCancelAutoGenerate}
           generating={generating}
-          castAnalyzing={castAnalyzing}
+          castAnalyzing={castAnalyzing || !!heroMode?.analyzing}
         />
       )}
 

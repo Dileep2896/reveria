@@ -47,13 +47,18 @@ export default function DirectorChat({
       }
       const audio = new Audio(latest.audioUrl);
       audio.volume = 0.7;
-      audio.onplay = () => { if (mountedRef.current) setSpeaking(true); };
+      let playStarted = false;
+      audio.onplay = () => { playStarted = true; if (mountedRef.current) setSpeaking(true); };
       audio.onended = () => { if (mountedRef.current) setSpeaking(false); };
       audio.onerror = () => { if (mountedRef.current) setSpeaking(false); };
       audio.play().catch(() => { if (mountedRef.current) setSpeaking(false); });
+      // Fallback: if audio doesn't fire onplay within 2s (autoplay blocked), auto-resume recording
+      setTimeout(() => {
+        if (!playStarted && mountedRef.current && !generating && !castAnalyzing) startRecording();
+      }, 2000);
       audioRef.current = audio;
     }
-  }, [messages]);
+  }, [messages, generating, castAnalyzing, startRecording]);
 
   // Auto-resume recording after Director finishes speaking
   useEffect(() => {
@@ -148,7 +153,7 @@ export default function DirectorChat({
       <button
         className={`director-voice-orb ${orbState}`}
         onClick={handleOrbClick}
-        aria-label={orbState === 'waiting' ? 'Waiting for character upload' : recording ? 'Stop recording' : chatLoading ? 'Director is thinking' : speaking ? 'Director is speaking' : generating ? 'Director is watching' : 'Start recording'}
+        aria-label={orbState === 'waiting' ? 'Analyzing hero photo' : recording ? 'Stop recording' : chatLoading ? 'Director is thinking' : speaking ? 'Director is speaking' : generating ? 'Director is watching' : 'Start recording'}
         type="button"
       >
         {/* Animated rings */}
@@ -165,8 +170,8 @@ export default function DirectorChat({
             <div className="voice-watching">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                <circle cx="12" cy="13" r="4" />
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
               </svg>
             </div>
           ) : orbState === 'watching' ? (
@@ -245,7 +250,7 @@ export default function DirectorChat({
         }}
       >
         {orbState === 'waiting'
-          ? 'Waiting for character...'
+          ? 'Analyzing hero photo...'
           : orbState === 'recording'
             ? 'Listening...'
             : orbState === 'speaking'
