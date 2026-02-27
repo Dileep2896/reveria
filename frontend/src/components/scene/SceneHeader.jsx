@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useSceneActions } from '../../contexts/SceneActionsContext';
 import IconBtn from '../IconBtn';
 
-export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, isBusy, audio, onRegenSceneStart }) {
+export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, isBusy, onRegenSceneStart }) {
   const { regenScene, deleteScene, isReadOnly, canRegen } = useSceneActions();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -39,37 +39,6 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
             </svg>
           </span>
-        )}
-        {scene.audio_url && (
-          <button
-            onClick={audio.togglePlay}
-            style={{
-              width: `${20 * scale}px`,
-              height: `${20 * scale}px`,
-              borderRadius: '50%',
-              border: 'none',
-              background: audio.playing ? 'var(--accent-primary)' : 'var(--accent-primary-soft)',
-              color: audio.playing ? 'var(--text-inverse)' : 'var(--accent-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              flexShrink: 0,
-              boxShadow: audio.playing ? '0 0 10px var(--accent-primary-glow)' : 'none',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            {audio.playing ? (
-              <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16" rx="1" />
-                <rect x="14" y="4" width="4" height="16" rx="1" />
-              </svg>
-            ) : (
-              <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            )}
-          </button>
         )}
         {/* Scene actions - in header row, right-aligned */}
         {!isReadOnly && !isBusy && (
@@ -123,28 +92,6 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
           }}
         >
           {scene.scene_title}
-        </div>
-      )}
-      {/* Audio progress bar - shown when playing */}
-      {audio.playing && (
-        <div
-          style={{
-            marginTop: `${4 * scale}px`,
-            height: `${2 * scale}px`,
-            background: 'var(--glass-border)',
-            borderRadius: `${1 * scale}px`,
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              height: '100%',
-              width: `${audio.progress}%`,
-              background: 'var(--accent-primary)',
-              boxShadow: '0 0 4px var(--accent-primary-glow)',
-              transition: 'width 0.1s linear',
-            }}
-          />
         </div>
       )}
     </div>

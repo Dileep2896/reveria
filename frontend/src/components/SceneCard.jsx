@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSceneActions } from '../contexts/SceneActionsContext';
 import { isImageCached } from '../utils/textUtils';
-import useCompactAudio from '../hooks/useCompactAudio';
 import SceneComposing from './scene/SceneComposing';
 import SceneHeader from './scene/SceneHeader';
 import SceneImageArea from './scene/SceneImageArea';
@@ -104,8 +103,6 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePag
   // Capture at mount: is this a fresh scene arriving during generation?
   const isTypewriterRef = useRef(!preloaded && !cached && !isError);
 
-  const audio = useCompactAudio(scene.audio_url);
-
   return (
     <div
       className={preloaded ? 'scene-preloaded-fadein' : undefined}
@@ -116,11 +113,7 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePag
         ...(skip && !preloaded ? {} : preloaded ? {} : { animation: 'sceneReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1)' }),
       }}
     >
-      {scene.audio_url && (
-        <audio ref={audio.audioRef} src={scene.audio_url} preload="metadata" style={{ display: 'none' }} />
-      )}
-
-      <SceneHeader scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} isBusy={isBusy} audio={audio} onRegenSceneStart={() => setAwaitingTextRegen(true)} />
+      <SceneHeader scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} isBusy={isBusy} onRegenSceneStart={() => setAwaitingTextRegen(true)} />
 
       <SceneImageArea
         scene={scene} scale={scale} displayIndex={displayIndex}
