@@ -349,28 +349,34 @@ async def handle_generate(
                     author_name=state.author_name,
                     author_photo_url=state.author_photo_url,
                 )
+            except Exception as e:
+                logger.error("Firestore persist error: %s", e)
 
+            # Meta + portraits run independently of persist success
+            try:
                 meta_task = asyncio.create_task(
                     _auto_generate_meta(state.active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send, language=language, character_sheet=state.illustrator._character_sheet)
                 )
                 state.pipeline_tasks.append(meta_task)
+            except Exception as e:
+                logger.error("Meta task creation error: %s", e)
 
-                # Auto-generate portraits for newly introduced characters
-                try:
-                    from services.firestore_client import get_db
-                    _db = get_db()
-                    _doc = await _db.collection("stories").document(state.active_story_id).get()
-                    _existing_portraits = (_doc.to_dict() or {}).get("portraits", []) if _doc.exists else []
-                    _existing_names = [p["name"] for p in _existing_portraits if p.get("name")]
-                except Exception:
-                    _existing_names = []
+            try:
+                from services.firestore_client import get_db
+                _db = get_db()
+                _doc = await _db.collection("stories").document(state.active_story_id).get()
+                _existing_portraits = (_doc.to_dict() or {}).get("portraits", []) if _doc.exists else []
+                _existing_names = [p["name"] for p in _existing_portraits if p.get("name")]
+            except Exception:
+                _existing_names = []
+            try:
                 portrait_task = asyncio.create_task(_generate_portraits(
                     websocket, state.illustrator, state.active_story_id,
                     safe_send=_safe_send, existing_names=_existing_names,
                 ))
                 state.pipeline_tasks.append(portrait_task)
             except Exception as e:
-                logger.error("Firestore persist error: %s", e)
+                logger.error("Portrait task creation error: %s", e)
 
             state.batch_index += 1
 
