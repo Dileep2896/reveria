@@ -1,0 +1,149 @@
+/* ============================================
+   EmptyPageContent — literary empty page
+   ============================================ */
+
+.empty-page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ---- Breathing vignette glow ---- */
+.empty-page-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 70% 60% at 50% 50%,
+    rgba(245, 158, 11, 0.06) 0%,
+    transparent 70%
+  );
+  animation: emptyPageBreathe 4s ease-in-out infinite;
+}
+
+@keyframes emptyPageBreathe {
+  0%, 100% { opacity: 0.05; }
+  50%      { opacity: 0.18; }
+}
+
+/* ---- StoryForge watermark ---- */
+.empty-page-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40%;
+  height: 40%;
+  transform: translate(-50%, -50%);
+  color: var(--text-muted);
+  opacity: 0.08;
+  pointer-events: none;
+}
+
+/* ---- Glassmorphic card ---- */
+.empty-page-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* ---- + icon circle ---- */
+.empty-page-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.12);
+}
+
+/* ---- Literary title ---- */
+.empty-page-title {
+  margin: 0;
+  font-family: 'Playfair Display', 'Georgia', 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+}
+
+/* ---- Ornamental flourish ---- */
+.empty-page-flourish {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.empty-page-flourish-dot {
+  font-size: 7px;
+  color: var(--accent-primary);
+  opacity: 0.5;
+  line-height: 1;
+}
+
+.empty-page-flourish-line {
+  display: inline-block;
+  width: 28px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(245, 158, 11, 0.25),
+    transparent
+  );
+}
+
+.empty-page-flourish-diamond {
+  font-size: 9px;
+  color: var(--accent-primary);
+  opacity: 0.4;
+  line-height: 1;
+}
+
+/* ---- Subtitle ---- */
+.empty-page-subtitle {
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 400;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+/* ============================================
+   Light mode overrides
+   ============================================ */
+[data-theme="light"] .empty-page-vignette {
+  background: radial-gradient(
+    ellipse 70% 60% at 50% 50%,
+    rgba(139, 92, 246, 0.05) 0%,
+    transparent 70%
+  );
+}
+
+[data-theme="light"] .empty-page-card {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06),
+              inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+[data-theme="light"] .empty-page-icon {
+  background: rgba(139, 92, 246, 0.06);
+  border-color: rgba(139, 92, 246, 0.12);
+}
