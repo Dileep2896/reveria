@@ -10,7 +10,7 @@ import GeneratingContent from './storybook/GeneratingContent';
 import useBookSize from '../hooks/useBookSize';
 import useStoryNavigation, { spreadLeftPage } from '../hooks/useStoryNavigation';
 
-const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWithinSpread, pageNum, scale, hasScenes, displayIndex, isBookmarked, singlePage }, ref) {
+const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWithinSpread, pageNum, scale, hasScenes, displayIndex, isBookmarked, singlePage, nextChapter }, ref) {
   const showAsPage = scene || isGenerating || isWithinSpread;
   const isEmpty = showAsPage && !scene && !isGenerating && hasScenes;
 
@@ -24,7 +24,7 @@ const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWit
         <GeneratingContent />
       ) : isEmpty ? (
         <div className="book-page-inner">
-          <EmptyPageContent scale={scale || 1} />
+          <EmptyPageContent scale={scale || 1} nextChapter={nextChapter} />
         </div>
       ) : null}
     </div>
@@ -244,6 +244,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
           hasScenes={scenes.length > 0}
           isBookmarked={!!(bookmarkPage && i + 1 === bookmarkPage)}
           singlePage={singlePage}
+          nextChapter={scenes.length + 1}
         />
       );
     }),
