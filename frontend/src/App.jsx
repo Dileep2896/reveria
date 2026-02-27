@@ -157,7 +157,7 @@ export default function App() {
   });
 
   // Director auto-generation with 5-second countdown
-  useDirectorAutoGenerate(directorAutoGenerate, send, setDirectorAutoGenerate, generating);
+  useDirectorAutoGenerate(directorAutoGenerate, send, setDirectorAutoGenerate, generating, artStyle);
 
   // Derive per-scene image tier info for DirectorPanel
   const imageTiers = useMemo(() =>
