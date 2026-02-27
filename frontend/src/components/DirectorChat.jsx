@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import useVoiceCapture from '../hooks/useVoiceCapture';
 
 export default function DirectorChat({
@@ -15,10 +16,25 @@ export default function DirectorChat({
   castAnalyzing = false,
 }) {
   const [speaking, setSpeaking] = useState(false);
+  const [countdown, setCountdown] = useState(5);
+  const [promptExpanded, setPromptExpanded] = useState(false);
   const audioRef = useRef(null);
   const playedIds = useRef(new Set());
   const prevSpeakingRef = useRef(false);
   const mountedRef = useRef(true);
+
+  // Countdown timer for auto-generate
+  useEffect(() => {
+    if (!autoGenerate) { setCountdown(5); setPromptExpanded(false); return; }
+    setCountdown(5);
+    const iv = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(iv); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [autoGenerate]);
 
   const handleAudioCaptured = useCallback(
     (b64, mime) => onSendAudio?.(b64, mime),
@@ -270,13 +286,51 @@ export default function DirectorChat({
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <span className="voice-autogen-label">Generating in 5s...</span>
+            <span className="voice-autogen-label">Generating in {countdown}s...</span>
           </div>
-          <p className="voice-autogen-prompt">{autoGenerate.prompt}</p>
+          <p
+            className="voice-autogen-prompt"
+            onClick={() => setPromptExpanded(true)}
+            style={{ cursor: 'pointer' }}
+            title="Click to view full prompt"
+          >
+            {autoGenerate.prompt}
+          </p>
           <button onClick={onCancelAutoGenerate} className="voice-autogen-cancel">
             Cancel
           </button>
         </div>
+      )}
+
+      {/* Prompt detail dialog */}
+      {promptExpanded && autoGenerate && createPortal(
+        <div
+          className="prompt-dialog-overlay"
+          onClick={() => setPromptExpanded(false)}
+        >
+          <div className="prompt-dialog" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent-primary)' }}>
+                  Director's Prompt
+                </span>
+              </div>
+              <button
+                onClick={() => setPromptExpanded(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <p style={{ fontSize: '13px', lineHeight: 1.7, color: 'var(--text-primary)', margin: 0, whiteSpace: 'pre-wrap' }}>
+              {autoGenerate.prompt}
+            </p>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {/* Suggested prompt card */}
