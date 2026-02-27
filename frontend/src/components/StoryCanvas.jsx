@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, forwardRef, memo } from 'react';
+import { createPortal } from 'react-dom';
 import HTMLFlipBook from 'react-pageflip';
 import { useTheme } from '../contexts/ThemeContext';
 import './storybook.css';
@@ -92,6 +93,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
   const bookRef = useRef(null);
   const wrapperRef = useRef(null);
   const prevGenerating = useRef(false);
+  const [expandedPrompt, setExpandedPrompt] = useState(null);
   const initialPageRef = useRef(() => {
     const p = new URLSearchParams(window.location.search).get('page');
     return p ? Math.max(1, parseInt(p, 10)) : 1;
@@ -315,12 +317,12 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
           );
           return (
             <div className={showTwo ? "book-prompt-pills" : undefined}>
-              <div className="book-prompt-pill" title={leftPrompt}>
+              <div className="book-prompt-pill" title={leftPrompt} onClick={() => setExpandedPrompt(leftPrompt)}>
                 {pillIcon}
                 <p>{leftPrompt}</p>
               </div>
               {showTwo && (
-                <div className="book-prompt-pill" title={rightPrompt}>
+                <div className="book-prompt-pill" title={rightPrompt} onClick={() => setExpandedPrompt(rightPrompt)}>
                   {pillIcon}
                   <p>{rightPrompt}</p>
                 </div>
@@ -398,6 +400,33 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
           </div>
         );
       })()}
+
+      {expandedPrompt && createPortal(
+        <div className="prompt-expand-overlay" onClick={() => setExpandedPrompt(null)}>
+          <div className="prompt-expand-dialog" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent-primary)' }}>
+                  Prompt
+                </span>
+              </div>
+              <button
+                onClick={() => setExpandedPrompt(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <p style={{ fontSize: '13px', lineHeight: 1.7, color: 'var(--text-primary)', margin: 0, whiteSpace: 'pre-wrap' }}>
+              {expandedPrompt}
+            </p>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
