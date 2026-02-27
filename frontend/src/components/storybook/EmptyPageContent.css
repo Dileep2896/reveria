@@ -16,27 +16,31 @@
 /* ---- Breathing vignette glow ---- */
 .empty-page-vignette {
   position: absolute;
-  inset: 0;
+  inset: -20%;
   pointer-events: none;
   background:
-    /* Warm center glow */
     radial-gradient(
-      ellipse 60% 50% at 50% 50%,
-      rgba(245, 158, 11, 0.10) 0%,
-      rgba(139, 92, 246, 0.04) 40%,
-      transparent 70%
-    ),
-    /* Dark edge vignette */
-    radial-gradient(
-      ellipse 80% 80% at 50% 50%,
-      transparent 40%,
-      rgba(0, 0, 0, 0.25) 100%
+      ellipse 50% 45% at 50% 50%,
+      rgba(245, 158, 11, 0.18) 0%,
+      rgba(139, 92, 246, 0.08) 35%,
+      transparent 65%
     );
   animation: emptyPageBreathe 4s ease-in-out infinite;
 }
 
+.empty-page-vignette-edge {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 75% 75% at 50% 50%,
+    transparent 30%,
+    rgba(0, 0, 0, 0.35) 100%
+  );
+}
+
 @keyframes emptyPageBreathe {
-  0%, 100% { opacity: 0.4; }
+  0%, 100% { opacity: 0.5; }
   50%      { opacity: 1; }
 }
 
@@ -137,18 +141,20 @@
    Light mode overrides
    ============================================ */
 [data-theme="light"] .empty-page-vignette {
-  background:
-    radial-gradient(
-      ellipse 60% 50% at 50% 50%,
-      rgba(139, 92, 246, 0.08) 0%,
-      rgba(245, 158, 11, 0.03) 40%,
-      transparent 70%
-    ),
-    radial-gradient(
-      ellipse 80% 80% at 50% 50%,
-      transparent 40%,
-      rgba(0, 0, 0, 0.08) 100%
-    );
+  background: radial-gradient(
+    ellipse 50% 45% at 50% 50%,
+    rgba(139, 92, 246, 0.12) 0%,
+    rgba(245, 158, 11, 0.04) 35%,
+    transparent 65%
+  );
+}
+
+[data-theme="light"] .empty-page-vignette-edge {
+  background: radial-gradient(
+    ellipse 75% 75% at 50% 50%,
+    transparent 30%,
+    rgba(0, 0, 0, 0.06) 100%
+  );
 }
 
 [data-theme="light"] .empty-page-card {

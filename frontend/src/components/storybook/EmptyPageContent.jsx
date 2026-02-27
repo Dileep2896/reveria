@@ -3,7 +3,9 @@ import './EmptyPageContent.css';
 
 const EmptyPageContent = memo(({ scale = 1 }) => (
   <div className="empty-page" style={{ padding: `${24 * scale}px` }}>
-    {/* Breathing vignette glow */}
+    {/* Static edge vignette (darkens corners) */}
+    <div className="empty-page-vignette-edge" />
+    {/* Breathing center glow */}
     <div className="empty-page-vignette" />
 
     {/* StoryForge watermark */}
