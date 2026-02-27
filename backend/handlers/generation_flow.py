@@ -271,7 +271,7 @@ async def handle_generate(
     is_hero_mode = bool(state.hero_description)
     if is_hero_mode:
         # Check if art_style is one of our special trend styles
-        if art_style in ("pixar", "ghibli", "marvel", "cyberpunk"):
+        if art_style in ("ghibli", "marvel"):
             state.trend_style = art_style
         else:
             state.trend_style = None

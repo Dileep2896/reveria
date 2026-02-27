@@ -40,7 +40,7 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
   useEffect(() => {
     if (heroActive && !prevHeroActive.current) {
       const isTrend = ART_STYLES.find(s => s.key === artStyle)?.trend;
-      if (!isTrend) setArtStyle('pixar');
+      if (!isTrend) setArtStyle('ghibli');
       setHeroLoading(false);
       // Restore name from server on resume
       if (heroMode?.heroName) setHeroName(heroMode.heroName);
