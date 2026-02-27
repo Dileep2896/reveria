@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, forwardRef, memo } from 'react';
-import { createPortal } from 'react-dom';
 import HTMLFlipBook from 'react-pageflip';
 import { useTheme } from '../contexts/ThemeContext';
 import './storybook.css';
@@ -401,7 +400,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
         );
       })()}
 
-      {expandedPrompt && createPortal(
+      {expandedPrompt && (
         <div className="prompt-expand-overlay" onClick={() => setExpandedPrompt(null)}>
           <div className="prompt-expand-dialog" onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -424,8 +423,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
               {expandedPrompt}
             </p>
           </div>
-        </div>,
-        document.body,
+        </div>
       )}
     </div>
   );
