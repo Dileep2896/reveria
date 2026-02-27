@@ -763,7 +763,7 @@
   position: absolute;
   inset: 0;
   z-index: 50;
-  background: rgba(8, 12, 50, 0.75);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
