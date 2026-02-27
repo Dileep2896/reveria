@@ -161,7 +161,8 @@ async def handle_hero_photo(
 
     # Validate photo size (max ~10MB base64 ≈ ~7.5MB image)
     if len(photo_data) > 10_000_000:
-        await _safe_send(websocket, {"type": "error", "content": "Photo too large. Please use a smaller image."})
+        await _safe_send(websocket, {"type": "hero_status", "enabled": False})
+        await _safe_send(websocket, {"type": "error", "content": "Photo too large (max 5 MB). Please use a smaller image."})
         await _safe_send(websocket, {"type": "status", "content": "done"})
         return
 

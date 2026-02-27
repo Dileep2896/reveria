@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom';
 import useVoiceCapture from '../hooks/useVoiceCapture';
 import { ART_STYLES } from '../data/artStyles';
 import { PLACEHOLDERS } from '../data/languages';
+import { useToast } from '../contexts/ToastContext';
 
 export default function ControlBar({ onSend, onSendAudio, onSteer, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, usage, onHeroPhoto, heroMode }) {
+  const { addToast } = useToast();
   const [focused, setFocused] = useState(false);
   const [heroPhoto, setHeroPhotoRaw] = useState(() => {
     try { return localStorage.getItem('storyforge-hero-photo'); } catch { return null; }
@@ -63,6 +65,12 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Reject files > 5MB before reading
+      if (file.size > 5 * 1024 * 1024) {
+        addToast?.('Photo too large (max 5 MB). Please use a smaller image.', 'warning');
+        e.target.value = '';
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         // Store pending photo data and show name dialog
