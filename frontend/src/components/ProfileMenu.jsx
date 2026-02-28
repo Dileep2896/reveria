@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ROUTES } from '../routes';
 import UserAvatar from './UserAvatar';
+import Tooltip from './Tooltip';
 
 export default function ProfileMenu({ user, onSignOut, onNavigate, isAdmin, userTier }) {
   const [open, setOpen] = useState(false);
@@ -51,6 +52,7 @@ export default function ProfileMenu({ user, onSignOut, onNavigate, isAdmin, user
   return (
     <div ref={menuRef} className="relative">
       {/* Avatar button */}
+      <Tooltip label={displayName}>
       <button
         onClick={() => setOpen(!open)}
         className="rounded-full flex items-center justify-center transition-all overflow-hidden cursor-pointer"
@@ -63,10 +65,10 @@ export default function ProfileMenu({ user, onSignOut, onNavigate, isAdmin, user
           padding: 0,
           background: 'transparent',
         }}
-        title={displayName}
       >
         <UserAvatar photoURL={photoURL} name={displayName} size={28} />
       </button>
+      </Tooltip>
 
       {/* Dropdown */}
       {open && (

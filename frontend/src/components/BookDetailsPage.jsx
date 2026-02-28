@@ -12,6 +12,7 @@ import BookSocialSection from './book/BookSocialSection';
 import BookCommentSection from './book/BookCommentSection';
 import BookActionBar from './book/BookActionBar';
 import UserAvatar from './UserAvatar';
+import Tooltip from './Tooltip';
 import { API_URL } from '../utils/storyHelpers';
 import './BookDetailsPage.css';
 
@@ -492,9 +493,11 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
           <div className="book-details-title-row">
             <h1 className="book-details-title">{storyData.title}</h1>
             {isVisitorView && (
-              <button className="book-details-share-inline" onClick={handleShare} title="Share">
-                <IconShare />
-              </button>
+              <Tooltip label="Share">
+                <button className="book-details-share-inline" onClick={handleShare}>
+                  <IconShare />
+                </button>
+              </Tooltip>
             )}
           </div>
 

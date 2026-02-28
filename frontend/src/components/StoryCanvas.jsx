@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, forwardRef, memo } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 import { useTheme } from '../contexts/ThemeContext';
+import Tooltip from './Tooltip';
 import './storybook.css';
 import SceneCard from './SceneCard';
 import { GENRE_KEYS, LANGUAGES, getLangData } from '../data/languages';
@@ -317,15 +318,19 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
           );
           return (
             <div className={showTwo ? "book-prompt-pills" : undefined}>
-              <div className="book-prompt-pill" title={leftPrompt} onClick={() => setExpandedPrompt(leftPrompt)}>
+              <Tooltip label={leftPrompt}>
+              <div className="book-prompt-pill" onClick={() => setExpandedPrompt(leftPrompt)}>
                 {pillIcon}
                 <p>{leftPrompt}</p>
               </div>
+              </Tooltip>
               {showTwo && (
-                <div className="book-prompt-pill" title={rightPrompt} onClick={() => setExpandedPrompt(rightPrompt)}>
+                <Tooltip label={rightPrompt}>
+                <div className="book-prompt-pill" onClick={() => setExpandedPrompt(rightPrompt)}>
                   {pillIcon}
                   <p>{rightPrompt}</p>
                 </div>
+                </Tooltip>
               )}
             </div>
           );

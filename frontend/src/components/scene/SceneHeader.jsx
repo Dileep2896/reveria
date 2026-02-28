@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSceneActions } from '../../contexts/SceneActionsContext';
 import IconBtn from '../IconBtn';
+import Tooltip from '../Tooltip';
 
 export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, isBusy, onRegenSceneStart }) {
   const { regenScene, deleteScene, isReadOnly, canRegen } = useSceneActions();
@@ -25,6 +26,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
         Scene {displayIndex ?? scene.scene_number}
       </span>
       {isBookmarked && (
+        <Tooltip label="Bookmarked">
         <span
           style={{
             color: '#d4a850',
@@ -34,12 +36,12 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
             marginLeft: `${4 * scale}px`,
             verticalAlign: 'middle',
           }}
-          title="Bookmarked"
         >
           <svg width={13 * scale} height={13 * scale} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
           </svg>
         </span>
+        </Tooltip>
       )}
       {scene.scene_title && (
         <div

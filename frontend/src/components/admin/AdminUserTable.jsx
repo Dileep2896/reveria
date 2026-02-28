@@ -1,5 +1,6 @@
 import { formatDate } from './adminHelpers';
 import UserAvatar from '../UserAvatar';
+import Tooltip from '../Tooltip';
 
 function TierPill({ tier, isAdmin: admin }) {
   if (admin) return <span className="admin-tier admin-tier--admin">admin</span>;
@@ -9,14 +10,18 @@ function TierPill({ tier, isAdmin: admin }) {
 
 function VerifiedBadge({ verified }) {
   if (verified) return (
-    <span className="admin-verified admin-verified--yes" title="Email verified">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-    </span>
+    <Tooltip label="Email verified">
+      <span className="admin-verified admin-verified--yes">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+      </span>
+    </Tooltip>
   );
   return (
-    <span className="admin-verified admin-verified--no" title="Email not verified">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-    </span>
+    <Tooltip label="Email not verified">
+      <span className="admin-verified admin-verified--no">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      </span>
+    </Tooltip>
   );
 }
 

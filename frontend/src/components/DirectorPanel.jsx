@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import Tooltip from './Tooltip';
 import './director-panel.css';
 import DirectorHelpModal from './director/DirectorHelpModal';
 import DirectorEmptyState from './director/DirectorEmptyState';
@@ -111,10 +112,10 @@ export default function DirectorPanel({
             {language}
           </span>
         )}
+        <Tooltip label="What do these cards mean?">
         <button
           onClick={() => setHelpOpen(true)}
           aria-label="Director guide"
-          title="What do these cards mean?"
           style={{
             width: '22px',
             height: '22px',
@@ -142,6 +143,7 @@ export default function DirectorPanel({
         >
           ?
         </button>
+        </Tooltip>
       </div>
 
       {helpOpen && createPortal(

@@ -1,3 +1,5 @@
+import Tooltip from '../Tooltip';
+
 export default function LiveNoteItem({ note, index, isLast, playingNoteIdx, playAudio }) {
   return (
     <div
@@ -37,9 +39,9 @@ export default function LiveNoteItem({ note, index, isLast, playingNoteIdx, play
           {note.mood}
         </span>
         {note.audio_url && (
+          <Tooltip label={playingNoteIdx === index ? "Stop playback" : "Replay Director's voice"}>
           <button
             onClick={() => playAudio(note.audio_url, index)}
-            title={playingNoteIdx === index ? "Stop playback" : "Replay Director's voice"}
             style={{
               width: '20px',
               height: '20px',
@@ -65,6 +67,7 @@ export default function LiveNoteItem({ note, index, isLast, playingNoteIdx, play
               </svg>
             )}
           </button>
+          </Tooltip>
         )}
       </div>
       <p style={{

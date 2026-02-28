@@ -4,6 +4,7 @@ import useVoiceCapture from '../hooks/useVoiceCapture';
 import { ART_STYLES } from '../data/artStyles';
 import { PLACEHOLDERS } from '../data/languages';
 import { useToast } from '../contexts/ToastContext';
+import Tooltip from './Tooltip';
 
 export default function ControlBar({ onSend, onSendAudio, onSteer, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, usage, onHeroPhoto, heroMode }) {
   const { addToast } = useToast();
@@ -292,7 +293,6 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                       cursor: 'pointer', flexShrink: 0,
                     }}
                     onClick={() => fileInputRef.current.click()}
-                    title="Change photo"
                   >
                     <img src={heroPhoto} alt="Hero" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
@@ -304,7 +304,6 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                       background: 'var(--accent-primary)', cursor: 'pointer', flexShrink: 0,
                     }}
                     onClick={() => fileInputRef.current.click()}
-                    title="Add photo"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -341,11 +340,11 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
               </div>
             ) : (
               /* Default: camera button to upload photo */
+              <Tooltip label="Add your photo for Hero Mode">
               <button
                 type="button"
                 onClick={() => fileInputRef.current.click()}
                 className="flex items-center justify-center p-2 rounded-lg transition-all"
-                title="Add your photo for Hero Mode"
                 style={{ color: 'var(--text-muted)', cursor: 'pointer' }}
                 onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent-primary)'}
                 onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
@@ -355,11 +354,13 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                   <circle cx="12" cy="13" r="4"/>
                 </svg>
               </button>
+              </Tooltip>
             )}
           </div>
 
           {/* Usage counter pill — hidden for pro (limit is effectively unlimited) */}
           {usage && usage.limits?.generations_today > 0 && usage.usage?.tier !== 'pro' && (
+            <Tooltip label="Generations used today">
             <div
               style={{
                 padding: '2px 8px',
@@ -374,10 +375,10 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
               }}
-              title="Generations used today"
             >
               {usage.usage?.generations_today || 0}/{usage.limits.generations_today}
             </div>
+            </Tooltip>
           )}
 
           <div className="control-input-divider" />
@@ -409,6 +410,7 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
 
           {/* Single morphing action button: mic → send → steer/spinner */}
           {generating && hasText ? (
+            <Tooltip label="Steer the story">
             <button
               type="submit"
               className="flex-shrink-0 rounded-full flex items-center justify-center transition-all control-action-btn"
@@ -419,7 +421,6 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                 boxShadow: 'var(--shadow-glow-secondary)',
                 cursor: 'pointer',
               }}
-              title="Steer the story"
             >
               {/* Compass icon */}
               <svg className="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -427,6 +428,7 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                 <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
               </svg>
             </button>
+            </Tooltip>
           ) : generating ? (
             <div
               className="flex-shrink-0 rounded-full flex items-center justify-center control-action-btn"
@@ -447,6 +449,7 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
               />
             </div>
           ) : hasText ? (
+            <Tooltip label="Send">
             <button
               type="submit"
               disabled={isDisabled}
@@ -459,14 +462,15 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                 cursor: isDisabled ? 'not-allowed' : 'pointer',
                 opacity: isDisabled ? 0.3 : 1,
               }}
-              title="Send"
             >
               <svg className="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12" />
                 <polyline points="12 5 19 12 12 19" />
               </svg>
             </button>
+            </Tooltip>
           ) : (
+            <Tooltip label={recording ? 'Click to stop' : 'Click to record'}>
             <button
               type="button"
               className="flex-shrink-0 rounded-full flex items-center justify-center transition-all control-action-btn"
@@ -479,7 +483,6 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                 opacity: (isDisabled || generating) ? 0.3 : 1,
                 cursor: (isDisabled || generating) ? 'not-allowed' : 'pointer',
               }}
-              title={recording ? 'Click to stop' : 'Click to record'}
               onClick={!(isDisabled || generating) ? (recording ? stopRecording : startRecording) : undefined}
               disabled={isDisabled || generating}
             >
@@ -490,6 +493,7 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                 <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
             </button>
+            </Tooltip>
           )}
         </div>
 

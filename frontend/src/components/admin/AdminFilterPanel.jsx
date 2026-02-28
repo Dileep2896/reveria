@@ -1,4 +1,5 @@
 import { TIER_OPTIONS, PROVIDER_OPTIONS, VERIFIED_OPTIONS, SORT_OPTIONS } from './adminHelpers';
+import Tooltip from '../Tooltip';
 
 export default function AdminFilterPanel({ search, setSearch, filterTier, setFilterTier, filterProvider, setFilterProvider, filterVerified, setFilterVerified, sortBy, setSortBy, hasActiveFilters, clearFilters }) {
   return (
@@ -16,9 +17,11 @@ export default function AdminFilterPanel({ search, setSearch, filterTier, setFil
           onChange={e => setSearch(e.target.value)}
         />
         {(search || hasActiveFilters) && (
-          <button className="admin-search-clear" onClick={() => { setSearch(''); clearFilters(); }} title="Clear all">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+          <Tooltip label="Clear all">
+            <button className="admin-search-clear" onClick={() => { setSearch(''); clearFilters(); }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </Tooltip>
         )}
       </div>
 

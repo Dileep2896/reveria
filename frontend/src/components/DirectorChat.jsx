@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import useVoiceCapture from '../hooks/useVoiceCapture';
+import Tooltip from './Tooltip';
 
 export default function DirectorChat({
   onSendAudio,
@@ -288,14 +289,15 @@ export default function DirectorChat({
             </svg>
             <span className="voice-autogen-label">Generating in {countdown}s...</span>
           </div>
+          <Tooltip label="Click to view full prompt">
           <p
             className="voice-autogen-prompt"
             onClick={() => setPromptExpanded(true)}
             style={{ cursor: 'pointer' }}
-            title="Click to view full prompt"
           >
             {autoGenerate.prompt}
           </p>
+          </Tooltip>
           <button onClick={onCancelAutoGenerate} className="voice-autogen-cancel">
             Cancel
           </button>
