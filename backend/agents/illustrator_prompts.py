@@ -55,6 +55,20 @@ output ONLY the names of characters who physically appear in or are visually
 present in this scene, one per line. If no characters appear, output NONE.
 Do NOT add explanations or extra text."""
 
+VISUAL_DNA_ANALYSIS_INSTRUCTION = """You are analyzing a character portrait for visual consistency in an illustrated storybook.
+Describe the EXACT physical appearance of this character as shown in this image.
+
+Include: face shape, skin tone and complexion, eye color/shape/size, nose and lip shape,
+hair color/style/length, approximate age, body build, clothing details with colors,
+any accessories or distinctive features.
+
+RULES:
+- Be extremely specific — these descriptions will be used to recreate this exact character in future illustrations
+- Use natural language color descriptions (warm brown, pale ivory, deep auburn) — NOT hex codes
+- Describe ONLY what you see in this image, not what you imagine
+- Keep to 100-150 words
+- Output ONLY the physical description, no preamble or labels"""
+
 
 ART_STYLES = {
     "cinematic": (

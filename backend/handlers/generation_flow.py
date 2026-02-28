@@ -378,6 +378,27 @@ async def handle_generate(
                     "content": "Could not save your scenes — they may disappear on reload. Try sending the same prompt again.",
                 })
 
+            # Persist anchor portraits generated during pipeline (visual DNA)
+            _anchor_names: list[str] = []
+            if state.illustrator._anchor_portraits:
+                _anchor_names = [p["name"] for p in state.illustrator._anchor_portraits]
+                try:
+                    from google.cloud.firestore_v1.transforms import ArrayUnion
+                    from services.firestore_client import get_db as _get_db_anchor
+                    _db_anchor = _get_db_anchor()
+                    try:
+                        await _db_anchor.collection("stories").document(state.active_story_id).update({
+                            "portraits": ArrayUnion(state.illustrator._anchor_portraits)
+                        })
+                    except Exception:
+                        await _db_anchor.collection("stories").document(state.active_story_id).set(
+                            {"portraits": state.illustrator._anchor_portraits}, merge=True
+                        )
+                    logger.info("Persisted %d anchor portraits for story %s", len(state.illustrator._anchor_portraits), state.active_story_id)
+                except Exception as e:
+                    logger.error("Failed to persist anchor portraits: %s", e)
+                state.illustrator._anchor_portraits = []  # consumed
+
             # Meta + portraits run independently of persist success
             try:
                 meta_task = asyncio.create_task(
@@ -395,6 +416,10 @@ async def handle_generate(
                 _existing_names = [p["name"] for p in _existing_portraits if p.get("name")]
             except Exception:
                 _existing_names = []
+            # Also include anchor portrait names for dedup (in case Firestore read missed them)
+            for _aname in _anchor_names:
+                if _aname not in _existing_names:
+                    _existing_names.append(_aname)
             try:
                 portrait_task = asyncio.create_task(_generate_portraits(
                     websocket, state.illustrator, state.active_story_id,

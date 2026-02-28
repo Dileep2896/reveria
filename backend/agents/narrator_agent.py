@@ -14,6 +14,7 @@ from agents.narrator import Narrator
 from agents.illustrator import Illustrator
 from agents.director import Director
 from agents.shared_state import SharedPipelineState
+from services.imagen_client import generate_image
 from services.multi_voice_tts import synthesize_multi_voice
 from services.storage_client import upload_media
 
@@ -74,6 +75,8 @@ class NarratorADKAgent(BaseAgent):
                 story_so_far = "\n\n".join(sc["text"] for sc in scenes)
                 self.illustrator.accumulate_story(story_so_far)
                 await self.illustrator.extract_characters(story_so_far)
+                # Generate anchor portraits + vision analysis BEFORE scene images
+                await self._generate_anchor_portraits()
 
             # Image (serialised via semaphore)
             pending_tasks.append(asyncio.create_task(
@@ -170,6 +173,100 @@ class NarratorADKAgent(BaseAgent):
             await asyncio.gather(*pending_tasks, return_exceptions=True)
 
         yield Event(author=self.name)
+
+    # ── Anchor portrait generation ──────────────────────────────────
+
+    async def _generate_anchor_portraits(self) -> None:
+        """Generate anchor portraits for new characters and analyze with Gemini Vision.
+
+        For each character without visual DNA:
+        1. Generate a close-up portrait via Imagen
+        2. Analyze the portrait with Gemini Vision to extract precise visual description
+        3. Store visual DNA on the illustrator for use in all subsequent scene images
+
+        Blocking call — scene images wait for this to complete so they benefit
+        from vision-anchored descriptions from scene 1.
+        """
+        s = self.shared
+        sheet = self.illustrator._character_sheet
+        if not sheet:
+            return
+
+        # Parse character names from sheet
+        characters = []
+        for line in sheet.strip().splitlines():
+            if ":" in line:
+                name = line.split(":", 1)[0].strip()
+                desc = line.split(":", 1)[1].strip()
+                if name and desc and len(name) < 50:
+                    characters.append({"name": name, "description": desc})
+
+        if not characters:
+            return
+
+        # Determine existing portrait count for GCS index offset
+        existing_anchor_count = len(self.illustrator._anchor_portraits)
+
+        for idx, char in enumerate(characters):
+            name = char["name"]
+            # Skip characters that already have visual DNA (from previous batch)
+            if name.lower() in self.illustrator._visual_dna:
+                continue
+            # Skip hero character — already has photo-based description
+            if s.hero_name and name.lower() == s.hero_name.lower():
+                continue
+
+            try:
+                # Build portrait prompt from character sheet description
+                clean_desc = self.illustrator._strip_hex_codes(char["description"])
+                prompt = (
+                    f"{clean_desc}. "
+                    f"Close-up face portrait of {name}, head and shoulders, "
+                    f"looking at the viewer, detailed facial features, expressive eyes, "
+                    f"{self.illustrator.art_style_suffix}"
+                )
+
+                image_data, error_reason = await generate_image(prompt, aspect_ratio="1:1", uid=s.uid)
+                if not image_data:
+                    logger.warning("Anchor portrait failed for %s: %s", name, error_reason)
+                    continue
+
+                # Analyze with Gemini Vision to get precise visual description
+                visual_desc = await self.illustrator.analyze_visual_dna(image_data, name)
+                if visual_desc:
+                    self.illustrator._visual_dna[name.lower()] = visual_desc
+
+                # Upload to GCS and send to frontend
+                gcs_index = 900 + existing_anchor_count + idx
+                try:
+                    gcs_url = await upload_media(s.story_id, gcs_index, "portrait", image_data)
+                except Exception as e:
+                    logger.error("GCS upload failed for anchor portrait %s: %s", name, e)
+                    continue
+
+                # Send portrait WS message to frontend (same format as portrait_service)
+                if s.ws_callback:
+                    await s.ws_callback({
+                        "type": "portrait",
+                        "name": name,
+                        "image_url": gcs_url,
+                    })
+
+                # Track for Firestore persistence
+                self.illustrator._anchor_portraits.append({
+                    "name": name,
+                    "image_url": gcs_url,
+                })
+
+            except Exception as e:
+                logger.error("Anchor portrait error for %s: %s", name, e)
+                # Continue — character falls back to text-based DNA
+
+        if self.illustrator._anchor_portraits:
+            logger.info(
+                "Generated %d anchor portraits with visual DNA",
+                len(self.illustrator._anchor_portraits),
+            )
 
     # ── Per-scene helpers ──────────────────────────────────────────
 

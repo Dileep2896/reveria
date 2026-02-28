@@ -8,6 +8,7 @@ from agents.illustrator_prompts import (
     SCENE_COMPOSER_INSTRUCTION,
     SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION,
     CHARACTER_IDENTIFIER_INSTRUCTION,
+    VISUAL_DNA_ANALYSIS_INSTRUCTION,
     ART_STYLES,
 )
 
@@ -23,6 +24,8 @@ class Illustrator:
         self.hero_description: str = ""
         self.hero_name: str = ""
         self.trend_style: str | None = None
+        self._visual_dna: dict[str, str] = {}      # name_lower → vision description
+        self._anchor_portraits: list[dict] = []     # [{name, image_url}] for Firestore
 
     def serialize_state(self) -> dict:
         """Return illustrator state as a plain dict for persistence."""
@@ -33,6 +36,8 @@ class Illustrator:
             "hero_description": self.hero_description,
             "hero_name": self.hero_name,
             "trend_style": self.trend_style,
+            "visual_dna": self._visual_dna,
+            "anchor_portraits": self._anchor_portraits,
         }
 
     def restore_state(self, state: dict) -> None:
@@ -43,6 +48,8 @@ class Illustrator:
         self.hero_description = state.get("hero_description", "")
         self.hero_name = state.get("hero_name", "")
         self.trend_style = state.get("trend_style")
+        self._visual_dna = state.get("visual_dna", {})
+        self._anchor_portraits = []  # transient per-batch artifact, not restored
 
     def accumulate_story(self, batch_text: str) -> None:
         """Append a new batch of story text to the accumulated cross-batch story."""
@@ -150,6 +157,48 @@ class Illustrator:
             logger.error("Character extraction failed: %s", e)
             # Keep existing sheet on error rather than clearing it
 
+
+    async def analyze_visual_dna(self, image_data_url: str, character_name: str) -> str | None:
+        """Analyze a portrait image with Gemini Vision to extract precise visual description.
+
+        Returns a natural-language description of the character's appearance,
+        or None on failure. Best-effort — never crashes the pipeline.
+        """
+        import base64
+        client = get_client()
+        model = get_model()
+        try:
+            # Parse data URL: "data:image/png;base64,..." → bytes + mime
+            if "," in image_data_url:
+                header, b64_data = image_data_url.split(",", 1)
+                mime_type = header.split(":")[1].split(";")[0] if ":" in header else "image/png"
+            else:
+                b64_data = image_data_url
+                mime_type = "image/png"
+            image_bytes = base64.b64decode(b64_data)
+
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                        types.Part(text=f"Describe the exact physical appearance of {character_name} as shown in this portrait."),
+                    ],
+                ),
+                config=types.GenerateContentConfig(
+                    system_instruction=VISUAL_DNA_ANALYSIS_INSTRUCTION,
+                    temperature=0.1,
+                    max_output_tokens=250,
+                ),
+            )
+            result = response.text.strip() if response.text else None
+            if result:
+                logger.info("Visual DNA for %s: %s", character_name, result[:120])
+            return result
+        except Exception as e:
+            logger.warning("Visual DNA analysis failed for %s: %s", character_name, e)
+            return None
 
     async def generate_for_scene(self, scene_text: str, uid: str = "__global__") -> tuple[str | None, str | None, int, str | None]:
         """Generate an illustration for a scene.
@@ -265,7 +314,11 @@ class Illustrator:
             return char_names
 
     def _filter_character_descriptions(self, names: list[str]) -> str:
-        """Extract full descriptions for the given character names from the sheet."""
+        """Extract full descriptions for the given character names from the sheet.
+
+        Prefers vision-anchored descriptions (visual DNA) when available,
+        falling back to the original structured character sheet line.
+        """
         if not self._character_sheet or not names:
             return ""
 
@@ -275,7 +328,11 @@ class Illustrator:
             if ":" in line:
                 name = line.split(":", 1)[0].strip()
                 if name.lower() in names_lower:
-                    descriptions.append(line.strip())
+                    # Prefer vision-anchored description if available
+                    if name.lower() in self._visual_dna:
+                        descriptions.append(f"{name}: {self._visual_dna[name.lower()]}")
+                    else:
+                        descriptions.append(line.strip())
 
         return "\n".join(descriptions)
 
