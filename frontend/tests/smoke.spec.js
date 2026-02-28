@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 
 test('home page loads without crashing', async ({ page }) => {
   await page.goto('/');
-  await expect(page).toHaveTitle(/StoryForge/i);
+  await expect(page).toHaveTitle(/Reveria/i);
   // Page should render something visible (auth screen or canvas)
   await expect(page.locator('body')).toBeVisible();
 });

@@ -83,7 +83,7 @@ async def _run_adk_pipeline(
             refusal_kind = _is_refusal(data.get("content", ""))
             if refusal_kind == "offtopic":
                 refusal_detected = True
-                msg = "StoryForge is a storytelling app - try describing a story you'd like me to create!"
+                msg = "Reveria is a storytelling app - try describing a story you'd like me to create!"
                 logger.warning("ADK narrator produced offtopic refusal, aborting batch")
                 await _safe_send(websocket, {"type": "error", "content": msg})
                 await _safe_send(websocket, {"type": "status", "content": "done"})
@@ -249,7 +249,7 @@ async def handle_generate(
     if not await _validate_prompt(user_input):
         await _safe_send(websocket, {
             "type": "error",
-            "content": "StoryForge is a storytelling app - try describing a story you'd like me to create!",
+            "content": "Reveria is a storytelling app - try describing a story you'd like me to create!",
         })
         await _safe_send(websocket, {"type": "status", "content": "done"})
         return
@@ -328,12 +328,14 @@ async def handle_generate(
 
             current_batch_scenes = [s for s in current_batch_scenes if not s.get("_image_failed")]
 
+            # Persist with retry — transient Firestore errors are common
+            persist_ok = False
             try:
                 # Snapshot live notes under lock to avoid concurrent mutation
                 async with state.shared_state._live_notes_lock:
                     live_notes_snapshot = list(state.shared_state.director_live_notes)
 
-                await persist_story(
+                persist_kwargs = dict(
                     story_id=state.active_story_id,
                     uid=state.uid,
                     narrator_history=_serialize_narrator_history(state.narrator),
@@ -349,8 +351,32 @@ async def handle_generate(
                     author_name=state.author_name,
                     author_photo_url=state.author_photo_url,
                 )
+
+                for attempt in range(3):
+                    try:
+                        await persist_story(**persist_kwargs)
+                        persist_ok = True
+                        break
+                    except Exception as e:
+                        logger.error(
+                            "Firestore persist error (attempt %d/3, batch %d, %d scenes): %s",
+                            attempt + 1, state.batch_index, len(current_batch_scenes), e,
+                            exc_info=True,
+                        )
+                        if attempt < 2:
+                            await asyncio.sleep(1.0 * (attempt + 1))
+
+                if not persist_ok:
+                    await _safe_send(websocket, {
+                        "type": "error",
+                        "content": "Could not save your scenes — they may disappear on reload. Try sending the same prompt again.",
+                    })
             except Exception as e:
-                logger.error("Firestore persist error: %s", e)
+                logger.error("Firestore persist error (outer): %s", e, exc_info=True)
+                await _safe_send(websocket, {
+                    "type": "error",
+                    "content": "Could not save your scenes — they may disappear on reload. Try sending the same prompt again.",
+                })
 
             # Meta + portraits run independently of persist success
             try:

@@ -58,7 +58,7 @@
 }
 
 .library-title {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: 1.8rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -331,7 +331,7 @@
 }
 
 .book-3d-title {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: 0.85rem;
   font-weight: 700;
   color: #fff;
@@ -786,7 +786,7 @@
 }
 
 .library-empty h3 {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: 1.4rem;
   font-weight: 600;
   color: var(--text-primary);
@@ -993,7 +993,7 @@
 }
 
 .library-delete-title {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: 1.4rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -1010,7 +1010,7 @@
 }
 
 .library-delete-book-name {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-secondary);

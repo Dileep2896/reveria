@@ -35,12 +35,12 @@ export default function TermsPage() {
             <section className="terms-section">
               <h2>1. Acceptance of Terms (and Excellent Taste)</h2>
               <p>
-                By accessing StoryForge, you acknowledge that you have impeccable judgment - not
+                By accessing Reveria, you acknowledge that you have impeccable judgment - not
                 only in choosing to read Terms of Service pages (a rare and admirable trait), but
                 also in recognizing quality interactive storytelling when you see it.
               </p>
               <p>
-                These terms govern your use of StoryForge, an AI-powered interactive fiction
+                These terms govern your use of Reveria, an AI-powered interactive fiction
                 platform built from the ground up for the <strong>Gemini Live Agent Challenge</strong>.
                 If you're a judge reading this - welcome! You've found the easter egg. Grab a
                 coffee, get comfortable, and let us tell you why you're looking at something special.
@@ -50,7 +50,7 @@ export default function TermsPage() {
             <section className="terms-section">
               <h2>2. The Platform (a.k.a. Why This Should Win)</h2>
               <p>
-                StoryForge is not just another chatbot wrapper. It is a full-stack, production-grade
+                Reveria is not just another chatbot wrapper. It is a full-stack, production-grade
                 creative platform that orchestrates <strong>six Google AI services</strong> into one
                 seamless experience:
               </p>
@@ -91,7 +91,7 @@ export default function TermsPage() {
               <h2>3. User-Generated Content</h2>
               <p>
                 You retain ownership of the stories you create. However, by publishing a story on
-                StoryForge's Explore page, you grant other users the right to read, like, rate,
+                Reveria's Explore page, you grant other users the right to read, like, rate,
                 and comment on your work. Think of it as a library card for the imagination.
               </p>
               <p>
@@ -165,7 +165,7 @@ export default function TermsPage() {
             <section className="terms-section">
               <h2>6. Fair Usage</h2>
               <p>
-                StoryForge uses Google Cloud APIs that have usage costs. We implement rate
+                Reveria uses Google Cloud APIs that have usage costs. We implement rate
                 limiting and quota tracking to keep things sustainable. Free tier users get
                 generous limits. Standard and Pro tiers unlock more. This isn't a paywall - it's
                 how we keep the lights on so everyone can tell stories.
@@ -181,7 +181,7 @@ export default function TermsPage() {
             <section className="terms-section">
               <h2>7. The Social Contract</h2>
               <p>
-                StoryForge has a community. Users publish stories, others read and rate them,
+                Reveria has a community. Users publish stories, others read and rate them,
                 people leave comments. Be kind. The comment section has moderation (authors can
                 moderate their own stories, users can delete their own comments), but the best
                 moderation is a community that lifts each other up.
@@ -191,7 +191,7 @@ export default function TermsPage() {
             <section className="terms-section">
               <h2>8. Availability & Disclaimers</h2>
               <p>
-                StoryForge is provided "as is" - we do our best, but AI can be unpredictable.
+                Reveria is provided "as is" - we do our best, but AI can be unpredictable.
                 Sometimes Imagen's safety filters reject a perfectly innocent prompt about a
                 knight and a dragon. Sometimes the Narrator gets a bit too dramatic. That's part
                 of the charm.
@@ -206,7 +206,7 @@ export default function TermsPage() {
             <section className="terms-section">
               <h2>9. Changes to These Terms</h2>
               <p>
-                We may update these terms as StoryForge evolves. We'll make it obvious when we do.
+                We may update these terms as Reveria evolves. We'll make it obvious when we do.
                 But honestly, if you've read this far, you're already our favorite user. Or judge.
                 Especially if you're a judge.
               </p>
@@ -215,7 +215,7 @@ export default function TermsPage() {
             <section className="terms-section terms-section--final">
               <h2>10. One Last Thing</h2>
               <p>
-                We built StoryForge because we believe the best use of AI isn't to replace human
+                We built Reveria because we believe the best use of AI isn't to replace human
                 creativity - it's to amplify it. Every story on this platform started with a
                 human idea. The AI just helped bring it to life with words, illustrations, and
                 voice.

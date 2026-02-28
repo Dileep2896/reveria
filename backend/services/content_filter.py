@@ -102,7 +102,7 @@ def is_refusal(text: str) -> str | None:
 # Pre-pipeline prompt validation (Gemini Flash - fast, multilingual)
 # ---------------------------------------------------------------------------
 
-_CLASSIFY_PROMPT = """You are a classifier for StoryForge, a storytelling app where users describe stories they want created.
+_CLASSIFY_PROMPT = """You are a classifier for Reveria, a storytelling app where users describe stories they want created.
 
 Decide if the user's message is a valid storytelling request. Valid requests include:
 - Story ideas, plot descriptions, character descriptions, settings

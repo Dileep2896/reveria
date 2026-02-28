@@ -37,7 +37,7 @@ logger = logging.getLogger("storyforge.director_chat")
 async def generate_voice_preview(voice_name: str) -> str | None:
     """Generate a short voice preview clip using the Gemini Live API."""
     client = get_client()
-    preview_text = VOICE_PREVIEW_LINES.get(voice_name, f"Hello, I am {voice_name}, your Director at StoryForge.")
+    preview_text = VOICE_PREVIEW_LINES.get(voice_name, f"Hello, I am {voice_name}, your Director at Reveria.")
     config = {
         "response_modalities": ["AUDIO"],
         "speech_config": {

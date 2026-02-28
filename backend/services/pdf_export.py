@@ -293,7 +293,7 @@ def generate_story_pdf(
 
     pdf.set_font(fn, "B", 24)
     pdf.set_text_color(78, 68, 58)
-    pdf.cell(0, 12, "StoryForge", align="C",
+    pdf.cell(0, 12, "Reveria", align="C",
              new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
 

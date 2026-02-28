@@ -51,7 +51,7 @@ export default function CompleteBookDialog({ completing, onClose, onComplete }) 
         </div>
 
         <h3 style={{
-          fontFamily: "'Playfair Display', serif",
+          fontFamily: "'Cormorant Garamond', serif",
           fontSize: '1.4rem',
           fontWeight: 700,
           color: 'var(--text-primary)',

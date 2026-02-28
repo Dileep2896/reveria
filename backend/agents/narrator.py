@@ -13,7 +13,7 @@ def _build_system_prompt(scene_count: int = 1, language: str = "English") -> str
             "\n- IMPORTANT: Always write in English regardless of what language the user writes or speaks in. The story language is English and cannot change."
         )
 
-    return f"""You are the Narrator of StoryForge, a master storyteller who crafts vivid, \
+    return f"""You are the Narrator of Reveria, a master storyteller who crafts vivid, \
 immersive narratives. You write in a cinematic style with rich sensory details.
 
 RULES:

@@ -152,7 +152,7 @@ export default function SubscriptionPage({ idToken, addToast }) {
           </svg>
         </div>
         <h1>Subscription & Usage</h1>
-        <p>Track your daily usage and manage your StoryForge plan</p>
+        <p>Track your daily usage and manage your Reveria plan</p>
       </div>
 
       <div className="sub-content">

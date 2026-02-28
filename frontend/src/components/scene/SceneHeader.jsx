@@ -13,7 +13,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
       <div className="flex items-center gap-2">
         <span
           style={{
-            fontFamily: "'Playfair Display', serif",
+            fontFamily: "'Cormorant Garamond', serif",
             fontSize: `${8.5 * scale}px`,
             fontWeight: 600,
             letterSpacing: '0.22em',
@@ -82,7 +82,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
       {scene.scene_title && (
         <div
           style={{
-            fontFamily: "'Playfair Display', serif",
+            fontFamily: "'Cormorant Garamond', serif",
             fontSize: `${11 * scale}px`,
             color: 'var(--text-secondary)',
             fontStyle: 'italic',
@@ -132,7 +132,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
           </div>
 
           <h3 style={{
-            fontFamily: "'Playfair Display', serif", fontSize: '1.4rem', fontWeight: 700,
+            fontFamily: "'Cormorant Garamond', serif", fontSize: '1.4rem', fontWeight: 700,
             color: 'var(--text-primary)', margin: '0 0 0.6rem', letterSpacing: '0.01em',
           }}>Delete This Scene?</h3>
 
@@ -143,7 +143,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
           }} />
 
           <p style={{
-            fontFamily: "'Playfair Display', serif", fontSize: '1rem', fontWeight: 600,
+            fontFamily: "'Cormorant Garamond', serif", fontSize: '1rem', fontWeight: 600,
             color: 'var(--text-secondary)', margin: '0 0 0.5rem', fontStyle: 'italic',
           }}>
             Scene {displayIndex ?? scene.scene_number}
@@ -162,7 +162,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
               onClick={() => setConfirmDelete(false)}
               style={{
                 padding: '0.6rem 1.5rem', borderRadius: 999,
-                fontFamily: "'Inter', sans-serif", fontSize: '0.8rem', fontWeight: 600,
+                fontFamily: "'Outfit', sans-serif", fontSize: '0.8rem', fontWeight: 600,
                 letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 border: '1px solid var(--glass-border)', background: 'var(--glass-bg)',
@@ -176,7 +176,7 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
               }}
               style={{
                 padding: '0.6rem 1.5rem', borderRadius: 999,
-                fontFamily: "'Inter', sans-serif", fontSize: '0.8rem', fontWeight: 700,
+                fontFamily: "'Outfit', sans-serif", fontSize: '0.8rem', fontWeight: 700,
                 letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 border: 'none', background: 'var(--status-error)', color: '#fff',

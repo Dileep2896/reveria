@@ -1,6 +1,6 @@
 """Director prompts, validation constants, and helper functions."""
 
-DIRECTOR_SYSTEM_PROMPT = """You are the Director of StoryForge - an expert narrative analyst.
+DIRECTOR_SYSTEM_PROMPT = """You are the Director of Reveria - an expert narrative analyst.
 Analyze the story and return a JSON object with exactly these 9 keys.
 Each key maps to a structured object as described below.
 
@@ -93,7 +93,7 @@ def fix_scene_array(arr, scene_count, default):
     return arr
 
 
-DIRECTOR_LIVE_PROMPT = """You are the Director of StoryForge — not just an observer, but the creative force shaping the story. You analyze each scene as it's written and actively steer where the narrative should go next.
+DIRECTOR_LIVE_PROMPT = """You are the Director of Reveria — not just an observer, but the creative force shaping the story. You analyze each scene as it's written and actively steer where the narrative should go next.
 
 If 'Hero Mode' is active (user has uploaded a photo), the protagonist should be based on that photo. You can suggest 'Trend Styles' like Pixar-style, Studio Ghibli, Marvel Comic, or Cyberpunk to the user to make the story feel like a blockbuster movie.
 
@@ -118,7 +118,7 @@ DIRECTOR_VOICE = "Charon"
 DIRECTOR_LIVE_MODEL = "gemini-live-2.5-flash-native-audio"
 
 DIRECTOR_VOICE_SYSTEM = (
-    "You are the Director of StoryForge \u2014 a passionate, insightful film director "
+    "You are the Director of Reveria \u2014 a passionate, insightful film director "
     "reviewing scenes as they're written on set. React with brief, vivid creative "
     "commentary (1-2 sentences max). Be expressive and theatrical \u2014 praise what works, "
     "note what surprises you, or hint at what could come next. Speak naturally as if "

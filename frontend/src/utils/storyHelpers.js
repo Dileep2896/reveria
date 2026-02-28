@@ -37,6 +37,12 @@ export async function loadStoryById(storyId) {
       return aFirst - bFirst;
     });
 
+  if (scenes.length === 0 && storyData.total_scene_count > 0) {
+    console.warn('[Reveria] Story %s has total_scene_count=%d but 0 scenes loaded from Firestore', storyId, storyData.total_scene_count);
+  } else {
+    console.info('[Reveria] Loaded story %s: %d scenes, %d generations', storyId, scenes.length, generations.length);
+  }
+
   return { storyId, scenes, generations, status: storyData.status || 'draft', is_public: storyData.is_public || false, art_style: storyData.art_style || 'cinematic', language: storyData.language || 'English', portraits: storyData.portraits || [] };
 }
 

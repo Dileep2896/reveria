@@ -212,7 +212,7 @@ export default function AuthScreen({ onSignInWithGoogle, onSignInWithEmail, onSi
           <div className="auth-brand">
             <div className="auth-brand-inner">
               <Logo size="full" />
-              <p className="auth-tagline">AI-Powered Interactive Fiction</p>
+              <p className="auth-tagline">Stories from your imagination</p>
 
               <div className="auth-brand-divider" />
 
@@ -274,11 +274,11 @@ export default function AuthScreen({ onSignInWithGoogle, onSignInWithEmail, onSi
             {/* Mobile-only logo */}
             <div className="auth-mobile-logo">
               <Logo size="full" />
-              <p className="auth-tagline">AI-Powered Interactive Fiction</p>
+              <p className="auth-tagline">Stories from your imagination</p>
             </div>
 
             <h2 className="auth-form-title" key={tab}>
-              {tab === 'signin' ? 'Welcome back' : 'Join StoryForge'}
+              {tab === 'signin' ? 'Welcome back' : 'Join Reveria'}
             </h2>
             <p className="auth-form-subtitle" key={`sub-${tab}`}>
               {tab === 'signin' ? 'Sign in to continue your stories' : 'Create an account to start writing'}
@@ -334,7 +334,7 @@ export default function AuthScreen({ onSignInWithGoogle, onSignInWithEmail, onSi
             </button>
 
             <p className="auth-footer">
-              By continuing, you agree to StoryForge's{' '}
+              By continuing, you agree to Reveria's{' '}
               <Link to={ROUTES.TERMS} className="auth-footer-link">Terms of Service</Link>
             </p>
           </div>

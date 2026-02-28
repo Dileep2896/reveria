@@ -91,7 +91,7 @@ export default function SceneTextArea({ scene, scale, showText, skip, animateTex
           {wordIndex > 0 && (
           <span
             style={{
-              fontFamily: "'Playfair Display', serif",
+              fontFamily: "'Cormorant Garamond', serif",
               fontSize: `${2.4 * scale}rem`,
               fontWeight: 700,
               float: 'left',

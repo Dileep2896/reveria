@@ -1,4 +1,4 @@
-# StoryForge Development History
+# Reveria Development History
 
 ## Week 1 - Foundation
 
@@ -17,7 +17,7 @@
 - Designed glassmorphism theme system with centralized CSS custom properties (`theme.css`)
 - Implemented dark/light mode with `ThemeContext` and localStorage persistence
 - Built frosted glass UI: header, story canvas, director panel, control bar, scene cards
-- Created animated StoryForge logo (book + forge sparks in orange/purple/cyan) as React component
+- Created animated Reveria logo (book + forge sparks in orange/purple/cyan) as React component
 - Added custom SVG favicon and updated page title
 - Integrated Gemini 2.0 Flash via Vertex AI for story text generation
 - Built Narrator agent with streaming support and conversation history
@@ -856,7 +856,7 @@
 - **Voice preview in Settings** — click a Director voice chip to hear a sample
 - **Native tool-driven generation** — Model calls `generate_story` tool when brainstorming is done (replaces external intent detection); manual "Suggest" button as fallback
 - **Token expiry handling** — WS auth failure recovery + REST getValidToken()
-- **404 page** with themed StoryForge design
+- **404 page** with themed Reveria design
 - **Error boundary** styled to match app theme
 
 - **Interaction-flow resilience** (deep audit, 9 fixes):

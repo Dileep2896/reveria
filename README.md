@@ -1,8 +1,8 @@
-# StoryForge
+# Reveria
 
 **An interactive multimodal story engine powered by Google Gemini**
 
-StoryForge is an interactive multimodal story engine. Users describe a scenario via voice or text - a mystery, a children's bedtime story, a historical event - and the agent builds it live. It generates scene illustrations, narrative text, narrated voiceover, and an interactive storyboard, all streaming as interleaved output. Users can interrupt and steer the narrative in real-time ("make the villain scarier," "add a plot twist"), and the story dynamically reshapes.
+Reveria is an interactive multimodal story engine. Users describe a scenario via voice or text - a mystery, a children's bedtime story, a historical event - and the agent builds it live. It generates scene illustrations, narrative text, narrated voiceover, and an interactive storyboard, all streaming as interleaved output. Users can interrupt and steer the narrative in real-time ("make the villain scarier," "add a plot twist"), and the story dynamically reshapes.
 
 **Killer Feature - Director Mode:** A split-screen view where the left panel shows the final story output and the right panel reveals the agent's creative reasoning - why it chose certain imagery, narrative structure decisions, tension arcs, and character development logic. This makes the agent architecture *visible* to judges.
 
@@ -228,7 +228,7 @@ flowchart TB
 
 ## CI/CD Pipeline & Automated Deployment
 
-StoryForge uses a fully automated CI/CD pipeline via **GitHub Actions** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Every push triggers smoke tests; merges to `main` automatically deploy both the backend and frontend — no manual intervention required.
+Reveria uses a fully automated CI/CD pipeline via **GitHub Actions** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Every push triggers smoke tests; merges to `main` automatically deploy both the backend and frontend — no manual intervention required.
 
 ```mermaid
 flowchart LR
@@ -330,7 +330,7 @@ npx playwright test
 
 | Test | What it verifies |
 |------|-----------------|
-| `home page loads` | `/` renders with "StoryForge" title, no crash |
+| `home page loads` | `/` renders with "Reveria" title, no crash |
 | `book page renders` | `/book/nonexistent` loads without JS errors |
 | `terms page shows content` | `/terms` renders with "Terms" text visible |
 
@@ -338,7 +338,7 @@ npx playwright test
 
 ## Agent Architecture (ADK)
 
-StoryForge uses **Google's Agent Development Kit (ADK)** to orchestrate a multi-agent pipeline. Each agent is a `BaseAgent` subclass that runs autonomously, and the pipeline is composed using ADK's built-in `SequentialAgent` and `ParallelAgent` combinators.
+Reveria uses **Google's Agent Development Kit (ADK)** to orchestrate a multi-agent pipeline. Each agent is a `BaseAgent` subclass that runs autonomously, and the pipeline is composed using ADK's built-in `SequentialAgent` and `ParallelAgent` combinators.
 
 ### Pipeline Structure
 
@@ -683,7 +683,7 @@ storyforge/
 │   │   ├── routes.js                    # Centralized route path constants (ROUTES object)
 │   │   ├── components/
 │   │   │   ├── UserAvatar.jsx          # Reusable avatar with marble gradient fallback (boring-avatars)
-│   │   │   ├── Logo.jsx + Logo.css    # Animated StoryForge logo
+│   │   │   ├── Logo.jsx + Logo.css    # Animated Reveria logo
 │   │   │   ├── StoryCanvas.jsx        # Flipbook with page-turn animation
 │   │   │   ├── SceneCard.jsx          # Scene: image + text + audio with drop cap
 │   │   │   ├── BookNavigation.jsx     # Dot navigation + arrow controls

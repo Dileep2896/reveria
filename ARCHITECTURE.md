@@ -1,4 +1,4 @@
-# StoryForge Architecture Notes
+# Reveria Architecture Notes
 
 ## Book Meta Generation (Title + Cover)
 

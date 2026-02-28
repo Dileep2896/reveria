@@ -59,7 +59,7 @@
 }
 
 .explore-title {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: 1.8rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -354,7 +354,7 @@
 }
 
 .explore-empty h3 {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: 1.4rem;
   font-weight: 600;
   color: var(--text-primary);

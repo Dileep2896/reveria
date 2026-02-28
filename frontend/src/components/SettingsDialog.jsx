@@ -125,7 +125,7 @@ export default function SettingsDialog({ onClose, theme, toggleTheme, directorVo
             </svg>
           </div>
           <h3 style={{
-            fontFamily: "'Playfair Display', serif",
+            fontFamily: "'Cormorant Garamond', serif",
             fontSize: '1.2rem',
             fontWeight: 700,
             color: 'var(--text-primary)',

@@ -1,6 +1,6 @@
-# Prompt Engineering -- StoryForge
+# Prompt Engineering -- Reveria
 
-A comprehensive record of how we designed, iterated, and refined prompts across StoryForge's multi-agent pipeline. Each section documents the current prompt, the problem it solves, and key iterations that improved output quality.
+A comprehensive record of how we designed, iterated, and refined prompts across Reveria's multi-agent pipeline. Each section documents the current prompt, the problem it solves, and key iterations that improved output quality.
 
 ---
 
@@ -24,12 +24,12 @@ A comprehensive record of how we designed, iterated, and refined prompts across 
 
 **File:** `backend/agents/narrator.py` -- `_build_system_prompt()`
 
-The Narrator is StoryForge's core creative engine. It generates story text in a streaming fashion, maintaining a sliding window of conversation history (10 turns, ~8K tokens) for continuity.
+The Narrator is Reveria's core creative engine. It generates story text in a streaming fashion, maintaining a sliding window of conversation history (10 turns, ~8K tokens) for continuity.
 
 ### Current System Prompt
 
 ```
-You are the Narrator of StoryForge, a master storyteller who crafts vivid,
+You are the Narrator of Reveria, a master storyteller who crafts vivid,
 immersive narratives. You write in a cinematic style with rich sensory details.
 
 RULES:
@@ -182,7 +182,7 @@ This ensures every scene gets *some* image, even if safety filters block charact
 
 **File:** `backend/agents/illustrator.py` -- `extract_characters()`, `_create_image_prompt()`
 
-This is the most important prompt engineering breakthrough in StoryForge. The hybrid prompt architecture solves the core challenge of maintaining consistent character appearance across all illustrated scenes.
+This is the most important prompt engineering breakthrough in Reveria. The hybrid prompt architecture solves the core challenge of maintaining consistent character appearance across all illustrated scenes.
 
 ### The Problem
 
@@ -290,7 +290,7 @@ The Director serves two roles: batch-level story analysis (9-category breakdown)
 The per-scene `analyze_scene()` prompt fires after each scene during generation, providing real-time creative commentary:
 
 ```
-You are the Director of StoryForge -- not just an observer, but the creative force
+You are the Director of Reveria -- not just an observer, but the creative force
 shaping the story. You analyze each scene as it's written and actively steer where
 the narrative should go next.
 
@@ -337,7 +337,7 @@ This creates a feedback loop: the Director watches each scene, proposes a bold n
 The full `DIRECTOR_SYSTEM_PROMPT` drives the comprehensive post-batch analysis dashboard with 9 categories:
 
 ```
-You are the Director of StoryForge - an expert narrative analyst.
+You are the Director of Reveria - an expert narrative analyst.
 Analyze the story and return a JSON object with exactly these 9 keys.
 Each key maps to a structured object as described below.
 
@@ -375,7 +375,7 @@ All per-scene arrays (`levels`, `values`, `notes`) are padded or truncated to ex
 The Director also has a voice component using Gemini Live API's native audio:
 
 ```
-You are the Director of StoryForge -- a passionate, insightful film director
+You are the Director of Reveria -- a passionate, insightful film director
 reviewing scenes as they're written on set. React with brief, vivid creative
 commentary (1-2 sentences max). Be expressive and theatrical -- praise what works,
 note what surprises you, or hint at what could come next. Speak naturally as if
@@ -395,7 +395,7 @@ The Director Chat is a persistent Gemini Live API session where users brainstorm
 ### System Prompt
 
 ```
-You are the Director of StoryForge -- a passionate, insightful creative collaborator.
+You are the Director of Reveria -- a passionate, insightful creative collaborator.
 The user is brainstorming their next story direction with you. Be enthusiastic, offer
 vivid creative ideas, build on their suggestions, and push the story in exciting
 directions. Keep responses conversational and concise (2-4 sentences). You're on set
@@ -451,7 +451,7 @@ Mentioning "something specific about their story" prevents generic greetings and
 When the brainstorming concludes, the Director generates a story prompt from the conversation:
 
 ```
-You are the Director of StoryForge. Based on the conversation and story context below,
+You are the Director of Reveria. Based on the conversation and story context below,
 write a 2-3 sentence story prompt that the user can use to generate their next scene.
 The prompt should be vivid, specific, and build on the ideas discussed.
 Output ONLY the prompt text, nothing else.
@@ -467,7 +467,7 @@ Each selectable Director voice has a curated preview line that showcases the voi
 
 ```python
 VOICE_PREVIEW_LINES = {
-    "Charon":  "Welcome to StoryForge. I am Charon, your Director. Let me guide your story
+    "Charon":  "Welcome to Reveria. I am Charon, your Director. Let me guide your story
                 into the depths of imagination.",
     "Kore":    "Hello there! I'm Kore, your Director. Let's craft something beautiful
                 together, shall we?",
@@ -543,7 +543,7 @@ The calling code applies an additional 0.8 confidence threshold -- even if the m
 
 **File:** `backend/services/gemini_tts.py`
 
-StoryForge uses Gemini's native audio model (`gemini-2.5-flash-native-audio`) for expressive audiobook-quality narration, chosen over Google Cloud TTS for its ability to understand narrative context and modulate delivery accordingly.
+Reveria uses Gemini's native audio model (`gemini-2.5-flash-native-audio`) for expressive audiobook-quality narration, chosen over Google Cloud TTS for its ability to understand narrative context and modulate delivery accordingly.
 
 ### Narration System Prompt
 
@@ -591,7 +591,7 @@ Content filtering operates at two levels: a pre-pipeline classifier and post-gen
 ### Pre-Pipeline Classifier (validate_prompt)
 
 ```
-You are a classifier for StoryForge, a storytelling app where users describe stories
+You are a classifier for Reveria, a storytelling app where users describe stories
 they want created.
 
 Decide if the user's message is a valid storytelling request. Valid requests include:
@@ -795,11 +795,11 @@ Language models want to be helpful, which means they paraphrase, summarize, and 
 
 ### 3. Explicit Word/Token Limits Prevent Verbose Outputs
 
-Every generative prompt in StoryForge has a word or token limit: 80-100 words for scenes, 100 words for image prompts, 4 words for titles. Without these, models produce verbose output that overflows UI containers, wastes tokens, and dilutes quality. Shorter is almost always better.
+Every generative prompt in Reveria has a word or token limit: 80-100 words for scenes, 100 words for image prompts, 4 words for titles. Without these, models produce verbose output that overflows UI containers, wastes tokens, and dilutes quality. Shorter is almost always better.
 
 ### 4. Structured JSON Output with response_mime_type
 
-Using `response_mime_type="application/json"` in the Gemini config forces the model to output valid JSON, eliminating the need for markdown fence stripping, regex extraction, or "please output only JSON" instructions. Every structured output in StoryForge (Director analysis, intent detection) uses this.
+Using `response_mime_type="application/json"` in the Gemini config forces the model to output valid JSON, eliminating the need for markdown fence stripping, regex extraction, or "please output only JSON" instructions. Every structured output in Reveria (Director analysis, intent detection) uses this.
 
 ### 5. Language Instructions Must Be Explicit and Repeated
 

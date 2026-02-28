@@ -1,4 +1,4 @@
-# Building StoryForge: An AI-Powered Interactive Story Engine
+# Building Reveria: An AI-Powered Interactive Story Engine
 
 *How we built a multimodal storytelling platform that generates illustrated, narrated storybooks in real-time using Google's Gemini, Imagen, and Agent Development Kit.*
 
@@ -8,7 +8,7 @@
 
 What if you could describe a story - "a mysterious noir detective story set in a rain-soaked city at midnight" - and watch it come alive in seconds? Not just text, but an illustrated storybook with images, narration, and an interactive flipbook you can page through?
 
-That's **StoryForge** - an interactive multimodal story engine built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Storyteller Track). Users describe a scenario via voice or text, and a team of AI agents builds it live: generating scene illustrations, narrative text, narrated voiceover, and an interactive storyboard, all streaming as interleaved output.
+That's **Reveria** - an interactive multimodal story engine built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Storyteller Track). Users describe a scenario via voice or text, and a team of AI agents builds it live: generating scene illustrations, narrative text, narrated voiceover, and an interactive storyboard, all streaming as interleaved output.
 
 The killer differentiator? **Director Mode** - a split-screen view where the left panel shows the final story output and the right panel reveals the agent's creative reasoning. Why it chose certain imagery, narrative structure decisions, tension arcs, character development logic. This makes the agent architecture *visible* and understandable.
 
@@ -16,7 +16,7 @@ The killer differentiator? **Director Mode** - a split-screen view where the lef
 
 ## The Architecture: A Team of Specialist Agents
 
-StoryForge isn't a single monolithic AI call. It's an **orchestra of four specialist agents**, coordinated by Google's Agent Development Kit (ADK) with a **per-scene streaming loop**:
+Reveria isn't a single monolithic AI call. It's an **orchestra of four specialist agents**, coordinated by Google's Agent Development Kit (ADK) with a **per-scene streaming loop**:
 
 ```
 StoryOrchestrator (SequentialAgent)
@@ -38,7 +38,7 @@ StoryOrchestrator (SequentialAgent)
         └── Director Agent     ← full post-batch analysis
 ```
 
-Unlike a traditional sequential pipeline where the Narrator must fully complete before images/audio start, StoryForge fires off image, audio, and Director commentary generation **per-scene** as each scene's text completes. This means the user sees Scene 1's image painting in while Scene 2's text is still streaming. The experience feels truly live and agentic.
+Unlike a traditional sequential pipeline where the Narrator must fully complete before images/audio start, Reveria fires off image, audio, and Director commentary generation **per-scene** as each scene's text completes. This means the user sees Scene 1's image painting in while Scene 2's text is still streaming. The experience feels truly live and agentic.
 
 **Mid-generation steering**: Users can type direction changes (e.g. "make it scarier") while generation is active. The steering text is injected into the Narrator's history between scenes, so the next scene picks up the new direction seamlessly.
 
@@ -195,7 +195,7 @@ While a cover is being generated, the book shows the scene image with a blur+gra
 
 ### Multi-Language Story Generation
 
-StoryForge doesn't just tell stories in English. Users can generate stories in **8 languages**: English, Spanish, French, German, Japanese, Hindi, Portuguese, and Chinese.
+Reveria doesn't just tell stories in English. Users can generate stories in **8 languages**: English, Spanish, French, German, Japanese, Hindi, Portuguese, and Chinese.
 
 The architecture is elegant - the language selection propagates through the entire pipeline:
 
@@ -353,7 +353,7 @@ Title generation was hardcoded to "children's story" and always produced English
 
 ### Subscription Tiers & Pro User Experience
 
-StoryForge supports three subscription tiers - **Free**, **Standard**, and **Pro** - each with different usage limits for daily generations, scene regenerations, and PDF exports.
+Reveria supports three subscription tiers - **Free**, **Standard**, and **Pro** - each with different usage limits for daily generations, scene regenerations, and PDF exports.
 
 The interesting UX challenge was making Pro users *feel* premium without being gaudy. We went with subtle visual indicators:
 
@@ -438,7 +438,7 @@ The `ws_callback` in the backend was also softened — for `safety`-type refusal
 
 ### Director Chat: Voice Brainstorming with Gemini Live API
 
-The most exciting addition to StoryForge is **Director Chat** — a real-time voice conversation with the Director character using Google's Gemini Live API (`gemini-live-2.5-flash-native-audio`). Instead of typing prompts, you can *talk* to the Director about where the story should go next.
+The most exciting addition to Reveria is **Director Chat** — a real-time voice conversation with the Director character using Google's Gemini Live API (`gemini-live-2.5-flash-native-audio`). Instead of typing prompts, you can *talk* to the Director about where the story should go next.
 
 The architecture is a persistent bidirectional audio session that leverages the Live API's native capabilities — function calling, audio transcription, and context compression — to eliminate all extra API calls:
 
@@ -515,7 +515,7 @@ The broader lesson: when your app has multiple entry points to the same state (W
 
 ## Architecture Evolution: Technical Challenges Solved
 
-Building StoryForge wasn't a straight line — it was an iterative process of building, measuring, and rearchitecting. Here are the most significant architectural pivots:
+Building Reveria wasn't a straight line — it was an iterative process of building, measuring, and rearchitecting. Here are the most significant architectural pivots:
 
 ### Director Chat: 3-5 API Calls → 0 Extra Calls
 
@@ -771,7 +771,7 @@ The result: **zero extra API calls per interaction** (was 3-5), no race conditio
 
 ## Try It
 
-StoryForge is open source: [github.com/Dileep2896/storyforge](https://github.com/Dileep2896/storyforge)
+Reveria is open source: [github.com/Dileep2896/storyforge](https://github.com/Dileep2896/storyforge)
 
 Built for the Gemini Live Agent Challenge - Creative Storyteller Track.
 

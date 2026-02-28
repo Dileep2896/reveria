@@ -1,5 +1,5 @@
 /* ============================================
-   StoryForge - Storybook Styles
+   Reveria - Storybook Styles
    (react-pageflip handles all flip animation)
    ============================================ */
 
@@ -327,7 +327,7 @@
 }
 
 .book-cover-title {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: calc(32px * var(--page-scale, 1));
   font-weight: 700;
   color: var(--book-cover-text);
@@ -500,7 +500,7 @@
 }
 
 .book-generating-title {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Cormorant Garamond', serif;
   font-size: calc(17.6px * var(--page-scale, 1));
   font-weight: 600;
   color: var(--text-primary);

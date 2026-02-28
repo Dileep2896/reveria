@@ -39,7 +39,7 @@ logging.basicConfig(
 logger = logging.getLogger("storyforge")
 logger.info("ADK orchestration enabled")
 
-app = FastAPI(title="StoryForge API")
+app = FastAPI(title="Reveria API")
 
 import os as _os
 
