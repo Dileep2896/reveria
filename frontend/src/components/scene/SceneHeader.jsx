@@ -9,76 +9,38 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
 
   return (
   <>
-    <div style={{ marginBottom: `${6 * scale}px`, flexShrink: 0 }}>
-      <div className="flex items-center gap-2">
+    <div style={{ marginBottom: `${6 * scale}px`, flexShrink: 0, textAlign: 'center', position: 'relative' }}>
+      <span
+        style={{
+          fontFamily: "'Cormorant Garamond', serif",
+          fontSize: `${8.5 * scale}px`,
+          fontWeight: 600,
+          letterSpacing: '0.22em',
+          textTransform: 'uppercase',
+          color: 'var(--accent-primary)',
+          opacity: 0.85,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        Scene {displayIndex ?? scene.scene_number}
+      </span>
+      {isBookmarked && (
         <span
           style={{
-            fontFamily: "'Cormorant Garamond', serif",
-            fontSize: `${8.5 * scale}px`,
-            fontWeight: 600,
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            color: 'var(--accent-primary)',
+            color: '#d4a850',
+            display: 'inline-flex',
+            alignItems: 'center',
             opacity: 0.85,
-            fontVariantNumeric: 'tabular-nums',
+            marginLeft: `${4 * scale}px`,
+            verticalAlign: 'middle',
           }}
+          title="Bookmarked"
         >
-          Scene {displayIndex ?? scene.scene_number}
+          <svg width={13 * scale} height={13 * scale} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+          </svg>
         </span>
-        {isBookmarked && (
-          <span
-            style={{
-              color: '#d4a850',
-              display: 'flex',
-              alignItems: 'center',
-              opacity: 0.85,
-            }}
-            title="Bookmarked"
-          >
-            <svg width={13 * scale} height={13 * scale} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-            </svg>
-          </span>
-        )}
-        {/* Scene actions - in header row, right-aligned */}
-        {!isReadOnly && !isBusy && (
-          <div
-            className="scene-external-actions"
-            style={{
-              marginLeft: 'auto',
-              display: 'flex',
-              gap: `${3 * scale}px`,
-              alignItems: 'center',
-            }}
-          >
-            {canRegen && (
-              <IconBtn
-                label="Regenerate scene"
-                size={18 * scale}
-                onPointerDown={(e) => { e.stopPropagation(); }}
-                onClick={(e) => { e.stopPropagation(); onRegenSceneStart?.(); regenScene?.(scene.scene_number, scene.text); }}
-              >
-                <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="23 4 23 10 17 10" />
-                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                </svg>
-              </IconBtn>
-            )}
-            <IconBtn
-              label="Delete scene"
-              size={18 * scale}
-              danger
-              onPointerDown={(e) => { e.stopPropagation(); }}
-              onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
-            >
-              <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-            </IconBtn>
-          </div>
-        )}
-      </div>
+      )}
       {scene.scene_title && (
         <div
           style={{
@@ -88,10 +50,49 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
             fontStyle: 'italic',
             letterSpacing: '0.02em',
             marginTop: `${3 * scale}px`,
-            marginLeft: `${12 * scale + 8}px`,
           }}
         >
           {scene.scene_title}
+        </div>
+      )}
+      {/* Scene actions - top-right corner */}
+      {!isReadOnly && !isBusy && (
+        <div
+          className="scene-external-actions"
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            display: 'flex',
+            gap: `${3 * scale}px`,
+            alignItems: 'center',
+          }}
+        >
+          {canRegen && (
+            <IconBtn
+              label="Regenerate scene"
+              size={18 * scale}
+              onPointerDown={(e) => { e.stopPropagation(); }}
+              onClick={(e) => { e.stopPropagation(); onRegenSceneStart?.(); regenScene?.(scene.scene_number, scene.text); }}
+            >
+              <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+            </IconBtn>
+          )}
+          <IconBtn
+            label="Delete scene"
+            size={18 * scale}
+            danger
+            onPointerDown={(e) => { e.stopPropagation(); }}
+            onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+          >
+            <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+          </IconBtn>
         </div>
       )}
     </div>

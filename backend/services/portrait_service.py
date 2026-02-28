@@ -75,13 +75,15 @@ async def generate_portraits(
         await safe_send(websocket, {"type": "portraits_loading"})
 
         art_suffix = illustrator.art_style_suffix
+        strip_hex = illustrator._strip_hex_codes
         portrait_results = []
         # Offset GCS index to avoid overwriting existing portrait files
         index_offset = len(existing_names or [])
 
         for idx, char in enumerate(characters):
+            clean_desc = strip_hex(char['description'])
             prompt = (
-                f"{char['description']}. "
+                f"{clean_desc}. "
                 f"Close-up face portrait of {char['name']}, head and shoulders, "
                 f"looking at the viewer, detailed facial features, expressive eyes, "
                 f"{art_suffix}"

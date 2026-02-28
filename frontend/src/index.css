@@ -367,12 +367,11 @@ body {
 
 .control-input {
   font-size: clamp(11px, 1.2vw, 14px);
-  min-height: clamp(20px, 2.5vw, 30px);
   max-height: 120px;
   line-height: 1.4;
   overflow-y: auto;
-  font-family: 'Inter', sans-serif;
-  padding: 2px 0;
+  font-family: 'Outfit', sans-serif;
+  padding: 0;
 }
 
 .control-icon {

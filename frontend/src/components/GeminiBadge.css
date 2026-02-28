@@ -1,0 +1,29 @@
+.gemini-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.gemini-badge-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.gemini-badge-text {
+  font-family: 'Outfit', sans-serif;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+[data-theme="light"] .gemini-badge-text {
+  color: rgba(15, 10, 30, 0.45);
+}

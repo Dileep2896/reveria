@@ -183,12 +183,28 @@ export default function App() {
   // Loading splash
   const showSplash = authLoading || (user && storyLoading) || (user && initialState === undefined) || (user && isHydrating);
 
+  const splashMessage = !user
+    ? 'Connecting...'
+    : isHydrating
+      ? 'Resuming your story...'
+      : 'Loading your story...';
+
+  // Exit-reveal transition: detect showSplash going true→false
+  const [splashExiting, setSplashExiting] = useState(false);
+  const prevShowSplashRef = useRef(showSplash);
+  const lastSplashMsgRef = useRef(splashMessage);
+  if (showSplash) lastSplashMsgRef.current = splashMessage;
+
+  useEffect(() => {
+    if (prevShowSplashRef.current && !showSplash) {
+      setSplashExiting(true);
+      const timer = setTimeout(() => setSplashExiting(false), 700);
+      return () => clearTimeout(timer);
+    }
+    prevShowSplashRef.current = showSplash;
+  }, [showSplash]);
+
   if (showSplash) {
-    const splashMessage = !user
-      ? 'Connecting...'
-      : isHydrating
-        ? 'Resuming your story...'
-        : 'Loading your story...';
     return <SplashScreen message={splashMessage} />;
   }
 
@@ -446,6 +462,8 @@ export default function App() {
       {settingsOpen && (
         <SettingsDialog onClose={() => setSettingsOpen(false)} theme={theme} toggleTheme={toggleTheme} directorVoice={directorVoice} setDirectorVoice={handleSetDirectorVoice} bookLayout={bookLayout} setBookLayout={handleSetBookLayout} />
       )}
+
+      {splashExiting && <SplashScreen message={lastSplashMsgRef.current} exiting />}
     </div>
   );
 }

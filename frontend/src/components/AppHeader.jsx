@@ -1,4 +1,5 @@
 import Logo from './Logo';
+import GeminiBadge from './GeminiBadge';
 import ProfileMenu from './ProfileMenu';
 import { ROUTES } from '../routes';
 import { API_URL } from '../utils/storyHelpers';
@@ -37,8 +38,11 @@ export default function AppHeader({
           boxShadow: 'var(--shadow-glass)',
         }}
       >
-        <div onClick={() => navigate(ROUTES.ADMIN)} style={{ cursor: 'pointer' }}>
-          <Logo size="compact" />
+        <div className="flex items-center" style={{ gap: 10 }}>
+          <div onClick={() => navigate(ROUTES.ADMIN)} style={{ cursor: 'pointer' }}>
+            <Logo size="compact" />
+          </div>
+          <GeminiBadge />
         </div>
         <div className="flex items-center header-actions">
           <button
@@ -75,8 +79,11 @@ export default function AppHeader({
         boxShadow: 'var(--shadow-glass)',
       }}
     >
-      <div onClick={() => navigate(storyId ? ROUTES.STORY(storyId) : ROUTES.HOME)} style={{ cursor: 'pointer' }}>
-        <Logo size="compact" />
+      <div className="flex items-center" style={{ gap: 10 }}>
+        <div onClick={() => navigate(storyId ? ROUTES.STORY(storyId) : ROUTES.HOME)} style={{ cursor: 'pointer' }}>
+          <Logo size="compact" />
+        </div>
+        <GeminiBadge />
       </div>
 
       <div className="flex items-center header-actions">
