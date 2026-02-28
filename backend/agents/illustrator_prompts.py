@@ -50,24 +50,74 @@ EXAMPLES:
 "Wide shot of a rain-soaked alley at night, neon signs reflecting in puddles, a woman with pale skin and long dark wavy hair in a leather jacket runs toward a flickering doorway, steam rising from a manhole, dramatic side lighting from a streetlamp"
 """
 
+VISUAL_NARRATIVE_COMPOSER_INSTRUCTION = """You are an image prompt engineer for a visual narrative (comic/manga/webtoon).
+Decompose the scene into SEPARATE PANEL descriptions. Each panel will be rendered as its own image.
+
+YOU decide the number of panels (1, 2, or 3) based on the story moment:
+- 1 PANEL: Single powerful moment, dramatic reveal, or splash page
+- 2 PANELS: Action-reaction, before-after, or two-beat exchange
+- 3 PANELS: Sequential action, multi-character dialog, or fast pacing
+
+Output a JSON array of panel description strings. Each element describes ONE panel:
+- Camera angle, action/pose, environment, mood
+- 60-80 words per panel
+- Reference characters by name only (e.g., "Kai lunges forward")
+- Do NOT describe character appearance (hair, clothes, age, skin, build, etc.)
+- Do NOT include art style, rendering style, or medium descriptions
+- If the scene has DIALOG, assign each quote to ONE specific panel. NEVER repeat dialog.
+
+Output ONLY the JSON array, nothing else. Example:
+["Wide shot of a moonlit rooftop, Kai crouches behind a chimney peering down at the alley below, tension in his posture, cold blue light from the full moon casting long shadows across broken tiles. Speech bubble: 'They're coming.'", "Close-up from low angle, Maya sprints through the narrow alley below, puddles splashing under her boots, neon signs reflecting in the wet cobblestones, urgency and determination in her stride"]
+"""
+
+VISUAL_NARRATIVE_WITH_CHARACTERS_COMPOSER_INSTRUCTION = """You are an image prompt engineer for a visual narrative (comic/manga/webtoon).
+Decompose the scene into SEPARATE PANEL descriptions. Each panel will be rendered as its own image.
+
+YOU decide the number of panels (1, 2, or 3) based on the story moment:
+- 1 PANEL: Single powerful moment, dramatic reveal, or splash page
+- 2 PANELS: Action-reaction, before-after, or two-beat exchange
+- 3 PANELS: Sequential action, multi-character dialog, or fast pacing
+
+CHARACTER CONSISTENCY IS CRITICAL:
+- In EVERY panel where a character appears, include their KEY physical traits (skin tone, hair color/style, build, clothing)
+- Use the EXACT SAME description for a character across all panels
+- Copy the most distinctive visual features verbatim from the CHARACTER DESCRIPTIONS provided
+
+Output a JSON array of panel description strings. Each element describes ONE panel:
+- Camera angle, character poses/expressions with FULL physical appearance details, environment, mood
+- 60-80 words per panel — self-contained description
+- REPEAT key appearance details (hair, skin, clothing) in EVERY panel a character appears
+- Use varied camera angles across panels (wide, close-up, over-shoulder, low angle)
+- Do NOT use hex color codes — use descriptive color names only
+- Do NOT include any character names — describe appearance only
+- Do NOT include art style, rendering style, or medium descriptions
+- If the scene has DIALOG, assign each quote to ONE specific panel. NEVER repeat dialog.
+
+Output ONLY the JSON array, nothing else. Example:
+["Medium shot of a dimly lit tavern, a tall woman with dark brown skin, long silver braids, and a scarred leather vest slams her fist on a wooden table, candlelight flickering across her fierce expression, tankards rattling. Speech bubble: 'We ride at dawn.'", "Close-up reaction shot, a young man with pale freckled skin, messy red hair, and round glasses stares wide-eyed from across the table, firelight reflecting in his green eyes, mouth slightly open in surprise"]
+"""
+
 CHARACTER_IDENTIFIER_INSTRUCTION = """Given a scene and a list of character names,
 output ONLY the names of characters who physically appear in or are visually
 present in this scene, one per line. If no characters appear, output NONE.
 Do NOT add explanations or extra text."""
 
-VISUAL_DNA_ANALYSIS_INSTRUCTION = """You are analyzing a character portrait for visual consistency in an illustrated storybook.
-Describe the EXACT physical appearance of this character as shown in this image.
+VISUAL_DNA_ANALYSIS_INSTRUCTION = """You are extracting a character's KEY visual traits for an AI image generator.
+Write a dense, compact physical description of this character as shown in this portrait.
 
-Include: face shape, skin tone and complexion, eye color/shape/size, nose and lip shape,
-hair color/style/length, approximate age, body build, clothing details with colors,
-any accessories or distinctive features.
+FOCUS ON (in order of importance):
+1. Gender, age, skin tone
+2. Hair color and style
+3. Eye color and shape
+4. Build and distinguishing facial features
+5. Clothing (only the most distinctive items)
 
 RULES:
-- Be extremely specific — these descriptions will be used to recreate this exact character in future illustrations
-- Use natural language color descriptions (warm brown, pale ivory, deep auburn) — NOT hex codes
-- Describe ONLY what you see in this image, not what you imagine
-- Keep to 100-150 words
-- Output ONLY the physical description, no preamble or labels"""
+- Maximum 50 words — be terse, every word must count
+- Use natural color words (warm brown, pale ivory, deep auburn) — NEVER hex codes
+- Describe ONLY what is visible in this image
+- Omit lighting, mood, background — physical traits ONLY
+- Output ONLY the description, no labels or preamble"""
 
 
 ART_STYLES = {
@@ -120,5 +170,99 @@ ART_STYLES = {
         "detailed graphite pencil sketch on cream paper, fine cross-hatching for shading, "
         "precise line weight variation, realistic proportions, "
         "high contrast black and white, subtle smudge shading, technical illustration quality"
+    ),
+    "classic_comic": (
+        "bold clean ink outlines, flat vibrant colors, halftone dot shading, "
+        "pop art palette, dynamic panel composition, retro comic book feel, "
+        "strong black shadows, Ben-Day dots pattern"
+    ),
+    "noir_comic": (
+        "high-contrast black and white with selective red and yellow accents, "
+        "heavy ink shadows, gritty atmosphere, dramatic chiaroscuro lighting, "
+        "rain-slicked surfaces, noir detective comic style"
+    ),
+    "superhero": (
+        "dynamic action poses, saturated bold colors, speed lines, "
+        "dramatic foreshortening, heroic proportions, energy effects, "
+        "modern superhero comic book art, cinematic action composition"
+    ),
+    "indie_comic": (
+        "hand-drawn imperfect ink lines, muted earthy palette, "
+        "watercolor washes over ink outlines, organic textures, "
+        "indie graphic novel aesthetic, subtle cross-hatching, intimate compositions"
+    ),
+    "romantic_webtoon": (
+        "soft pastel palette, sparkle and bokeh effects, beautiful expressive eyes, "
+        "dreamy atmosphere, clean digital lineart, soft cel shading, "
+        "romance manhwa style, gentle lighting, flower accents"
+    ),
+    "action_webtoon": (
+        "dynamic poses, bold saturated colors, speed lines, sharp clean lineart, "
+        "dramatic camera angles, impact frames, action manhwa style, "
+        "glowing energy effects, high contrast lighting"
+    ),
+    "slice_of_life": (
+        "warm soft colors, gentle natural lighting, cozy atmosphere, "
+        "natural expressions, everyday settings, clean digital art, "
+        "slice-of-life manhwa style, soft shadows, inviting composition"
+    ),
+    "fantasy_webtoon": (
+        "ethereal glowing effects, rich jewel-tone colors, ornate magical details, "
+        "fantasy manhwa style, luminous particle effects, detailed costumes, "
+        "mystical atmosphere, dramatic lighting, intricate backgrounds"
+    ),
+    "epic_fantasy": (
+        "high fantasy digital painting, sweeping landscapes, dramatic skies, "
+        "golden rim lighting, heroic proportions, epic scale, "
+        "detailed armor and magical effects"
+    ),
+    "shonen_manga": (
+        "shonen manga, bold dynamic action, speed lines, intense expressions, "
+        "high contrast black and white, screentone shading, dramatic angles"
+    ),
+    "shojo_manga": (
+        "shojo manga, delicate lineart, flower and sparkle accents, "
+        "soft screentone, emotional expressions, romantic atmosphere, "
+        "elegant compositions"
+    ),
+    "seinen_manga": (
+        "seinen manga, detailed realistic proportions, heavy crosshatching, "
+        "dark atmospheric shading, mature gritty tone, cinematic framing"
+    ),
+    "chibi": (
+        "chibi manga, super-deformed cute proportions, oversized expressive heads, "
+        "simplified bodies, playful pastel colors, comedic poses"
+    ),
+    "journal_sketch": (
+        "loose pencil journal sketch, rough gestural lines, coffee-stained paper texture, "
+        "marginal doodles, personal and imperfect, warm sepia tones"
+    ),
+    "ink_wash": (
+        "East Asian ink wash painting, sumi-e inspired, flowing black ink on rice paper, "
+        "minimalist brushstrokes, subtle gray gradients, contemplative mood"
+    ),
+    "impressionist": (
+        "French impressionist painting, visible dappled brushstrokes, soft natural light, "
+        "plein air atmosphere, Monet-inspired palette, dreamy landscape quality"
+    ),
+    "ethereal": (
+        "ethereal dreamscape, luminous soft-focus glow, translucent layered forms, "
+        "iridescent pastel colors, otherworldly atmosphere, floating light particles"
+    ),
+    "minimalist": (
+        "minimalist illustration, clean sparse composition, large negative space, "
+        "single focal element, muted two-tone palette, geometric simplicity"
+    ),
+    "photorealistic": (
+        "ultra-photorealistic photography, sharp focus, natural available light, "
+        "shallow depth of field, professional DSLR quality, authentic textures"
+    ),
+    "documentary": (
+        "documentary photojournalism, candid unposed moments, natural harsh lighting, "
+        "gritty real-world textures, wide-angle environmental context"
+    ),
+    "retro_film": (
+        "vintage analog film photography, warm film grain, faded color palette, "
+        "light leaks, 1970s Kodachrome aesthetic, nostalgic soft contrast"
     ),
 }

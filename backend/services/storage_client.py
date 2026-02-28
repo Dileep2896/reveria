@@ -60,6 +60,8 @@ async def upload_media(
     scene_number: int,
     media_type: str,
     data_url: str,
+    *,
+    suffix: str = "",
 ) -> str:
     """Upload a base64 data URL to GCS and return a public URL.
 
@@ -68,6 +70,7 @@ async def upload_media(
         scene_number: Scene number.
         media_type: "image" or "audio".
         data_url: Full data URL (e.g. "data:image/png;base64,iVBOR...").
+        suffix: Optional suffix appended to filename (e.g. "_panel_0").
 
     Returns:
         Public HTTPS URL for the uploaded object.
@@ -99,7 +102,7 @@ async def upload_media(
     ext = ext_map.get(mime_type, mime_type.split("/")[-1])
 
     bucket_name = _get_bucket_name()
-    blob_path = f"stories/{story_id}/scenes/{scene_number}/{media_type}.{ext}"
+    blob_path = f"stories/{story_id}/scenes/{scene_number}/{media_type}{suffix}.{ext}"
 
     def _upload() -> str:
         client = _get_client()

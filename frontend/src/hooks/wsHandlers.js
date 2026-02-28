@@ -99,6 +99,23 @@ export function createWsHandlers({
         return true;
       }
 
+      case 'panel_image':
+        if (!storyIdRef.current) return true;
+        setScenes((prev) =>
+          prev.map((scene) => {
+            if (scene.scene_number !== data.scene_number) return scene;
+            const panels = [...(scene.panel_images || [])];
+            panels[data.panel_index] = { url: data.content, composition: data.composition };
+            return {
+              ...scene,
+              panel_images: panels,
+              // Set image_url to first panel for backward compat (covers, thumbnails)
+              ...(data.panel_index === 0 ? { image_url: data.content } : {}),
+            };
+          }),
+        );
+        return true;
+
       case 'image':
         if (!storyIdRef.current) return true;
         setScenes((prev) =>

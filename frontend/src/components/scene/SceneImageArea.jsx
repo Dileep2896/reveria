@@ -2,9 +2,137 @@ import { useState } from 'react';
 import { useSceneActions } from '../../contexts/SceneActionsContext';
 import IconBtn from '../IconBtn';
 
-export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, isBusy, showError, preloaded, skip, wasRegenerated, singlePage }) {
+export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, isBusy, showError, preloaded, skip, wasRegenerated, singlePage, visualNarrative }) {
   const { regenImage, isReadOnly, canRegen } = useSceneActions();
   const [showBrief, setShowBrief] = useState(false);
+
+  // ── Visual narrative with per-panel images ──
+  if (visualNarrative && scene.panel_images?.length > 0) {
+    return (
+      <div
+        style={{
+          flex: '1 1 0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: `${2 * scale}px`,
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        {scene.panel_images.map((panel, i) => (
+          <div
+            key={i}
+            style={{
+              flex: '1 1 0',
+              minHeight: 0,
+              position: 'relative',
+              borderRadius: `${4 * scale}px`,
+              overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.06)',
+              background: 'var(--book-page-bg)',
+            }}
+          >
+            {panel?.url ? (
+              <img
+                src={panel.url}
+                alt={`Scene ${displayIndex ?? scene.scene_number} panel ${i + 1}`}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  display: 'block',
+                  animation: skip ? 'none' : 'imageFadeIn 0.8s ease-out',
+                }}
+              />
+            ) : (
+              /* Shimmer placeholder per panel */
+              <div
+                className="painting-loader"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  background: 'var(--glass-bg)',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
+              >
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.04) 35%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 65%, transparent 100%)',
+                  animation: 'shimmer 2.5s ease-in-out infinite',
+                }} />
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <span style={{ fontSize: `${8 * scale}px`, color: 'var(--text-muted)', opacity: 0.5 }}>
+                    Panel {i + 1}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Regen Image button for panel layout */}
+        {!isReadOnly && !isBusy && canRegen && (
+          <div
+            className="scene-action-bar"
+            style={{
+              position: 'absolute',
+              top: `${4 * scale}px`,
+              right: `${4 * scale}px`,
+              zIndex: 10,
+              display: 'flex',
+            }}
+          >
+            <IconBtn
+              label="Regenerate panels"
+              size={22 * scale}
+              dark
+              onPointerDown={(e) => { e.stopPropagation(); }}
+              onClick={(e) => { e.stopPropagation(); regenImage?.(scene.scene_number, scene.text); }}
+            >
+              <svg width={11 * scale} height={11 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </IconBtn>
+          </div>
+        )}
+
+        {/* Busy overlay for panel regeneration */}
+        {isBusy && (
+          <div
+            style={{
+              position: 'absolute', inset: 0, zIndex: 10,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0, 0, 0, 0.55)',
+              backdropFilter: 'blur(2px)',
+              borderRadius: 'inherit',
+            }}
+          >
+            <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit' }}>
+              <div style={{
+                position: 'absolute', inset: 0,
+                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 40%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 60%, transparent 100%)',
+                animation: 'shimmer 2s ease-in-out infinite',
+              }} />
+            </div>
+            <span style={{
+              fontSize: `${9 * scale}px`, fontWeight: 500,
+              color: 'rgba(255,255,255,0.7)', letterSpacing: '0.05em',
+              textTransform: 'uppercase', position: 'relative',
+            }}>
+              Regenerating...
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Collapsed error / no-image indicator
   if (showError || (preloaded && !scene.image_url)) {
@@ -46,7 +174,7 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
     <div
       className="scene-image-wrap overflow-hidden"
       style={{
-        flex: singlePage ? '0 0 48%' : '0 0 35%',
+        flex: visualNarrative ? '1 1 0' : singlePage ? '0 0 48%' : '0 0 35%',
         flexShrink: 0,
         marginBottom: `${6 * scale}px`,
         background: 'var(--book-page-bg)',
@@ -60,59 +188,114 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
         {/* Shimmer placeholder while image loads / generates */}
         {!imageLoaded && (
           <div
-            className="absolute inset-0"
+            className="absolute inset-0 painting-loader"
             style={{
               background: 'var(--glass-bg)',
               zIndex: 1,
+              overflow: 'hidden',
             }}
           >
-            <div
-              className="absolute inset-0"
-              style={{
-                background: `
-                  radial-gradient(ellipse at 30% 50%, var(--accent-primary-soft) 0%, transparent 60%),
-                  radial-gradient(ellipse at 70% 50%, var(--accent-secondary-soft) 0%, transparent 60%)
-                `,
-              }}
-            />
-            <div
-              className="absolute inset-0"
-              style={{
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 40%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.06) 60%, transparent 100%)',
-                animation: 'shimmer 2s ease-in-out infinite',
-              }}
-            />
+            {/* Animated gradient blobs */}
+            <div className="absolute inset-0" style={{
+              background: `
+                radial-gradient(ellipse at 30% 40%, var(--accent-primary-soft) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 60%, var(--accent-secondary-soft) 0%, transparent 50%)
+              `,
+              animation: 'paintBlobDrift 6s ease-in-out infinite alternate',
+            }} />
+            <div className="absolute inset-0" style={{
+              background: `
+                radial-gradient(ellipse at 60% 30%, var(--accent-secondary-soft) 0%, transparent 45%),
+                radial-gradient(ellipse at 40% 70%, var(--accent-primary-soft) 0%, transparent 45%)
+              `,
+              animation: 'paintBlobDrift 6s ease-in-out 3s infinite alternate-reverse',
+              opacity: 0.6,
+            }} />
+
+            {/* Shimmer sweep */}
+            <div className="absolute inset-0" style={{
+              background: 'linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.04) 35%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 65%, transparent 100%)',
+              animation: 'shimmer 2.5s ease-in-out infinite',
+            }} />
+
+            {/* Floating sparkles */}
+            {[0, 1, 2, 3, 4].map(i => (
+              <div key={i} className="absolute" style={{
+                width: `${(2 + i % 2) * scale}px`,
+                height: `${(2 + i % 2) * scale}px`,
+                borderRadius: '50%',
+                background: i % 2 === 0 ? 'var(--accent-primary)' : 'var(--accent-secondary)',
+                left: `${15 + i * 17}%`,
+                top: `${20 + (i * 13) % 60}%`,
+                opacity: 0,
+                animation: `paintSparkle 3s ease-in-out ${i * 0.6}s infinite`,
+              }} />
+            ))}
+
+            {/* Center content */}
             <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-              <div
-                className="rounded-lg flex items-center justify-center"
-                style={{
-                  width: `${32 * scale}px`,
-                  height: `${32 * scale}px`,
+              {/* Orbiting rings */}
+              <div style={{ position: 'relative', width: `${56 * scale}px`, height: `${56 * scale}px`, marginBottom: `${8 * scale}px` }}>
+                <div style={{
+                  position: 'absolute', inset: 0, borderRadius: '50%',
+                  border: `1px solid var(--accent-primary)`, opacity: 0.2,
+                  animation: 'paintRingSpin 8s linear infinite',
+                }} />
+                <div style={{
+                  position: 'absolute', inset: `${4 * scale}px`, borderRadius: '50%',
+                  border: `1px dashed var(--accent-secondary)`, opacity: 0.15,
+                  animation: 'paintRingSpin 6s linear infinite reverse',
+                }} />
+                {/* Orbiting dot */}
+                <div style={{
+                  position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+                  width: `${4 * scale}px`, height: `${4 * scale}px`, borderRadius: '50%',
+                  background: 'var(--accent-primary)',
+                  boxShadow: '0 0 8px var(--accent-primary-glow)',
+                  animation: 'paintOrbitDot 4s linear infinite',
+                  transformOrigin: `${0}px ${28 * scale}px`,
+                }} />
+                {/* Center icon */}
+                <div style={{
+                  position: 'absolute', inset: `${10 * scale}px`,
+                  borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: 'var(--glass-bg-strong)',
                   border: '1px solid var(--glass-border)',
                   backdropFilter: 'var(--glass-blur)',
                   boxShadow: 'var(--shadow-glow-primary)',
-                  animation: 'pulse 2.5s ease-in-out infinite',
-                  marginBottom: `${6 * scale}px`,
-                }}
-              >
-                <svg
-                  width={14 * scale} height={14 * scale} viewBox="0 0 24 24" fill="none"
-                  stroke="var(--accent-primary)" strokeWidth="1.5"
-                  strokeLinecap="round" strokeLinejoin="round"
-                >
-                  <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                  <path d="M2 2l7.586 7.586" />
-                  <circle cx="11" cy="11" r="2" />
-                </svg>
+                  animation: 'paintIconPulse 3s ease-in-out infinite',
+                }}>
+                  <svg
+                    width={14 * scale} height={14 * scale} viewBox="0 0 24 24" fill="none"
+                    stroke="var(--accent-primary)" strokeWidth="1.5"
+                    strokeLinecap="round" strokeLinejoin="round"
+                    style={{ animation: 'paintBrushWiggle 2s ease-in-out infinite' }}
+                  >
+                    <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                    <path d="M2 2l7.586 7.586" />
+                    <circle cx="11" cy="11" r="2" />
+                  </svg>
+                </div>
               </div>
-              <span
-                className="font-medium tracking-wide"
-                style={{ fontSize: `${9 * scale}px`, color: 'var(--text-secondary)' }}
-              >
+
+              <span className="font-medium tracking-wide" style={{
+                fontSize: `${9 * scale}px`, color: 'var(--text-secondary)',
+                animation: 'paintTextPulse 2s ease-in-out infinite',
+              }}>
                 Painting scene
               </span>
+
+              {/* Animated dots */}
+              <div style={{ display: 'flex', gap: `${3 * scale}px`, marginTop: `${4 * scale}px` }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{
+                    width: `${3 * scale}px`, height: `${3 * scale}px`, borderRadius: '50%',
+                    background: 'var(--accent-primary)',
+                    animation: `paintDotBounce 1.4s ease-in-out ${i * 0.2}s infinite`,
+                  }} />
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -122,10 +305,9 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
           alt={`Scene ${displayIndex ?? scene.scene_number}`}
           style={{
             width: '100%',
-            height: '100%',
-            objectFit: 'cover',
+            height: visualNarrative ? '100%' : 'auto',
+            objectFit: 'contain',
             display: 'block',
-            transform: 'scale(1.04)',
             opacity: imageLoaded ? 1 : 0,
             animation: skip && !wasRegenerated.current
               ? 'none'

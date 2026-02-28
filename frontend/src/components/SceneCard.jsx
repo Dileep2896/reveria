@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSceneActions } from '../contexts/SceneActionsContext';
 import { isImageCached } from '../utils/textUtils';
+import { getTemplate } from '../data/templates';
 import SceneComposing from './scene/SceneComposing';
 import SceneHeader from './scene/SceneHeader';
 import SceneImageArea from './scene/SceneImageArea';
 import SceneTextArea from './scene/SceneTextArea';
 
 /* ── Revealed scene with cinematic animation ── */
-function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePage }) {
+function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePage, visualNarrative }) {
   const { sceneBusy } = useSceneActions();
   const isBusy = sceneBusy.has(scene.scene_number);
 
@@ -71,6 +72,19 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePag
     }
   }, [scene.image_url, isError, imageLoaded, imageFailed]);
 
+  // Preload panel images (visual narrative)
+  useEffect(() => {
+    if (!scene.panel_images?.length) return;
+    const imgs = scene.panel_images
+      .filter((p) => p?.url)
+      .map((p) => {
+        const img = new Image();
+        img.src = p.url;
+        return img;
+      });
+    return () => imgs.forEach((img) => { img.src = ''; });
+  }, [scene.panel_images]);
+
   // Track text changes for regen animation
   const prevText = useRef(scene.text);
   const [textRegenKey, setTextRegenKey] = useState(0);
@@ -113,15 +127,17 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePag
         ...(skip && !preloaded ? {} : preloaded ? {} : { animation: 'sceneReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1)' }),
       }}
     >
-      <SceneHeader scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} isBusy={isBusy} onRegenSceneStart={() => setAwaitingTextRegen(true)} />
+      <SceneHeader scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} isBusy={isBusy} onRegenSceneStart={() => setAwaitingTextRegen(true)} visualNarrative={visualNarrative} />
 
       <SceneImageArea
         scene={scene} scale={scale} displayIndex={displayIndex}
         imageLoaded={imageLoaded} imageFailed={imageFailed} isBusy={isBusy}
         showError={showError} preloaded={preloaded} skip={skip}
         wasRegenerated={wasRegenerated} singlePage={singlePage}
+        visualNarrative={visualNarrative}
       />
 
+      {!visualNarrative && (
       <SceneTextArea
         scene={scene} scale={scale} showText={showText} skip={skip}
         animateText={animateText} isRegen={isRegen} textRegenKey={textRegenKey}
@@ -129,18 +145,20 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePag
         rewriting={awaitingTextRegen}
         isTypewriter={isTypewriterRef.current && !isRegen}
       />
+      )}
     </div>
   );
 }
 
 /* ── Main SceneCard: decides composing vs revealed ── */
-export default function SceneCard({ scene, scale = 1, displayIndex, isBookmarked, singlePage }) {
+export default function SceneCard({ scene, scale = 1, displayIndex, isBookmarked, singlePage, template }) {
+  const visualNarrative = getTemplate(template).visualNarrative;
   const wrapperStyle = scene._deleting
     ? { animation: 'sceneDeleteOut 0.5s ease-in forwards', height: '100%' }
     : { height: '100%' };
 
   const content = scene.text
-    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} singlePage={singlePage} />
+    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} singlePage={singlePage} visualNarrative={visualNarrative} />
     : <SceneComposing sceneNumber={scene.scene_number} displayIndex={displayIndex} scale={scale} />;
 
   return <div style={wrapperStyle}>{content}</div>;

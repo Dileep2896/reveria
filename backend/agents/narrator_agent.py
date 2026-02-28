@@ -17,6 +17,7 @@ from agents.shared_state import SharedPipelineState
 from services.imagen_client import generate_image
 from services.multi_voice_tts import synthesize_multi_voice
 from services.storage_client import upload_media
+from templates.registry import get_template
 
 logger = logging.getLogger("storyforge.orchestrator")
 
@@ -41,6 +42,10 @@ class NarratorADKAgent(BaseAgent):
         pending_title: str | None = None
         pending_tasks: list[asyncio.Task] = []
         characters_extracted = False
+
+        # Event signaling anchor portraits + visual DNA are ready
+        anchor_done = asyncio.Event()
+        first_scene_number: int | None = None
 
         limit = s.scene_count
         limit_hit = False
@@ -68,19 +73,23 @@ class NarratorADKAgent(BaseAgent):
 
         async def _on_scene_ready(scene: dict) -> None:
             """Fire per-scene image, audio, and director live tasks."""
-            nonlocal characters_extracted
+            nonlocal characters_extracted, first_scene_number
             # Character extraction: run once when first scene arrives
             if not characters_extracted:
                 characters_extracted = True
+                first_scene_number = scene["scene_number"]
                 story_so_far = "\n\n".join(sc["text"] for sc in scenes)
                 self.illustrator.accumulate_story(story_so_far)
                 await self.illustrator.extract_characters(story_so_far)
-                # Generate anchor portraits + vision analysis BEFORE scene images
-                await self._generate_anchor_portraits()
+                # Fire anchor portraits as background task (non-blocking)
+                # Scene 1 uses text-only character sheet; Scene 2+ awaits visual DNA
+                pending_tasks.append(asyncio.create_task(
+                    self._generate_anchor_portraits_async(anchor_done)
+                ))
 
             # Image (serialised via semaphore)
             pending_tasks.append(asyncio.create_task(
-                self._generate_image(scene)
+                self._generate_image(scene, anchor_done=anchor_done, first_scene_number=first_scene_number)
             ))
             # Audio
             pending_tasks.append(asyncio.create_task(
@@ -92,7 +101,7 @@ class NarratorADKAgent(BaseAgent):
                     self._director_live(scene, scenes)
                 ))
 
-        async for chunk in self.narrator.generate(narrator_input, scene_count=limit, language=s.language):
+        async for chunk in self.narrator.generate(narrator_input, scene_count=limit, language=s.language, template=s.template):
             if limit_hit:
                 break
             buffer += chunk
@@ -176,6 +185,17 @@ class NarratorADKAgent(BaseAgent):
 
     # ── Anchor portrait generation ──────────────────────────────────
 
+    async def _generate_anchor_portraits_async(self, done_event: asyncio.Event) -> None:
+        """Generate anchor portraits in the background and signal completion.
+
+        Non-blocking — Scene 1 proceeds with text-only character sheet while
+        portraits generate. Scene 2+ can await done_event to get visual DNA.
+        """
+        try:
+            await self._generate_anchor_portraits()
+        finally:
+            done_event.set()
+
     async def _generate_anchor_portraits(self) -> None:
         """Generate anchor portraits for new characters and analyze with Gemini Vision.
 
@@ -183,9 +203,6 @@ class NarratorADKAgent(BaseAgent):
         1. Generate a close-up portrait via Imagen
         2. Analyze the portrait with Gemini Vision to extract precise visual description
         3. Store visual DNA on the illustrator for use in all subsequent scene images
-
-        Blocking call — scene images wait for this to complete so they benefit
-        from vision-anchored descriptions from scene 1.
         """
         s = self.shared
         sheet = self.illustrator._character_sheet
@@ -270,10 +287,106 @@ class NarratorADKAgent(BaseAgent):
 
     # ── Per-scene helpers ──────────────────────────────────────────
 
-    async def _generate_image(self, scene: dict) -> None:
-        """Generate and upload image for a single scene."""
+    async def _generate_image(
+        self,
+        scene: dict,
+        *,
+        anchor_done: asyncio.Event | None = None,
+        first_scene_number: int | None = None,
+    ) -> None:
+        """Generate and upload image for a single scene.
+
+        For visual narrative templates (comic/manga/webtoon), generates per-panel
+        images and sends progressive panel_image WS messages. For other templates,
+        generates a single image as before.
+
+        Scene 1 proceeds immediately with text-only character descriptions.
+        Scene 2+ awaits anchor_done to benefit from vision-anchored visual DNA.
+        """
         s = self.shared
         scene_num = scene["scene_number"]
+        is_visual_narrative = get_template(s.template).visual_narrative
+
+        # For scenes after the first, wait for anchor portraits to finish
+        # so they benefit from vision-anchored character descriptions
+        if anchor_done and first_scene_number and scene_num != first_scene_number:
+            try:
+                await asyncio.wait_for(anchor_done.wait(), timeout=120)
+            except asyncio.TimeoutError:
+                logger.warning("Anchor portrait timeout for scene %d, proceeding with text-only", scene_num)
+
+        # ── Visual narrative: per-panel generation ──
+        if is_visual_narrative:
+            try:
+                panels = await self.illustrator.generate_panels(scene["text"], uid=s.uid)
+                if not panels:
+                    if s.ws_callback:
+                        await s.ws_callback({
+                            "type": "image_error",
+                            "scene_number": scene_num,
+                            "reason": "generation_failed",
+                        })
+                    return
+
+                panel_images = []
+                for i, panel in enumerate(panels):
+                    image_data = panel.get("image_data")
+                    composition = panel.get("composition", "")
+                    if image_data:
+                        try:
+                            gcs_url = await upload_media(
+                                s.story_id, scene_num, "image", image_data,
+                                suffix=f"_panel_{i}",
+                            )
+                        except Exception as e:
+                            logger.error("GCS panel upload error scene %d panel %d: %s", scene_num, i, e)
+                            gcs_url = image_data  # fallback to data URL
+
+                        panel_images.append({"url": gcs_url, "composition": composition})
+
+                        # Set image_url to first panel for backward compat
+                        if i == 0:
+                            scene["image_url"] = gcs_url
+
+                        # Progressive WS message per panel
+                        if s.ws_callback:
+                            await s.ws_callback({
+                                "type": "panel_image",
+                                "scene_number": scene_num,
+                                "panel_index": i,
+                                "content": gcs_url,
+                                "composition": composition,
+                            })
+                    else:
+                        panel_images.append({"url": None, "composition": composition})
+                        logger.warning(
+                            "Panel %d failed for scene %d: %s",
+                            i, scene_num, panel.get("error_reason"),
+                        )
+
+                scene["panel_images"] = panel_images
+                scene["image_tier"] = 1
+
+                # Also send standard image message with first panel for backward compat
+                if scene.get("image_url") and s.ws_callback:
+                    await s.ws_callback({
+                        "type": "image",
+                        "scene_number": scene_num,
+                        "tier": 1,
+                        "content": scene["image_url"],
+                    })
+
+            except Exception as e:
+                logger.error("Panel generation error for scene %d: %s", scene_num, e)
+                if s.ws_callback:
+                    await s.ws_callback({
+                        "type": "image_error",
+                        "scene_number": scene_num,
+                        "reason": "generation_failed",
+                    })
+            return
+
+        # ── Standard single-image generation ──
         try:
             image_data, error_reason, tier, scene_composition = await self.illustrator.generate_for_scene(scene["text"], uid=self.shared.uid)
             scene["image_tier"] = tier

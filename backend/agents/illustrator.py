@@ -1,12 +1,16 @@
+import json
 import logging
 import re
 from services.gemini_client import get_client, get_model
 from services.imagen_client import generate_image
 from google.genai import types
+from templates.registry import get_template
 
 from agents.illustrator_prompts import (
     SCENE_COMPOSER_INSTRUCTION,
     SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION,
+    VISUAL_NARRATIVE_COMPOSER_INSTRUCTION,
+    VISUAL_NARRATIVE_WITH_CHARACTERS_COMPOSER_INSTRUCTION,
     CHARACTER_IDENTIFIER_INSTRUCTION,
     VISUAL_DNA_ANALYSIS_INSTRUCTION,
     ART_STYLES,
@@ -19,6 +23,7 @@ class Illustrator:
     def __init__(self):
         self._character_sheet: str = ""
         self._art_style: str = "cinematic"
+        self._template: str = "storybook"
         self._accumulated_story: str = ""
         self._last_scene_composition: str | None = None
         self.hero_description: str = ""
@@ -33,6 +38,7 @@ class Illustrator:
             "character_sheet": self._character_sheet,
             "accumulated_story": self._accumulated_story,
             "art_style": self._art_style,
+            "template": self._template,
             "hero_description": self.hero_description,
             "hero_name": self.hero_name,
             "trend_style": self.trend_style,
@@ -45,6 +51,7 @@ class Illustrator:
         self._character_sheet = state.get("character_sheet", "")
         self._accumulated_story = state.get("accumulated_story", "")
         self.art_style = state.get("art_style", "cinematic")
+        self._template = state.get("template", "storybook")
         self.hero_description = state.get("hero_description", "")
         self.hero_name = state.get("hero_name", "")
         self.trend_style = state.get("trend_style")
@@ -67,7 +74,19 @@ class Illustrator:
         self._art_style = value if value in ART_STYLES else "cinematic"
 
     @property
+    def template(self) -> str:
+        return self._template
+
+    @template.setter
+    def template(self, value: str) -> None:
+        self._template = value
+
+    @property
     def art_style_suffix(self) -> str:
+        tmpl = get_template(self._template)
+        if tmpl.style_suffix_override:
+            per_style = ART_STYLES.get(self._art_style, "")
+            return f"{tmpl.style_suffix_override}, {per_style}" if per_style else tmpl.style_suffix_override
         if self.trend_style:
             return ART_STYLES.get(self.trend_style, self.trend_style)
         return ART_STYLES.get(self._art_style, ART_STYLES["cinematic"])
@@ -99,14 +118,13 @@ class Illustrator:
             "For each character, output exactly one line in this format:\n"
             "NAME: [gender: man/woman/boy/girl], [age: e.g. 8-year-old], "
             "[body: e.g. slim/stocky/tall/petite with height hint], "
-            "[skin: specific tone with hex e.g. warm brown #8D5524], "
-            "[hair: color with hex + style e.g. jet black #0A0A0A straight shoulder-length], "
-            "[face: shape + key features e.g. round face, button nose, large almond-shaped brown #4A2810 eyes, thick eyebrows], "
-            "[outfit: detailed clothing with colors e.g. navy blue #1B2A4A hoodie, faded jeans, red #C41E3A sneakers], "
-            "[signature items: unique accessories/props that identify this character e.g. silver moon pendant, round glasses, wooden walking staff], "
-            "[palette: 3-4 dominant hex colors e.g. #1B2A4A, #C41E3A, #0A0A0A]\n\n"
+            "[skin: vivid natural color e.g. warm brown, pale ivory, deep mahogany], "
+            "[hair: natural color + style e.g. jet black straight shoulder-length, deep auburn wavy], "
+            "[face: shape + key features e.g. round face, button nose, large almond-shaped dark brown eyes, thick eyebrows], "
+            "[outfit: detailed clothing with colors e.g. navy blue hoodie, faded jeans, crimson sneakers], "
+            "[signature items: unique accessories/props that identify this character e.g. silver moon pendant, round glasses, wooden walking staff]\n\n"
             "CRITICAL RULES:\n"
-            "- Include hex color codes for ALL colors (skin, hair, eyes, clothing)\n"
+            "- Use vivid natural-language color descriptions (e.g. 'deep auburn', 'warm mahogany', 'olive') — NEVER hex codes like #8B4513\n"
             "- Be VERY specific about gender (man/woman/boy/girl)\n"
             "- Always include at least one signature item or distinguishing feature per character\n"
             "- These descriptions will be passed VERBATIM to an image generator - be precise and visual\n"
@@ -189,7 +207,7 @@ class Illustrator:
                 config=types.GenerateContentConfig(
                     system_instruction=VISUAL_DNA_ANALYSIS_INSTRUCTION,
                     temperature=0.1,
-                    max_output_tokens=250,
+                    max_output_tokens=100,
                 ),
             )
             result = response.text.strip() if response.text else None
@@ -209,11 +227,13 @@ class Illustrator:
         Tier 1 = full prompt with characters, 2 = scene-only, 3 = generic atmospheric.
         scene_composition is the creative brief text (tier 1 only).
         """
+        aspect = get_template(self._template).aspect_ratio
+
         # Attempt 1: full detailed prompt with character sheet
         image_prompt = await self._create_image_prompt(scene_text)
         if image_prompt:
             logger.info("Image prompt (full): %s", image_prompt)
-            data, err = await generate_image(image_prompt, uid=uid)
+            data, err = await generate_image(image_prompt, uid=uid, aspect_ratio=aspect)
             if data:
                 return data, None, 1, self._last_scene_composition
             if err and err != "safety_filter":
@@ -223,16 +243,16 @@ class Illustrator:
         safe_prompt = await self._create_safe_prompt(scene_text)
         if safe_prompt:
             logger.info("Fallback safe prompt: %s...", safe_prompt[:150])
-            data, err = await generate_image(safe_prompt, uid=uid)
+            data, err = await generate_image(safe_prompt, uid=uid, aspect_ratio=aspect)
             if data:
                 return data, None, 2, None
             if err and err != "safety_filter":
                 return None, err, 2, None
 
         # Attempt 3: ultra-generic atmospheric prompt (almost never blocked)
-        generic = f"A beautiful atmospheric {self.art_style_suffix} landscape illustration, soft lighting, no text, no people"
+        generic = f"A beautiful atmospheric {self.art_style_suffix} landscape illustration, soft lighting, no text, no people. [NO watermarks, NO distortions]"
         logger.info("Fallback generic prompt: %s", generic)
-        data, err = await generate_image(generic, uid=uid)
+        data, err = await generate_image(generic, uid=uid, aspect_ratio=aspect)
         return data, err, 3, None
 
     async def _create_safe_prompt(self, scene_text: str) -> str | None:
@@ -261,8 +281,8 @@ class Illustrator:
             composition = response.text.strip() if response.text else None
             if not composition:
                 return None
-            # Always append art style suffix programmatically
-            return f"{composition}\n\n{self.art_style_suffix}"
+            # Always append art style suffix + negative constraints programmatically
+            return f"{composition}\n\n{self.art_style_suffix}\n\n[NO text, NO watermarks, NO extra limbs, NO distorted faces]"
         except Exception as e:
             logger.error("Safe prompt generation failed: %s", e)
             return None
@@ -338,30 +358,43 @@ class Illustrator:
 
     @staticmethod
     def _strip_hex_codes(text: str) -> str:
-        """Remove hex color codes (e.g. #8B4513) from text — Imagen can't interpret them."""
-        return re.sub(r'\s*#[0-9A-Fa-f]{6}\b', '', text)
+        """Remove color codes (hex, rgb, hsl) from text — Imagen can't interpret them."""
+        # 6-digit hex (#8B4513), 3-digit hex (#abc)
+        text = re.sub(r'\s*#[0-9A-Fa-f]{3,6}\b', '', text)
+        # rgb()/rgba()/hsl()/hsla() functional notation
+        text = re.sub(r'\s*(?:rgba?|hsla?)\([^)]*\)', '', text)
+        return text
 
-    async def _create_image_prompt(self, scene_text: str) -> str | None:
-        """Build an image prompt with character appearances woven into the scene composition."""
+    @staticmethod
+    def _extract_dialog(scene_text: str, max_bubbles: int = 3) -> list[str]:
+        """Extract quoted dialog from scene text for speech bubbles."""
+        pattern = r'["\u201c]([^"\u201d]{1,80})["\u201d]'
+        matches = re.findall(pattern, scene_text)
+        return [m.strip() for m in matches[:max_bubbles] if m.strip()]
+
+    async def _decompose_into_panels(self, scene_text: str) -> list[str]:
+        """Decompose a scene into individual panel descriptions using Gemini.
+
+        Returns a list of composition strings (one per panel), or a single-element
+        list with a fallback composition on failure.
+        """
         client = get_client()
         model = get_model()
 
-        # Step 1: Identify which characters appear in this scene
+        # Identify characters and build description block
         scene_characters = await self._identify_scene_characters(scene_text)
         char_block = self._filter_character_descriptions(scene_characters)
 
-        # Step 2: Generate scene composition
         if char_block:
-            # Strip hex codes — Imagen uses natural language colors, not hex
             clean_chars = self._strip_hex_codes(char_block)
             user_input = (
                 f"CHARACTER DESCRIPTIONS:\n{clean_chars}\n\n"
                 f"SCENE TO ILLUSTRATE:\n{scene_text}"
             )
-            instruction = SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION
+            instruction = VISUAL_NARRATIVE_WITH_CHARACTERS_COMPOSER_INSTRUCTION
         else:
             user_input = f"SCENE TO ILLUSTRATE:\n{scene_text}"
-            instruction = SCENE_COMPOSER_INSTRUCTION
+            instruction = VISUAL_NARRATIVE_COMPOSER_INSTRUCTION
 
         try:
             response = await client.aio.models.generate_content(
@@ -373,7 +406,112 @@ class Illustrator:
                 config=types.GenerateContentConfig(
                     system_instruction=instruction,
                     temperature=0.3,
-                    max_output_tokens=200,
+                    max_output_tokens=500,
+                    response_mime_type="application/json",
+                ),
+            )
+            raw = response.text.strip() if response.text else ""
+            panels = json.loads(raw) if raw else []
+            if isinstance(panels, list) and panels:
+                # Strip hex codes from each panel
+                panels = [self._strip_hex_codes(str(p)) for p in panels]
+                logger.info("Decomposed scene into %d panels", len(panels))
+                return panels[:3]  # cap at 3
+        except (json.JSONDecodeError, Exception) as e:
+            logger.warning("Panel decomposition failed (will fallback): %s", e)
+
+        # Fallback: generate a single composition via existing path
+        prompt = await self._create_image_prompt(scene_text)
+        if prompt:
+            return [prompt]
+        return []
+
+    async def generate_panels(self, scene_text: str, uid: str = "__global__") -> list[dict]:
+        """Generate per-panel images for a visual narrative scene.
+
+        Returns list of {image_data, image_url (None), composition, tier, error_reason} dicts.
+        Each panel gets its own Imagen call with full character descriptions.
+        """
+        panel_compositions = await self._decompose_into_panels(scene_text)
+        if not panel_compositions:
+            return []
+
+        aspect = "16:9"  # landscape panels stacked vertically
+        negative = "[NO text, NO watermarks, NO extra limbs, NO distorted faces, NO blurred features]"
+
+        # Build character block once for all panels
+        scene_characters = await self._identify_scene_characters(scene_text)
+        char_block = self._filter_character_descriptions(scene_characters)
+
+        results = []
+        for composition in panel_compositions:
+            # Build final prompt: character anchor + composition + art style + negative
+            parts = []
+            if char_block:
+                clean_chars = self._strip_hex_codes(char_block)
+                parts.append(
+                    f"CHARACTERS (render EXACTLY as described):\n{clean_chars}"
+                )
+            parts.append(composition)
+            parts.append(self.art_style_suffix)
+            parts.append(negative)
+            final_prompt = "\n\n".join(parts)
+
+            logger.info("Panel prompt: %s", final_prompt[:200])
+            data, err = await generate_image(final_prompt, uid=uid, aspect_ratio=aspect)
+            results.append({
+                "image_data": data,
+                "image_url": None,
+                "composition": composition,
+                "tier": 1 if data else 0,
+                "error_reason": err,
+            })
+
+        return results
+
+    async def _create_image_prompt(self, scene_text: str) -> str | None:
+        """Build an image prompt with character appearances woven into the scene composition."""
+        client = get_client()
+        model = get_model()
+
+        is_visual_narrative = get_template(self._template).visual_narrative
+
+        # Step 1: Identify which characters appear in this scene
+        scene_characters = await self._identify_scene_characters(scene_text)
+        char_block = self._filter_character_descriptions(scene_characters)
+
+        # Step 2: Generate scene composition (use visual narrative instructions when applicable)
+        if char_block:
+            # Strip hex codes — Imagen uses natural language colors, not hex
+            clean_chars = self._strip_hex_codes(char_block)
+            user_input = (
+                f"CHARACTER DESCRIPTIONS:\n{clean_chars}\n\n"
+                f"SCENE TO ILLUSTRATE:\n{scene_text}"
+            )
+            instruction = (
+                VISUAL_NARRATIVE_WITH_CHARACTERS_COMPOSER_INSTRUCTION
+                if is_visual_narrative
+                else SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION
+            )
+        else:
+            user_input = f"SCENE TO ILLUSTRATE:\n{scene_text}"
+            instruction = (
+                VISUAL_NARRATIVE_COMPOSER_INSTRUCTION
+                if is_visual_narrative
+                else SCENE_COMPOSER_INSTRUCTION
+            )
+
+        try:
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=types.Content(
+                    role="user",
+                    parts=[types.Part(text=user_input)],
+                ),
+                config=types.GenerateContentConfig(
+                    system_instruction=instruction,
+                    temperature=0.3,
+                    max_output_tokens=300 if is_visual_narrative else 200,
                 ),
             )
             scene_composition = response.text.strip() if response.text else None
@@ -389,5 +527,27 @@ class Illustrator:
         # Strip any hex codes that Gemini may have included in the output
         scene_composition = self._strip_hex_codes(scene_composition)
 
-        # Step 3: Append art style (always programmatic)
-        return f"{scene_composition}\n\n{self.art_style_suffix}"
+        # Negative constraints to reduce common AI artifacts
+        negative = "[NO text, NO watermarks, NO extra limbs, NO distorted faces, NO blurred features]"
+
+        # Step 3: For visual narratives, prepend character anchor + append page layout framing
+        if is_visual_narrative:
+            parts = []
+            # Prepend character descriptions directly so Imagen sees them
+            if char_block:
+                clean_chars = self._strip_hex_codes(char_block)
+                parts.append(
+                    f"CHARACTERS (render EXACTLY as described in every panel):\n{clean_chars}"
+                )
+            parts.append(scene_composition)
+            parts.append(
+                "Full comic book page with panel borders and gutters. "
+                "Bold expressive comic lettering in speech bubbles. "
+                "Every panel must show the SAME characters with IDENTICAL appearance."
+            )
+            parts.append(self.art_style_suffix)
+            parts.append(negative)
+            return "\n\n".join(parts)
+
+        # Step 4: Append art style (always programmatic)
+        return f"{scene_composition}\n\n{self.art_style_suffix}\n\n{negative}"

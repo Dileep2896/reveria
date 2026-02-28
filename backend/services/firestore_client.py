@@ -34,6 +34,7 @@ async def persist_story(
     director_data: dict[str, Any] | None = None,
     director_live_notes: list[dict[str, Any]] | None = None,
     language: str = "English",
+    template: str = "storybook",
     author_name: str | None = None,
     author_photo_url: str | None = None,
 ) -> None:
@@ -62,6 +63,7 @@ async def persist_story(
             "updated_at": datetime.now(timezone.utc),
             "art_style": art_style,
             "language": language,
+            "template": template,
             "total_scene_count": total_scene_count,
             "narrator_history": narrator_history,
             "illustrator_state": illustrator_state,
@@ -74,18 +76,20 @@ async def persist_story(
         scene_ref = story_ref.collection("scenes").document(
             str(scene["scene_number"])
         )
-        await scene_ref.set(
-            {
-                "scene_number": scene["scene_number"],
-                "text": scene.get("text", ""),
-                "scene_title": scene.get("scene_title"),
-                "image_url": scene.get("image_url"),
-                "audio_url": scene.get("audio_url"),
-                "word_timestamps": scene.get("word_timestamps"),
-                "prompt": scene.get("prompt", ""),
-                "batch_index": batch_index,
-            }
-        )
+        scene_doc: dict[str, Any] = {
+            "scene_number": scene["scene_number"],
+            "text": scene.get("text", ""),
+            "scene_title": scene.get("scene_title"),
+            "image_url": scene.get("image_url"),
+            "audio_url": scene.get("audio_url"),
+            "word_timestamps": scene.get("word_timestamps"),
+            "prompt": scene.get("prompt", ""),
+            "batch_index": batch_index,
+        }
+        # Panel images for visual narrative templates (comic/manga/webtoon)
+        if scene.get("panel_images"):
+            scene_doc["panel_images"] = scene["panel_images"]
+        await scene_ref.set(scene_doc)
 
     # Write generation batch
     gen_ref = story_ref.collection("generations").document(str(batch_index))
