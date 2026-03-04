@@ -1,17 +1,18 @@
-import { useState, useEffect, useRef, forwardRef, memo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, forwardRef, memo, useCallback } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 import { useTheme } from '../contexts/ThemeContext';
-import Tooltip from './Tooltip';
+import gsap from 'gsap';
 import './storybook.css';
 import SceneCard from './SceneCard';
-import { GENRE_KEYS, LANGUAGES, getLangData } from '../data/languages';
+import { getLangData } from '../data/languages';
 import CoverPage from './storybook/CoverPage';
 import EmptyPageContent from './storybook/EmptyPageContent';
 import GeneratingContent from './storybook/GeneratingContent';
+import TemplateChooser, { BookCover } from './TemplateChooser';
 import useBookSize from '../hooks/useBookSize';
 import useStoryNavigation, { spreadLeftPage } from '../hooks/useStoryNavigation';
 
-const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWithinSpread, pageNum, scale, hasScenes, displayIndex, isBookmarked, singlePage, nextChapter }, ref) {
+const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWithinSpread, pageNum, scale, hasScenes, displayIndex, isBookmarked, singlePage, nextChapter, template }, ref) {
   const showAsPage = scene || isGenerating || isWithinSpread;
   const isEmpty = showAsPage && !scene && !isGenerating && hasScenes;
 
@@ -19,7 +20,7 @@ const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWit
     <div ref={ref} className={showAsPage ? `book-page ${pageNum % 2 === 1 ? 'book-page-left' : 'book-page-right'}` : 'book-page-slot'}>
       {scene ? (
         <div className="book-page-inner">
-          <SceneCard scene={scene} scale={scale || 1} displayIndex={displayIndex} isBookmarked={isBookmarked} singlePage={singlePage} />
+          <SceneCard scene={scene} scale={scale || 1} displayIndex={displayIndex} isBookmarked={isBookmarked} singlePage={singlePage} template={template} />
         </div>
       ) : isGenerating ? (
         <GeneratingContent />
@@ -32,62 +33,9 @@ const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWit
   );
 });
 
-function CoverLanguagePicker({ language, onChange }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onClickOutside = (e) => {
-      if (!ref.current?.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', onClickOutside);
-    return () => document.removeEventListener('pointerdown', onClickOutside);
-  }, [open]);
-
-  return (
-    <div className="book-cover-lang-picker" ref={ref}>
-      <button
-        type="button"
-        className="book-cover-lang-trigger"
-        onClick={() => setOpen(!open)}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="2" y1="12" x2="22" y2="12" />
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-        </svg>
-        <span>{LANGUAGES.find(l => l.key === language)?.label || 'English'}</span>
-        <svg width="9" height="5" viewBox="0 0 10 6" fill="none" style={{ transition: 'transform 0.2s ease', transform: open ? 'rotate(180deg)' : 'none' }}>
-          <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && (
-        <div className="book-cover-lang-menu">
-          {LANGUAGES.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              className={`book-cover-lang-option${language === key ? ' active' : ''}`}
-              onClick={() => { onChange(key); setOpen(false); }}
-            >
-              {language === key && (
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 const MIN_PAGE_SLOTS = 21;
 
-function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English', onLanguageChange, singlePage = false }) {
+function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English', onLanguageChange, singlePage = false, template = 'storybook', onTemplateSelect, onTemplateBack }) {
   const { theme } = useTheme();
   const lang = getLangData(language);
   const bookRef = useRef(null);
@@ -96,7 +44,8 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
   const [expandedPrompt, setExpandedPrompt] = useState(null);
   const initialPageRef = useRef(() => {
     const p = new URLSearchParams(window.location.search).get('page');
-    return p ? Math.max(1, parseInt(p, 10)) : 1;
+    if (p) return Math.max(1, parseInt(p, 10));
+    return /^\/story\//.test(window.location.pathname) ? 1 : 0;
   });
   if (typeof initialPageRef.current === 'function') initialPageRef.current = initialPageRef.current();
   const [currentPage, setCurrentPage] = useState(initialPageRef.current);
@@ -118,50 +67,62 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
   /* ── Auto-advance during generation ── */
   const lastFlipTarget = useRef(-1);
   const scenesAtGenStart = useRef(0);
+  const firstGenFlipDone = useRef(false);
   useEffect(() => {
     if (!bookRef.current) return;
 
     // Track how many scenes existed when generation started
     if (generating && !prevGenerating.current) {
       scenesAtGenStart.current = scenes.length;
+      firstGenFlipDone.current = false;
     }
 
-    if (generating && !prevGenerating.current && scenes.length > 0) {
-      const target = singlePage ? scenes.length + 1 : spreadLeftPage(scenes.length + 1);
+    const isFirstGen = scenesAtGenStart.current === 0;
+
+    // ── First generation: cover → first scene flip ──
+    if (generating && isFirstGen && !firstGenFlipDone.current && scenes.length > 0) {
+      firstGenFlipDone.current = true;
+      const target = singlePage ? 1 : 1;
       lastFlipTarget.current = target;
-      // First-ever generation (no prior scenes): jump instantly without flip animation
-      const isFirstGeneration = scenesAtGenStart.current === 0;
+      // 800ms delay lets the 700ms entrance animation finish
       setTimeout(() => {
-        try {
-          if (isFirstGeneration) {
-            bookRef.current.pageFlip().turnToPage(target);
-          } else {
-            bookRef.current.pageFlip().flip(target);
-          }
-        } catch {}
-      }, 200);
+        try { bookRef.current.pageFlip().flip(target); } catch {}
+      }, 800);
     }
 
-    if (generating && scenes.length > 0) {
-      let currentIdx;
-      try { currentIdx = bookRef.current.pageFlip().getCurrentPageIndex(); } catch { currentIdx = 0; }
-      const newScenePage = scenes.length;
-      const currentSpreadEnd = singlePage ? currentIdx : currentIdx + 1;
-      if (newScenePage > currentSpreadEnd) {
-        const target = singlePage ? newScenePage : spreadLeftPage(newScenePage);
-        if (target !== lastFlipTarget.current) {
-          lastFlipTarget.current = target;
-          // First generation: instant page turn, no flip animation
-          const isFirstGeneration = scenesAtGenStart.current === 0;
-          setTimeout(() => {
-            try {
-              if (isFirstGeneration) {
-                bookRef.current.pageFlip().turnToPage(target);
-              } else {
-                bookRef.current.pageFlip().flip(target);
-              }
-            } catch {}
-          }, 300);
+    // ── First generation, scene 2+: flip to new scene after cover flip done ──
+    if (generating && isFirstGen && firstGenFlipDone.current && scenes.length > 1) {
+      const target = singlePage ? scenes.length : spreadLeftPage(scenes.length);
+      if (target !== lastFlipTarget.current) {
+        lastFlipTarget.current = target;
+        setTimeout(() => {
+          try { bookRef.current.pageFlip().flip(target); } catch {}
+        }, 200);
+      }
+    }
+
+    // ── Subsequent generations: flip to generating page ──
+    if (generating && !isFirstGen) {
+      if (!prevGenerating.current && scenes.length > 0) {
+        const target = singlePage ? scenes.length + 1 : spreadLeftPage(scenes.length + 1);
+        lastFlipTarget.current = target;
+        setTimeout(() => {
+          try { bookRef.current.pageFlip().flip(target); } catch {}
+        }, 200);
+      }
+      if (scenes.length > 0) {
+        let currentIdx;
+        try { currentIdx = bookRef.current.pageFlip().getCurrentPageIndex(); } catch { currentIdx = 0; }
+        const newScenePage = scenes.length;
+        const currentSpreadEnd = singlePage ? currentIdx : currentIdx + 1;
+        if (newScenePage > currentSpreadEnd) {
+          const target = singlePage ? newScenePage : spreadLeftPage(newScenePage);
+          if (target !== lastFlipTarget.current) {
+            lastFlipTarget.current = target;
+            setTimeout(() => {
+              try { bookRef.current.pageFlip().flip(target); } catch {}
+            }, 300);
+          }
         }
       }
     }
@@ -215,7 +176,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
   const maxPage = singlePage ? lastFilledPage : lastFilledPage + (lastFilledPage % 2 !== 0 ? 1 : 0);
 
   const { onFlip, goNext, goPrev, goTo } = useStoryNavigation({
-    bookRef, currentPage, setCurrentPage, maxPage, scenes, storyId, onPageChange, singlePage,
+    bookRef, currentPage, setCurrentPage, maxPage, scenes, storyId, onPageChange, singlePage, generating,
   });
 
   /* ── Navigation dots ── */
@@ -230,12 +191,12 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
   /* ── Build fixed page array ── */
   const pageSlots = Math.max(MIN_PAGE_SLOTS, scenes.length + 2);
   const pages = [
-    <CoverPage key="cover" onGenreClick={onGenreClick} lang={lang} />,
+    <CoverPage key="cover" lang={lang} generating={generating && scenes.length === 0} />,
     ...Array.from({ length: pageSlots }, (_, i) => {
       const pageIndex = i + 1;
       return (
         <ContentPage
-          key={`slot-${i}`}
+          key={i < scenes.length ? `scene-${scenes[i].scene_number}` : `slot-${i}`}
           scene={i < scenes.length ? scenes[i] : null}
           displayIndex={i < scenes.length ? i + 1 : undefined}
           isGenerating={i === scenes.length && showGenerating}
@@ -246,6 +207,7 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
           isBookmarked={!!(bookmarkPage && i + 1 === bookmarkPage)}
           singlePage={singlePage}
           nextChapter={scenes.length + 1}
+          template={template}
         />
       );
     }),
@@ -253,57 +215,120 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
 
   const hasContent = scenes.length > 0 || generating;
 
+  /* ── Template selection transition ── */
+  /* Forward: GSAP exit → save focused book rect → React swap → gsap.from() settle   */
+  /* Back:    GSAP exit idle cover → React swap → chooser mounts with CSS fadeIn      */
+  const [transitioning, setTransitioning] = useState(null);
+  const savedRectRef = useRef(null);
+  const [settleTick, setSettleTick] = useState(0);
+
+  const handleTemplateTransition = useCallback((key) => {
+    const chooser = document.querySelector('.template-chooser');
+    if (chooser) gsap.set(chooser, { pointerEvents: 'none' });
+
+    const tl = gsap.timeline();
+    const header = document.querySelector('.tc-header');
+    const footer = document.querySelector('.tc-footer');
+    const arrowL = document.querySelector('.tc-coverflow-arrow--left');
+    const arrowR = document.querySelector('.tc-coverflow-arrow--right');
+    const sideItems = document.querySelectorAll('.tc-coverflow-item:not(.focused)');
+    const gridItems = document.querySelectorAll('.tc-grid .tc-book:not(.selected)');
+    const focusedBook = document.querySelector('.tc-coverflow-item.focused .tc-book') ||
+                        document.querySelector('.tc-grid .tc-book.selected');
+
+    // Phase 1: Surrounding UI slides out (0–300ms)
+    if (header) tl.to(header, { y: -30, opacity: 0, duration: 0.3, ease: 'power2.in' }, 0);
+    if (footer) tl.to(footer, { y: 30, opacity: 0, duration: 0.3, ease: 'power2.in' }, 0);
+    if (arrowL) tl.to(arrowL, { x: -40, opacity: 0, duration: 0.25, ease: 'power2.in' }, 0);
+    if (arrowR) tl.to(arrowR, { x: 40, opacity: 0, duration: 0.25, ease: 'power2.in' }, 0);
+    if (sideItems.length) tl.to(sideItems, { opacity: 0, filter: 'blur(4px)', duration: 0.3, ease: 'power2.out' }, 0);
+    if (gridItems.length) tl.to(gridItems, { opacity: 0, filter: 'blur(4px)', duration: 0.3, ease: 'power2.out' }, 0);
+
+    // Phase 2: Focused book pulses bright then fades (100–480ms)
+    if (focusedBook) {
+      // Save the book's screen position before it fades
+      savedRectRef.current = focusedBook.getBoundingClientRect();
+      tl.to(focusedBook, { filter: 'brightness(1.4)', scale: 1.06, duration: 0.2, ease: 'power2.out' }, 0.1);
+      tl.to(focusedBook, { opacity: 0, scale: 1.1, filter: 'brightness(1.6)', duration: 0.2, ease: 'power2.in' }, 0.3);
+    }
+
+    setTransitioning(key);
+
+    // Phase 3: After exit completes, swap React state — idle cover mounts
+    setTimeout(() => {
+      onTemplateSelect(key);
+      setTransitioning(null);
+      setSettleTick(v => v + 1);
+    }, 500);
+  }, [onTemplateSelect]);
+
+  // Phase 4: After idle cover mounts, animate it FROM the carousel book's last position
+  // useLayoutEffect fires before browser paint — no visible gap
+  useLayoutEffect(() => {
+    const sourceRect = savedRectRef.current;
+    if (!sourceRect || settleTick === 0) return;
+    savedRectRef.current = null;
+
+    const idleBook = document.querySelector('.tc-idle-cover .tc-book');
+    if (!idleBook) return;
+
+    const targetRect = idleBook.getBoundingClientRect();
+
+    // Delta: how far the idle book needs to travel from the carousel book's position
+    const dx = sourceRect.left + sourceRect.width / 2 - (targetRect.left + targetRect.width / 2);
+    const dy = sourceRect.top + sourceRect.height / 2 - (targetRect.top + targetRect.height / 2);
+    const scaleX = sourceRect.width / targetRect.width;
+    const scaleY = sourceRect.height / targetRect.height;
+
+    // Animate idle book FROM carousel position TO its natural position
+    gsap.from(idleBook, {
+      x: dx,
+      y: dy,
+      scaleX,
+      scaleY,
+      opacity: 0,
+      duration: 0.5,
+      ease: 'power2.out',
+      clearProps: 'transform,opacity',
+    });
+
+  }, [settleTick]);
+
+  const handleBack = useCallback(() => {
+    if (!onTemplateBack) return;
+
+    const backBtn = document.querySelector('.tc-idle-back');
+    const book = document.querySelector('.tc-idle-cover .tc-book');
+    const tl = gsap.timeline({
+      onComplete: () => onTemplateBack(),
+    });
+
+    if (backBtn) tl.to(backBtn, { x: -20, opacity: 0, duration: 0.25, ease: 'power2.in' }, 0);
+    if (book) tl.to(book, { scale: 0.92, opacity: 0, filter: 'blur(2px)', duration: 0.35, ease: 'power2.in' }, 0.05);
+  }, [onTemplateBack]);
+
+  const showChooser = !hasContent && (onTemplateSelect || transitioning);
+
   if (!bookSize) {
     return <div className="storybook-wrapper" ref={wrapperRef} />;
   }
 
   return (
-    <div className="storybook-wrapper" ref={wrapperRef} style={{ '--page-scale': pageScale }}>
-      {!hasContent ? (
-        <div className="book-idle">
-          <div className="book-page book-page-cover book-idle-cover" style={{ width: bookSize.w, height: bookSize.h }}>
-            <div className="book-cover-inner-frame" />
-            <div className="book-cover-content">
-              <div className="book-cover-icon">
-                <svg
-                  width="34" height="34" viewBox="0 0 24 24" fill="none"
-                  stroke="var(--accent-primary)" strokeWidth="1.5"
-                  strokeLinecap="round" strokeLinejoin="round"
-                >
-                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-                </svg>
-              </div>
-              <h2 className="book-cover-title">{lang.title}</h2>
-              <div className="book-cover-ornament" />
-              <p className="book-cover-subtitle">{lang.subtitle}</p>
-              <div className="book-cover-genres">
-                {GENRE_KEYS.map((g) => (
-                  <button
-                    key={g}
-                    className="book-cover-genre"
-                    onClick={() => onGenreClick?.(lang.genres[g].prompt)}
-                  >
-                    {lang.genres[g].label}
-                  </button>
-                ))}
-              </div>
-              {onLanguageChange && (
-                <CoverLanguagePicker language={language} onChange={onLanguageChange} />
-              )}
-            </div>
-          </div>
-          <div className="book-idle-hint">
-            <svg
-              width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="var(--accent-primary)" strokeWidth="1.5"
-              strokeLinecap="round" strokeLinejoin="round"
-            >
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </svg>
-            <span>{lang.hint}</span>
-          </div>
+    <div className={`storybook-wrapper${showChooser ? ' storybook-wrapper--chooser' : !hasContent ? ' storybook-wrapper--idle' : ''}`} ref={wrapperRef} style={{ '--page-scale': pageScale }}>
+      {showChooser ? (
+        <TemplateChooser onSelect={transitioning ? undefined : handleTemplateTransition} language={language} onLanguageChange={onLanguageChange} bookSize={bookSize} initialTemplate={template} />
+      ) : !hasContent ? (
+        /* Template chosen, waiting for first prompt — show the selected book cover standing alone */
+        <div className={`tc-idle-cover${displayPrompt && !hasContent ? ' tc-idle-preparing' : ''}`}>
+          {onTemplateBack && (
+            <button type="button" className="tc-back-btn tc-idle-back" onClick={handleBack} aria-label="Back to templates">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              <span>Templates</span>
+            </button>
+          )}
+          <BookCover templateKey={template} size={bookSize} standalone selected />
         </div>
       ) : (
         <>
@@ -316,22 +341,34 @@ function StoryCanvas({ scenes, generating, onGenreClick, onPageChange, storyId, 
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
           );
+          const pageW = bookSize?.w || 480;
+          const pill = (prompt, key) => (
+            <div
+              key={key}
+              className="book-prompt-pill"
+              title={prompt}
+              onClick={() => setExpandedPrompt(prompt)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                width: showTwo ? pageW : pageW * 2,
+                maxWidth: showTwo ? pageW : pageW * 2,
+                minWidth: 0, overflow: 'hidden',
+                padding: '5px 16px', borderRadius: 999,
+                background: 'var(--glass-bg-strong)',
+                border: '1px solid var(--glass-border)',
+                backdropFilter: 'var(--glass-blur)',
+                color: 'var(--text-secondary)', cursor: 'pointer',
+                boxSizing: 'border-box',
+              }}
+            >
+              {pillIcon}
+              <p style={{ margin: 0, minWidth: 0, fontSize: '0.8rem', lineHeight: 1.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prompt}</p>
+            </div>
+          );
           return (
-            <div className={showTwo ? "book-prompt-pills" : undefined}>
-              <Tooltip label={leftPrompt}>
-              <div className="book-prompt-pill" onClick={() => setExpandedPrompt(leftPrompt)}>
-                {pillIcon}
-                <p>{leftPrompt}</p>
-              </div>
-              </Tooltip>
-              {showTwo && (
-                <Tooltip label={rightPrompt}>
-                <div className="book-prompt-pill" onClick={() => setExpandedPrompt(rightPrompt)}>
-                  {pillIcon}
-                  <p>{rightPrompt}</p>
-                </div>
-                </Tooltip>
-              )}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, width: '100%', flexShrink: 0, marginBottom: 6 }}>
+              {pill(leftPrompt, 'left')}
+              {showTwo && pill(rightPrompt, 'right')}
             </div>
           );
         })()}

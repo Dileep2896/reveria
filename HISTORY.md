@@ -922,13 +922,48 @@ Comprehensive audit of all major user flows (generation, Director Chat, save/lib
 
 - Files modified (11): `backend/handlers/director_chat_handlers.py`, `backend/handlers/generation_flow.py`, `backend/main.py`, `backend/services/director_chat.py`, `backend/services/hero_service.py`, `frontend/src/components/ControlBar.jsx`, `frontend/src/components/DirectorChat.jsx`, `frontend/src/components/DirectorPanel.jsx`, `frontend/src/hooks/useSaveStory.js`, `frontend/src/hooks/useWebSocket.js`, `frontend/src/hooks/wsHandlers.js`
 
+**Session 60+: Visual Narrative Pipeline & Character Consistency**
+
+- **Visual narrative scene composition** — Added `VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION` for comic/manga/webtoon templates. Classifies scenes as character-present vs. setting-only, applies different composition rules (60%+ character framing for character scenes). Multiple iterations to get characters to actually appear in comic images.
+- **Art style text-trigger cleanup** — Removed phrases like "comic book panel art", "halftone dot texture", "graphic novel style" from comic art styles — these triggered Imagen to render speech bubbles and text into images. Replaced with non-text-triggering alternatives.
+- **Prompt structure optimization** — Moved negative constraints (`[NO text, NO speech bubbles...]`) from beginning to END of prompt. Imagen weights prompt start most heavily for subject matter; putting "no text" first consumed attention budget.
+- **Character fallback for visual narratives** — When character identification returns empty for short comic scenes, injects full character sheet if scene contains dialog or character name references.
+- **Face-crop portrait extraction (prototyped, disabled)** — Built Gemini Vision face detection + Pillow cropping to extract character portraits from scene images. Renamed from face detection to character region detection (upper body). Detection accuracy on comic/manga art insufficient — disabled as future work.
+- **TTS verbatim enforcement** — Changed system prompts from "audiobook narrator" to "text-to-speech engine" with `[SCRIPT]` markers. Gemini Live's generative nature caused paraphrasing; reframing as TTS engine constrains it to verbatim reproduction.
+- **Sequential image→audio for visual narratives** — For comic/manga/webtoon, audio generation now chains AFTER image (not parallel). TTS reads only the condensed overlay text (~20 words) shown on screen, not the full scene prose (~50 words).
+- **Portrait system removed** — Portraits removed from backend pipeline and frontend. Marked as future work with face-crop approach.
+- **Text overlay stability** — Fixed React key strategy from index-based (`slot-${i}`) to scene-number-based (`scene-${scene.scene_number}`) to prevent remounts on page flip. Decoupled overlay visibility from imageLoaded state.
+- **Split DNA for character consistency** — Split character descriptions into physical traits (permanent) vs. style traits (outfit, changeable). When scene text describes clothing changes, style traits are stripped to avoid image prompt conflicts.
+- **Documentation updates** — Updated BLOG.md, README.md, ARCHITECTURE.md, PROMPT_ENGINEERING.md with visual narrative pipeline, split DNA, future work items, and removed outdated portrait references.
+
+- Files modified: `backend/agents/illustrator_prompts.py`, `backend/agents/illustrator.py`, `backend/agents/narrator_agent.py`, `backend/templates/registry.py`, `backend/services/gemini_tts.py`, `backend/services/multi_voice_tts.py`, `backend/handlers/generation_flow.py`, `backend/handlers/ws_resume.py`, `frontend/src/components/director/DirectorCardList.jsx`, `frontend/src/components/StoryCanvas.jsx`, `frontend/src/components/scene/SceneImageArea.jsx`
+
+**Session 61: Cinematic Book Opening Animation**
+
+- **Cinematic first-prompt transition** — Replaced the jarring hard cut (idle cover vanishes → book pops in on page 1) with a cinematic sequence: idle cover glows violet → book appears on its cover page with shimmer overlay → satisfying page-flip reveals the first scene.
+- **Page 0 start for new stories** — `StoryCanvas.initialPageRef` now starts at page 0 (cover) for new stories (no `/story/:id` in URL). Resumed stories still start at page 1 or URL `?page=N`.
+- **Enhanced entrance animation** — `bookEntrance` keyframe upgraded: 700ms duration (was 400ms), deeper initial offset (20px/0.96 vs 16px/0.98), 3-stage with brightness bloom at 60% and slight overshoot.
+- **Cover shimmer + icon pulse** — `CoverPage` accepts `generating` prop. When true: diagonal violet gradient sweep (`coverShimmer` 2s infinite) + amplified icon glow (`coverIconPulse` 1.8s). Shimmer div absolutely positioned over cover.
+- **Idle cover preparing pulse** — `tc-idle-preparing` class applied on prompt send (before `generating=true`), triggering `idleCoverPulse` on the standalone BookCover (~500-1000ms of glow before book mounts).
+- **Animated cover→content flip** — `firstGenFlipDone` ref tracks the one-time cover→page-1 flip. Uses `flip(1)` (animated) with 800ms delay so entrance animation finishes first. Scene 2+ uses standard flip logic.
+- **Cover-bounce suppression** — `useStoryNavigation` accepts `generating` flag, gates the `page === 0 && scenes.length > 0` bounce so the generation flip isn't fought.
+- **All `turnToPage()` removed from generation path** — First generation now uses animated `flip()` throughout (no instant jumps).
+
+- Files modified: `frontend/src/components/StoryCanvas.jsx`, `frontend/src/components/storybook/CoverPage.jsx`, `frontend/src/components/storybook.css`, `frontend/src/hooks/useStoryNavigation.js`, `ARCHITECTURE.md`
+
 ### What Needs to Be Built
 
 - **Demo Video** - 4-minute walkthrough for submission
+- **Character Portraits** - Face-crop from scene images (Gemini Vision + Pillow) — infrastructure built, needs accuracy improvement on comic/manga art
+- **Character Consistency** - Visual Anchor API (`CONTROL_TYPE_FACE_MESH`) for cross-scene consistency
+- **Multi-Voice Narration** - Character-specific voices for dialogue scenes
 
 ---
 
-## Next Session Plans
+## Future Work
 
-- **Book Layout Preference**: Single-page / two-page spread toggle — let users choose their preferred reading layout. With single-page mode, the Director Panel can be wider for better analysis display.
-- **Multi-Voice Narration**: Different voices for narrator vs dialogue characters based on gender and age. Instead of one narrator voice, dialogues get character-appropriate voices for immersive audiobook experience.
+- **Character Portrait System** — Face-crop extraction from scene images (Gemini Vision bounding box detection + Pillow cropping). Infrastructure partially built. Blocker: detection accuracy on illustrated/comic art.
+- **Visual Anchor API** — Imagen's `ControlReferenceImage` with `CONTROL_TYPE_FACE_MESH` for cross-scene character consistency using first scene's render as reference.
+- **Multi-Voice Narration** — Different voices for narrator vs dialogue characters based on personality traits from Director's character analysis.
+- **Floating Director Orb** — Mobile FAB for Director Chat voice interaction + bottom-sheet drawer.
+- **Cinematic Video Scenes (Veo 2)** — Short video clips for high-tension climax scenes (tension_level >= 8).

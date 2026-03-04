@@ -1,13 +1,14 @@
 import { forwardRef } from 'react';
-import { GENRE_KEYS, getLangData } from '../../data/languages';
+import { getLangData } from '../../data/languages';
 
-const CoverPage = forwardRef(function CoverPage({ onGenreClick, lang }, ref) {
+const CoverPage = forwardRef(function CoverPage({ lang, generating }, ref) {
   const l = lang || getLangData('English');
+
   return (
     <div ref={ref} className="book-page book-page-cover">
       <div className="book-cover-inner-frame" />
       <div className="book-cover-content">
-        <div className="book-cover-icon">
+        <div className={`book-cover-icon${generating ? ' book-cover-icon--generating' : ''}`}>
           <svg
             width="34" height="34" viewBox="0 0 24 24" fill="none"
             stroke="var(--accent-primary)" strokeWidth="1.5"
@@ -19,19 +20,8 @@ const CoverPage = forwardRef(function CoverPage({ onGenreClick, lang }, ref) {
         </div>
         <h2 className="book-cover-title">{l.title}</h2>
         <div className="book-cover-ornament" />
-        <p className="book-cover-subtitle">{l.subtitle}</p>
-        <div className="book-cover-genres">
-          {GENRE_KEYS.map((g) => (
-            <button
-              key={g}
-              className="book-cover-genre"
-              onClick={() => onGenreClick?.(l.genres[g].prompt)}
-            >
-              {l.genres[g].label}
-            </button>
-          ))}
-        </div>
       </div>
+      {generating && <div className="book-cover-shimmer" />}
     </div>
   );
 });

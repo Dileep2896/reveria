@@ -64,10 +64,23 @@ export const ROUTES = {
 - **storyId → URL**: Effect in useAppEffects.js navigates to `ROUTES.STORY(storyId)` when storyId changes (replace)
 - **URL → story load**: `useActiveStory(user, urlStoryId)` loads story from URL on boot
 - **Page → URL**: `StoryCanvas` updates `?page=N` via `history.replaceState` on every flip
-- **URL → page**: `initialPageRef` reads `?page` on mount → sets `startPage` + `currentPage` (no flash)
+- **URL → page**: `initialPageRef` reads `?page` on mount. New stories (no `/story/:id` in URL) start at page 0 (cover); resumed stories start at page 1 or URL `?page=N`
 - **Trailing slash normalization**: `pathname.replace(/\/+$/, '') || '/'` applied in App.jsx and useAppEffects.js
 - **SPA navigation**: All internal links use `<Link>` or `navigate()` (no `<a href>` causing full page reloads)
 - Navigation: Library/Explore back buttons → `ROUTES.STORY(id)`, New Story → `ROUTES.HOME`, Logo → `ROUTES.STORY(id)`
+
+### Cinematic Book Opening (First Prompt)
+When a user sends their first prompt, the transition is cinematic rather than a hard cut:
+1. **T=0** (Send pressed): Idle BookCover starts pulsing violet glow (`tc-idle-preparing` class, `idleCoverPulse` animation)
+2. **T≈500-1000ms** (`generating=true`): HTMLFlipBook mounts on **cover page** (page 0). Cover shows shimmer overlay (`book-cover-shimmer`) + icon pulse (`book-cover-icon--generating`). Entrance animation plays (700ms `bookEntrance` with brightness bloom + slight overshoot)
+3. **T≈800-1500ms**: First scene text arrives, fills page 1 (behind cover)
+4. **T≈1600-2300ms**: `flip(1)` fires after 800ms delay — satisfying page-flip from cover to first scene
+
+Key implementation:
+- `firstGenFlipDone` ref in `StoryCanvas` tracks the cover→content flip; scene 2+ uses standard flip logic
+- `useStoryNavigation` accepts `generating` flag — suppresses cover-bounce during generation
+- Resumed stories (`/story/:id`) skip the cover entirely (start at page 1)
+- Post-generation remount (`canvasKey` changes) resets with `scenes.length > 0` → `startPage=1`
 
 ## Image Error Handling
 
@@ -116,20 +129,22 @@ export const ROUTES = {
 1. `stories`: (uid ASC, status ASC, updated_at DESC) — Library page
 2. `stories`: (is_public ASC, published_at DESC) — Explore page
 
-## Character Portraits (Auto-Generated)
+## Character Portraits (Disabled — Future Work)
 
-### Backend Flow
-- After each story batch persist + meta task, `main.py` reads existing portrait names from Firestore
-- Spawns `_generate_portraits(existing_names=...)` as background task
-- `portrait_service.py` filters characters by `existing_names` (case-insensitive) — only new characters get portraits
-- Sends `portraits_loading` WS message at start, individual `portrait` messages, then `portraits_done`
-- GCS index: `900 + len(existing_names) + idx` to avoid overwriting existing portrait files
-- Firestore persistence: reads old `portraits` array, appends new results, merges back
+Portrait generation is currently disabled. The initial approach (separate Imagen 3 calls for 1:1 close-up portraits) produced inconsistent visuals — portraits looked different from the same characters in scene images. A face-crop approach (Gemini Vision bounding box detection + Pillow cropping from scene images) was prototyped but detection accuracy on illustrated/comic art was insufficient.
 
-### Frontend
-- `PortraitGallery` — no Generate/Regenerate button; renders when portraits exist or loading
-- `wsHandlers.js` handles `portraits_loading` → `setPortraitsLoading(true)`, `portraits_done` → `false`
-- `sendPortraitRequest` removed from `useWebSocket`; manual WS handler in `main.py` kept as dead code
+### Planned Approach (Face-Crop from Scene Images)
+- Per-scene: after image generation, send scene image + character names to Gemini Vision
+- Gemini returns bounding boxes for character upper-body regions
+- Pillow crops + pads to 512x512 square portraits
+- Guaranteed visual consistency (portrait IS the scene character), zero extra Imagen calls
+- Tracking state: `_portrait_extracted: set[str]` on Illustrator prevents duplicate portraits
+
+### Infrastructure Still in Place
+- `portrait_service.py` exists but is a no-op (immediately sends `portraits_done`)
+- `CHARACTER_REGION_INSTRUCTION` prompt in `illustrator_prompts.py` (tested, works for storybook art; needs improvement for comic/manga)
+- `detect_and_crop_portraits()` method on Illustrator (disabled in `_generate_image`)
+- Frontend `PortraitGallery` removed from `DirectorCardList.jsx`
 
 ## GCS Structure
 - Scene media: `stories/{story_id}/scenes/{scene_number}/{image|audio}.{ext}`
@@ -156,11 +171,27 @@ export const ROUTES = {
 2. For each completed scene → `_on_scene_ready()`:
    a. Send scene text via `ws_callback`
    b. Extract characters once (first scene only) via `illustrator.extract_characters()`
-   c. `asyncio.create_task(_generate_image(scene))` — rate-limited by module-level `Semaphore(1)` in `imagen_client.py`
-   d. `asyncio.create_task(_generate_audio(scene))`
+   c. **Visual narrative templates** (comic/manga/webtoon): `asyncio.create_task(_generate_image_then_audio(scene))` — sequential: image first, then audio from overlay text only
+   d. **Storybook templates**: `asyncio.create_task(_generate_image(scene))` + `asyncio.create_task(_generate_audio(scene))` — parallel
    e. `asyncio.create_task(_director_live(scene))` — **only when `director_enabled=True`**
 3. After narrator loop: `await asyncio.gather(*pending_tasks)`
 4. Between scenes: check `steering_queue` (`asyncio.Queue`), inject into narrator history
+
+### Visual Narrative Pipeline (Comic/Manga/Webtoon)
+Visual narrative templates use a different per-scene flow than storybook:
+- **Scene composition**: `VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION` classifies scenes as character-present vs. setting-only, applies different composition rules (characters 60%+ of frame for character scenes)
+- **Character fallback**: If character identification returns empty but scene has dialog or character name references, full character sheet is injected
+- **Prompt structure**: Characters FIRST → scene composition → art style → negative constraints at END (Imagen weights prompt start most heavily)
+- **Negative constraints**: `[NO text, NO speech bubbles, NO dialog bubbles, NO captions, NO letters, NO words]` — placed at end to avoid consuming attention budget
+- **Sequential image→audio**: Audio waits for image generation to complete, then builds TTS script from overlay text only (~20 words), not full scene prose (~50 words)
+- **Split DNA**: Character descriptions split into physical traits (permanent) vs. style traits (outfit, changeable). When scene text contains outfit-change keywords, style traits are stripped to avoid conflicts
+
+### Split DNA (Character Description Filtering)
+`illustrator._filter_character_descriptions()` accepts `scene_text` parameter:
+- Regex detects outfit-change keywords: `wearing`, `donned`, `changed into`, `disguise`, `armor`, `costume`, etc.
+- When detected: strips `[outfit: ...]`, `[signature items: ...]`, `[clothing: ...]` bracketed sections from character descriptions
+- Physical traits (face, hair, skin, build) always preserved
+- Prevents image prompt conflicts when narrative describes clothing changes
 
 ### Image Composition Strategy
 The image pipeline separates character definition from scene composition:
@@ -323,10 +354,11 @@ Director Chat active → generate_story tool fires → generation starts
 
 ### Gemini Native Audio (Story Narration)
 - `services/gemini_tts.py` replaces Cloud TTS — uses `gemini-2.5-flash-native-audio` via Live API
-- System prompt: "Professional audiobook narrator — vary tone to match mood, dramatic for tense moments, gentle for quiet scenes"
+- System prompt: Text-to-speech engine with `[SCRIPT]`/`[/SCRIPT]` markers — reads EVERY word exactly as written, no additions or paraphrasing
 - Per-language voices: Kore (English/Spanish/Hindi/Portuguese), Leda (French), Orus (German), Aoede (Japanese/Chinese)
 - Returns `(data_url, None)` — no word-level timestamps (ReadingMode uses heuristic fallback)
-- Used by: `orchestrator._generate_audio()` and `handlers/scene_actions.py` (scene regen)
+- **Visual narrative TTS**: For comic/manga/webtoon templates, audio reads only the condensed overlay text (~20 words), not the full scene prose (~50 words). Built via `scene["_tts_script"]` from overlay text sorted in reading order.
+- Used by: `narrator_agent._generate_audio()` (storybook: parallel with image), `narrator_agent._generate_image_then_audio()` (visual narrative: sequential after image), `handlers/scene_actions.py` (scene regen)
 
 ### Voice Preview
 - `GET /api/voice-preview/{voice_name}` — creates short-lived Live session, voice says personality-matched intro line
@@ -445,6 +477,22 @@ Director Chat active → generate_story tool fires → generation starts
 - Applied to both `handle_director_chat_audio` and `handle_director_chat_text`.
 
 ## Future Work
+
+### Character Portrait System (Face-Crop from Scene Images)
+- Detect character regions in scene images using Gemini Vision bounding box detection
+- Crop with Pillow to 512x512 square portraits — guaranteed visual consistency with zero extra Imagen calls
+- Per-scene extraction (portraits appear as characters first show up, not batched at end)
+- Infrastructure partially built: `CHARACTER_REGION_INSTRUCTION` prompt, `detect_and_crop_portraits()` method
+- Blocker: face detection accuracy on illustrated/comic art needs improvement
+
+### Character Consistency via Visual Anchor API
+- Use Imagen's `ControlReferenceImage` with `CONTROL_TYPE_FACE_MESH` to reference first scene's character render in subsequent scenes
+- Dynamic weight adjustment — boost character description weight when visual drift is detected
+- Cross-scene visual DNA — extract visual features from generated images and feed back into prompts
+
+### Multi-Voice Narration
+- Map characters to Gemini voice presets based on personality traits from Director's character analysis
+- Dialogue scenes sound like distinct people instead of one narrator
 
 ### Floating Director Orb for Mobile
 - Move DirectorChat voice orb out of sidebar into a floating FAB (bottom-right) on mobile

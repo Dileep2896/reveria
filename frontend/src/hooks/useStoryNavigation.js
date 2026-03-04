@@ -8,7 +8,7 @@ export function spreadLeftPage(pageIndex) {
   return pageIndex % 2 === 0 ? pageIndex - 1 : pageIndex;
 }
 
-export default function useStoryNavigation({ bookRef, currentPage, setCurrentPage, maxPage, scenes, storyId, onPageChange, singlePage = false }) {
+export default function useStoryNavigation({ bookRef, currentPage, setCurrentPage, maxPage, scenes, storyId, onPageChange, singlePage = false, generating = false }) {
   /* ── Track current page + clamp to content ── */
   const onFlip = useCallback((e) => {
     const page = e.data;
@@ -21,12 +21,13 @@ export default function useStoryNavigation({ bookRef, currentPage, setCurrentPag
       }, 0);
     }
     // If user navigated back to cover but there are scenes, bounce to first spread
-    if (page === 0 && scenes.length > 0 && bookRef.current) {
+    // Suppress during generation so the cover→content flip isn't fought
+    if (page === 0 && scenes.length > 0 && !generating && bookRef.current) {
       setTimeout(() => {
         try { bookRef.current.pageFlip().turnToPage(1); } catch {}
       }, 0);
     }
-  }, [maxPage, scenes.length, bookRef, setCurrentPage, singlePage]);
+  }, [maxPage, scenes.length, bookRef, setCurrentPage, singlePage, generating]);
 
   /* ── Navigation - clamp to content pages ── */
   const goNext = useCallback(() => {
