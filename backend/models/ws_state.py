@@ -38,6 +38,7 @@ class WsConnectionState:
     trend_style: str | None = None
     scene_count_current: int = 1
     language_current: str = "English"
+    template_current: str = "storybook"
 
     # Initialized in __post_init__
     orchestrator: Any = field(default=None, init=False)

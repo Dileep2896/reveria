@@ -13,6 +13,7 @@ class SharedPipelineState:
     def __init__(self) -> None:
         self.user_input: str = ""
         self.art_style: str = "cinematic"
+        self.template: str = "storybook"
         self.scene_count: int = 1
         self.total_scene_count: int = 0
         self.scenes: list[dict[str, Any]] = []

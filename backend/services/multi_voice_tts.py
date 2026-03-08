@@ -43,9 +43,12 @@ VOICE_POOLS = {
 }
 
 DIALOGUE_SYSTEM = (
-    "You are a voice actor performing character dialogue in an audiobook. "
-    "Read the dialogue with natural emotion and character. "
-    "Read EXACTLY the text provided. Do not add narration or commentary."
+    "You are a text-to-speech engine performing character dialogue. "
+    "STRICT RULES:\n"
+    "1. Vocalize ONLY the exact words between [SCRIPT] and [/SCRIPT] markers.\n"
+    "2. Do NOT add, remove, or change ANY words.\n"
+    "3. Do NOT add narration, commentary, or attribution.\n"
+    "4. Perform with natural emotion and character voice, but NEVER alter the text."
 )
 
 # Matches both straight and curly double-quotes
@@ -60,17 +63,39 @@ def parse_character_genders(character_sheet: str) -> dict[str, str]:
 
     Expected format per line:
         NAME: [gender: man/woman/boy/girl], [age: ...], ...
+    Uses multiple fallback strategies if the exact format isn't followed.
     """
+    # Normalize common gender synonyms to our pool keys
+    _GENDER_MAP = {
+        "man": "man", "male": "man", "boy": "boy", "gentleman": "man",
+        "woman": "woman", "female": "woman", "girl": "girl", "lady": "woman",
+    }
+
     genders: dict[str, str] = {}
     for line in character_sheet.strip().splitlines():
         if ":" not in line:
             continue
         name = line.split(":", 1)[0].strip()
-        gender_match = re.search(
-            r"\[gender:\s*(man|woman|boy|girl)\]", line, re.IGNORECASE
-        )
-        if name and gender_match:
-            genders[name] = gender_match.group(1).lower()
+        desc = line.split(":", 1)[1].strip().lower() if name else ""
+        if not name or not desc:
+            continue
+
+        gender = None
+
+        # Strategy 1: bracketed format [gender: man/woman/boy/girl]
+        m = re.search(r"\[gender:\s*(\w+)\]", line, re.IGNORECASE)
+        if m:
+            gender = _GENDER_MAP.get(m.group(1).lower())
+
+        # Strategy 2: scan description for gender keywords near the start
+        if not gender:
+            for keyword, mapped in _GENDER_MAP.items():
+                if re.search(r"\b" + keyword + r"\b", desc[:80]):
+                    gender = mapped
+                    break
+
+        if name and gender:
+            genders[name] = gender
     return genders
 
 

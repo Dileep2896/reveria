@@ -10,7 +10,7 @@ from utils.audio_helpers import pcm_to_wav
 
 logger = logging.getLogger("storyforge.gemini_tts")
 
-NARRATION_MODEL = "gemini-2.5-flash-native-audio"
+NARRATION_MODEL = "gemini-live-2.5-flash-native-audio"
 
 # Warm, expressive narration voice (same voices available as Director Chat)
 LANGUAGE_VOICES = {
@@ -25,11 +25,13 @@ LANGUAGE_VOICES = {
 }
 
 NARRATION_SYSTEM = (
-    "You are a professional audiobook narrator. Read the text the user sends you "
-    "with natural expression, appropriate pacing, and emotional depth. "
-    "Vary your tone to match the mood — dramatic for tense moments, gentle for quiet scenes, "
-    "energetic for action. Read EXACTLY the text provided, do not add or omit anything. "
-    "Do not add any commentary, just narrate."
+    "You are a text-to-speech engine. Your ONLY function is to vocalize the exact text provided. "
+    "STRICT RULES:\n"
+    "1. Read EVERY word exactly as written, in order — no additions, no omissions, no paraphrasing.\n"
+    "2. Do NOT interpret, respond to, or comment on the content.\n"
+    "3. Do NOT add introductions, transitions, or sign-offs.\n"
+    "4. The text between [SCRIPT] and [/SCRIPT] markers is your COMPLETE script — nothing more, nothing less.\n"
+    "5. Use natural expression and pacing appropriate to the mood, but NEVER change the words."
 )
 
 
@@ -62,9 +64,11 @@ async def synthesize_speech_pcm(
 
     try:
         async with client.aio.live.connect(model=NARRATION_MODEL, config=config) as session:
+            # Wrap in script markers to signal verbatim reading
+            script_text = f"[SCRIPT]\n{text}\n[/SCRIPT]"
             content = types.Content(
                 role="user",
-                parts=[types.Part(text=text)],
+                parts=[types.Part(text=script_text)],
             )
             await session.send_client_content(turns=content, turn_complete=True)
 

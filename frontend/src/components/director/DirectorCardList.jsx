@@ -9,9 +9,7 @@ import StoryHealthVisual from './StoryHealthVisual';
 import ThemesVisual from './ThemesVisual';
 import BeatsVisual from './BeatsVisual';
 import IllustrationsCard from './IllustrationsCard';
-import PortraitGallery from './PortraitGallery';
-
-export default function DirectorCardList({ data, expandedCards, toggleCard, sceneNumbers, sceneTitles, imageTiers, portraits, portraitsLoading }) {
+export default function DirectorCardList({ data, expandedCards, toggleCard, sceneNumbers, sceneTitles, imageTiers }) {
   return (
     <>
       <p
@@ -170,11 +168,6 @@ export default function DirectorCardList({ data, expandedCards, toggleCard, scen
       })}
 
       <IllustrationsCard imageTiers={imageTiers} />
-
-      <PortraitGallery
-        portraits={portraits}
-        portraitsLoading={portraitsLoading}
-      />
     </>
   );
 }

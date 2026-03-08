@@ -12,12 +12,27 @@ export default function BookCard({ book, onOpen, onDelete, onToggleFavorite, onR
       {/* .book-3d uses ::before (pages/spine) and ::after (back cover) for 3D */}
       <div className="book-3d" onClick={() => onOpen(book)}>
         {book.cover_image_url ? (
-          <img
-            className={`book-3d-cover${book._regenMeta ? ' book-3d-cover--generating' : ''}`}
-            src={book.cover_image_url}
-            alt={book.title}
-            loading="lazy"
-          />
+          <>
+            <img
+              className={`book-3d-cover${book._regenMeta ? ' book-3d-cover--generating' : ''}`}
+              src={book.cover_image_url}
+              alt={book.title}
+              loading="lazy"
+            />
+            {/* Prompt to generate a proper cover when using scene-fallback */}
+            {!book.cover_generated && !book._regenMeta && book.total_scene_count > 0 && (
+              <button
+                className="book-cover-upgrade"
+                onClick={(e) => { e.stopPropagation(); onRegenMeta(book.id); }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                </svg>
+                Generate Cover
+              </button>
+            )}
+          </>
         ) : (
           <div className="book-3d-cover book-3d-cover--placeholder">
             {book._regenMeta ? null : book.total_scene_count > 0 ? (

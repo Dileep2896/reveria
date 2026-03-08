@@ -218,6 +218,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
         art_style: options.artStyle || 'cinematic',
         scene_count: options.sceneCount || 1,
         language: options.language || 'English',
+        template: options.template || 'storybook',
       };
       if (options.fromDirector) {
         msg.from_director = true;
@@ -263,7 +264,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
     }
   }, []);
 
-  const startDirectorChat = useCallback((storyContext, { language, voiceName } = {}) => {
+  const startDirectorChat = useCallback((storyContext, { language, voiceName, template } = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       setDirectorChatActive(true);
       setDirectorChatLoading(true);
@@ -272,6 +273,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
       const msg = { type: 'director_chat_start', story_context: storyContext || '' };
       if (language) msg.language = language;
       if (voiceName) msg.voice_name = voiceName;
+      if (template) msg.template = template;
       wsRef.current.send(JSON.stringify(msg));
     }
   }, []);

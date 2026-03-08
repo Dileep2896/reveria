@@ -8,6 +8,14 @@ from typing import Any
 import requests
 from fpdf import FPDF
 
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    _HAS_PILLOW = True
+except ImportError:
+    _HAS_PILLOW = False
+
+from templates.registry import get_template
+
 logger = logging.getLogger("storyforge.pdf")
 
 PAGE_W = 210  # A4 width in mm
@@ -96,11 +104,160 @@ def _cleanup(paths: list[str]):
             pass
 
 
+_OVERLAY_COLORS = {
+    "comic": {
+        "narration_bg": (255, 220, 80, 234),
+        "narration_border": (180, 140, 0),
+        "narration_color": (26, 26, 26),
+        "dialog_bg": (255, 255, 255, 240),
+        "dialog_border": (26, 26, 26),
+        "dialog_color": (26, 26, 26),
+    },
+    "webtoon": {
+        "narration_bg": (240, 230, 255, 230),
+        "narration_border": (167, 139, 250),
+        "narration_color": (45, 27, 78),
+        "dialog_bg": (255, 255, 255, 235),
+        "dialog_border": (100, 80, 160),
+        "dialog_color": (45, 27, 78),
+    },
+    "manga": {
+        "narration_bg": (255, 220, 80, 234),
+        "narration_border": (180, 140, 0),
+        "narration_color": (26, 26, 26),
+        "dialog_bg": (255, 255, 255, 240),
+        "dialog_border": (26, 26, 26),
+        "dialog_color": (26, 26, 26),
+    },
+}
+
+_FONT_CANDIDATES = [
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+]
+
+
+def _find_overlay_font() -> str | None:
+    for p in _FONT_CANDIDATES:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def _wrap_text(draw: "ImageDraw.ImageDraw", text: str, font: "ImageFont.FreeTypeFont", max_width: int) -> list[str]:
+    """Word-wrap text to fit within max_width pixels."""
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for w in words:
+        test = f"{current} {w}".strip() if current else w
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            current = test
+        else:
+            if current:
+                lines.append(current)
+            current = w
+    if current:
+        lines.append(current)
+    return lines or [text]
+
+
+def _composite_overlays(img_path: str, overlays: list[dict], template_key: str) -> str | None:
+    """Composite text overlays onto image using Pillow. Returns temp file path."""
+    if not _HAS_PILLOW or not overlays:
+        return None
+    try:
+        base = Image.open(img_path).convert("RGBA")
+        overlay_layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay_layer)
+        w, h = base.size
+        colors = _OVERLAY_COLORS.get(template_key, _OVERLAY_COLORS["comic"])
+
+        font_path = _find_overlay_font()
+        font_size = max(14, int(w * 0.028))
+        try:
+            font = ImageFont.truetype(font_path, font_size) if font_path else ImageFont.load_default()
+        except Exception:
+            font = ImageFont.load_default()
+
+        for ov in overlays:
+            is_dialog = ov.get("type") == "dialog"
+            bg = colors["dialog_bg"] if is_dialog else colors["narration_bg"]
+            border_color = colors["dialog_border"] if is_dialog else colors["narration_border"]
+            text_color = colors["dialog_color"] if is_dialog else colors["narration_color"]
+
+            bx = int(ov.get("x", 0) / 100 * w)
+            by = int(ov.get("y", 0) / 100 * h)
+            bw = int(ov.get("width", 20) / 100 * w)
+            bh = int(ov.get("height", 10) / 100 * h)
+
+            pad_x = max(4, int(bw * 0.08))
+            pad_y = max(3, int(bh * 0.1))
+            text_max_w = bw - 2 * pad_x
+            if text_max_w < 20:
+                text_max_w = bw
+
+            text = ov.get("text", "")
+            lines = _wrap_text(draw, text, font, text_max_w)
+
+            # Calculate actual text height
+            line_h = font_size + 4
+            text_h = len(lines) * line_h
+            actual_h = max(bh, text_h + 2 * pad_y)
+
+            radius = int(bw * 0.15) if is_dialog else max(2, int(bw * 0.03))
+
+            # Draw rounded rectangle background
+            draw.rounded_rectangle(
+                [bx, by, bx + bw, by + actual_h],
+                radius=radius,
+                fill=bg,
+                outline=border_color,
+                width=2,
+            )
+
+            # Draw text centered
+            ty = by + pad_y + max(0, (actual_h - 2 * pad_y - text_h) // 2)
+            for line in lines:
+                bbox = draw.textbbox((0, 0), line, font=font)
+                lw = bbox[2] - bbox[0]
+                tx = bx + (bw - lw) // 2
+                draw.text((tx, ty), line, fill=text_color, font=font)
+                ty += line_h
+
+            # Dialog tail triangle
+            if is_dialog and ov.get("tail_x") is not None:
+                tail_w = max(8, int(bw * 0.2))
+                tail_h = max(6, int(actual_h * 0.25))
+                cx = bx + bw // 2
+                draw.polygon(
+                    [(cx - tail_w // 2, by + actual_h - 1),
+                     (cx + tail_w // 2, by + actual_h - 1),
+                     (cx, by + actual_h + tail_h)],
+                    fill=bg,
+                    outline=border_color,
+                )
+
+        result = Image.alpha_composite(base, overlay_layer).convert("RGB")
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+        result.save(tmp.name, "PNG")
+        tmp.close()
+        return tmp.name
+    except Exception as e:
+        logger.warning("Overlay compositing failed: %s", e)
+        return None
+
+
 def generate_story_pdf(
     title: str,
     author_name: str,
     cover_url: str | None,
     scenes: list[dict[str, Any]],
+    *,
+    template: str = "storybook",
 ) -> bytes:
     """Generate a polished PDF storybook. Returns PDF bytes."""
     title = title or "Untitled Story"
@@ -197,6 +354,7 @@ def generate_story_pdf(
     #  SCENE PAGES
     # ================================================================
     pdf._footer_enabled = True
+    tmpl = get_template(template)
 
     for i, scene in enumerate(scenes):
         pdf.add_page()
@@ -205,6 +363,8 @@ def generate_story_pdf(
 
         scene_num = scene.get("scene_number", i + 1)
         scene_title = scene.get("scene_title") or f"Scene {scene_num}"
+        overlays = scene.get("text_overlays")
+        is_visual = tmpl.visual_narrative and overlays
 
         # -- Scene image (full width with small margins) --
         img_url = scene.get("image_url")
@@ -213,8 +373,17 @@ def generate_story_pdf(
             img_path = _download_image(img_url)
             if img_path:
                 temp_files.append(img_path)
+
+                # Visual narrative: composite overlays onto image
+                if is_visual:
+                    comp_path = _composite_overlays(img_path, overlays, template)
+                    if comp_path:
+                        temp_files.append(comp_path)
+                        img_path = comp_path
+
                 try:
-                    pdf.image(img_path, x=15, w=PAGE_W - 30)
+                    pdf.image(img_path, x=10 if is_visual else 15,
+                              w=PAGE_W - 20 if is_visual else PAGE_W - 30)
                     pdf.ln(8)
                     has_image = True
                 except Exception:
@@ -222,6 +391,14 @@ def generate_story_pdf(
 
         if not has_image:
             pdf.ln(10)
+
+        # Visual narrative: just a small scene number, skip title/text
+        if is_visual and has_image:
+            pdf.set_font(fn, "I", 9)
+            pdf.set_text_color(165, 148, 118)
+            pdf.cell(0, 4, f"~  {scene_num}  ~", align="C",
+                     new_x="LMARGIN", new_y="NEXT")
+            continue
 
         # -- Chapter number --
         pdf.set_font(fn, "I", 9)

@@ -89,6 +89,8 @@ async def persist_story(
         # Panel images for visual narrative templates (comic/manga/webtoon)
         if scene.get("panel_images"):
             scene_doc["panel_images"] = scene["panel_images"]
+        if scene.get("text_overlays"):
+            scene_doc["text_overlays"] = scene["text_overlays"]
         await scene_ref.set(scene_doc)
 
     # Write generation batch

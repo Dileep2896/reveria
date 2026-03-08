@@ -13,6 +13,7 @@ export default function useBookManager({
   setIsPublished,
   setArtStyle,
   setLanguage,
+  setTemplate,
   setViewingReadOnly,
 }) {
   const handleOpenBook = useCallback(async (bookData) => {
@@ -35,13 +36,14 @@ export default function useBookManager({
     setStoryStatus(bookData.status || 'draft');
     setIsPublished(bookData.is_public || false);
     if (bookData.art_style) setArtStyle(bookData.art_style);
+    if (bookData.template) setTemplate(bookData.template);
     setLanguage(bookData.language || 'English');
 
     setTimeout(() => {
       load(bookData, { skipResume: isCompleted });
       navigate(ROUTES.STORY(bookData.storyId));
     }, 50);
-  }, [storyId, autoSaveCurrent, reset, load, navigate, setViewingReadOnly, setStoryStatus, setIsPublished, setArtStyle, setLanguage]);
+  }, [storyId, autoSaveCurrent, reset, load, navigate, setViewingReadOnly, setStoryStatus, setIsPublished, setArtStyle, setLanguage, setTemplate]);
 
   const handleOpenPublicBook = useCallback((bookData) => {
     const isOwn = bookData.authorUid === user?.uid;

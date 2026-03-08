@@ -8,7 +8,7 @@ import SceneImageArea from './scene/SceneImageArea';
 import SceneTextArea from './scene/SceneTextArea';
 
 /* ── Revealed scene with cinematic animation ── */
-function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePage, visualNarrative }) {
+function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePage, visualNarrative, template }) {
   const { sceneBusy } = useSceneActions();
   const isBusy = sceneBusy.has(scene.scene_number);
 
@@ -46,17 +46,27 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePag
     }
   }, [imageLoaded, showError, noImage]);
 
-  // Reset image state when URL changes (e.g. regen)
+  // Reset image state when URL changes (e.g. regen) or scene identity changes (e.g. deletion shift)
   const prevImageUrl = useRef(scene.image_url);
+  const prevSceneNumber = useRef(scene.scene_number);
   const wasRegenerated = useRef(false);
   useEffect(() => {
+    const identityChanged = scene.scene_number !== prevSceneNumber.current;
+    if (identityChanged) {
+      prevSceneNumber.current = scene.scene_number;
+      prevImageUrl.current = scene.image_url;
+      wasRegenerated.current = false;
+      setImageLoaded(isError || isImageCached(scene.image_url));
+      setImageFailed(false);
+      return;
+    }
     if (scene.image_url && scene.image_url !== prevImageUrl.current) {
       wasRegenerated.current = !!prevImageUrl.current;
       prevImageUrl.current = scene.image_url;
       setImageLoaded(false);
       setImageFailed(false);
     }
-  }, [scene.image_url]);
+  }, [scene.image_url, scene.scene_number, isError]);
 
   useEffect(() => {
     if (scene.image_url && !isError && !imageLoaded && !imageFailed) {
@@ -71,19 +81,6 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePag
       };
     }
   }, [scene.image_url, isError, imageLoaded, imageFailed]);
-
-  // Preload panel images (visual narrative)
-  useEffect(() => {
-    if (!scene.panel_images?.length) return;
-    const imgs = scene.panel_images
-      .filter((p) => p?.url)
-      .map((p) => {
-        const img = new Image();
-        img.src = p.url;
-        return img;
-      });
-    return () => imgs.forEach((img) => { img.src = ''; });
-  }, [scene.panel_images]);
 
   // Track text changes for regen animation
   const prevText = useRef(scene.text);
@@ -134,7 +131,7 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePag
         imageLoaded={imageLoaded} imageFailed={imageFailed} isBusy={isBusy}
         showError={showError} preloaded={preloaded} skip={skip}
         wasRegenerated={wasRegenerated} singlePage={singlePage}
-        visualNarrative={visualNarrative}
+        visualNarrative={visualNarrative} template={template}
       />
 
       {!visualNarrative && (
@@ -158,7 +155,7 @@ export default function SceneCard({ scene, scale = 1, displayIndex, isBookmarked
     : { height: '100%' };
 
   const content = scene.text
-    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} singlePage={singlePage} visualNarrative={visualNarrative} />
+    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} singlePage={singlePage} visualNarrative={visualNarrative} template={template} />
     : <SceneComposing sceneNumber={scene.scene_number} displayIndex={displayIndex} scale={scale} />;
 
   return <div style={wrapperStyle}>{content}</div>;

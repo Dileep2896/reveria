@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { getTemplate } from '../data/templates';
 import './reading-mode.css';
 
 /**
@@ -20,7 +21,7 @@ const API_URL = (() => {
   return 'http://localhost:8000';
 })();
 
-export default function ReadingMode({ scenes, storyId, idToken, onExit, onBookmarkChange }) {
+export default function ReadingMode({ scenes, storyId, idToken, onExit, onBookmarkChange, template = 'storybook' }) {
   const canBookmark = !!(idToken && storyId);
 
   const sessionKey = storyId ? `sf_rp_${storyId}` : null;
@@ -263,6 +264,9 @@ export default function ReadingMode({ scenes, storyId, idToken, onExit, onBookma
     return () => window.removeEventListener('keydown', onKey);
   }, [goNext, goPrev, togglePause, toggleBookmark, restart, handleExit]);
 
+  const tmpl = getTemplate(template);
+  const hasOverlays = tmpl.visualNarrative && scene?.text_overlays?.length > 0;
+  const isVisualScene = hasOverlays && scene?.image_url && scene.image_url !== 'error';
   const hasImage = scene?.image_url && scene.image_url !== 'error';
   const hasAudio = !!scene?.audio_url;
   const kbVariant = currentIndex % 3;
@@ -341,48 +345,130 @@ export default function ReadingMode({ scenes, storyId, idToken, onExit, onBookma
 
       {/* Main content */}
       <div className="rm-body">
-        {/* Contained image */}
-        <div className={`rm-img-wrap ${visible ? 'rm-in' : 'rm-out'}`}>
-          {hasImage && (
-            <img
-              key={currentIndex}
-              src={scene.image_url}
-              alt={scene.scene_title || ''}
-              className={`rm-img rm-kb-${kbVariant}`}
-              draggable={false}
-            />
-          )}
-          {!hasImage && (
-            <div className="rm-img-ph">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
-                stroke="rgba(255,255,255,0.12)" strokeWidth="1.5"
-                strokeLinecap="round">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
+        {isVisualScene ? (
+          /* Visual narrative: image with text overlays */
+          <div className={`rm-img-wrap rm-vn-wrap ${visible ? 'rm-in' : 'rm-out'}`} style={{ flex: '1 1 auto' }}>
+            <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', maxHeight: '100%' }}>
+              <img
+                key={currentIndex}
+                src={scene.image_url}
+                alt={scene.scene_title || ''}
+                className={`rm-img rm-kb-${kbVariant}`}
+                draggable={false}
+              />
+              {/* Text overlays */}
+              <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                {scene.text_overlays.map((ov, i) => {
+                  const os = tmpl.overlayStyle || {};
+                  const isDialog = ov.type === 'dialog';
+                  const bg = isDialog ? (os.dialogBg || 'rgba(255,255,255,0.94)') : (os.narrationBg || 'rgba(255,220,80,0.92)');
+                  const border = isDialog ? (os.dialogBorder || '#1a1a1a') : (os.narrationBorder || 'rgba(180,140,0,0.5)');
+                  const color = isDialog ? (os.dialogColor || '#1a1a1a') : (os.narrationColor || '#1a1a1a');
+                  const weight = isDialog ? (os.dialogFontWeight || 700) : (os.fontWeight || 700);
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        position: 'absolute',
+                        left: `${ov.x}%`,
+                        top: `${ov.y}%`,
+                        width: `${ov.width}%`,
+                        minHeight: `${ov.height}%`,
+                        padding: '4px 6px',
+                        fontSize: `clamp(0.5rem, 1.4vw, 0.85rem)`,
+                        lineHeight: 1.3,
+                        fontFamily: "'Outfit', sans-serif",
+                        fontWeight: weight,
+                        textTransform: (os.uppercase && !isDialog) ? 'uppercase' : 'none',
+                        letterSpacing: !isDialog ? '0.04em' : 'normal',
+                        color,
+                        background: bg,
+                        border: `1.5px solid ${border}`,
+                        borderRadius: isDialog ? '12px' : '2px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {ov.text}
+                      {isDialog && ov.tail_x != null && ov.tail_y != null && (
+                        <svg
+                          style={{
+                            position: 'absolute',
+                            bottom: '-10px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            width: '16px',
+                            height: '12px',
+                            overflow: 'visible',
+                          }}
+                          viewBox="0 0 16 12"
+                        >
+                          <polygon
+                            points="3,0 13,0 8,12"
+                            fill={bg}
+                            stroke={border}
+                            strokeWidth="1.5"
+                          />
+                          <rect x="3" y="-0.5" width="10" height="2" fill={bg} />
+                        </svg>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          /* Standard: image + karaoke text */
+          <>
+            {/* Contained image */}
+            <div className={`rm-img-wrap ${visible ? 'rm-in' : 'rm-out'}`}>
+              {hasImage && (
+                <img
+                  key={currentIndex}
+                  src={scene.image_url}
+                  alt={scene.scene_title || ''}
+                  className={`rm-img rm-kb-${kbVariant}`}
+                  draggable={false}
+                />
+              )}
+              {!hasImage && (
+                <div className="rm-img-ph">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+                    stroke="rgba(255,255,255,0.12)" strokeWidth="1.5"
+                    strokeLinecap="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                </div>
+              )}
+            </div>
 
-        {/* Text with word-by-word highlighting */}
-        <div className={`rm-text-area ${visible ? 'rm-in' : 'rm-out'}`}>
-          {scene?.scene_title && (
-            <h2 className="rm-title">{scene.scene_title}</h2>
-          )}
-          <p className="rm-text">
-            {words.map((w, i) => (
-              <span
-                key={i}
-                className={
-                  i < activeWord ? 'rm-w rm-past' :
-                  i === activeWord ? 'rm-w rm-now' :
-                  'rm-w'
-                }
-              >{w} </span>
-            ))}
-          </p>
-        </div>
+            {/* Text with word-by-word highlighting */}
+            <div className={`rm-text-area ${visible ? 'rm-in' : 'rm-out'}`}>
+              {scene?.scene_title && (
+                <h2 className="rm-title">{scene.scene_title}</h2>
+              )}
+              <p className="rm-text">
+                {words.map((w, i) => (
+                  <span
+                    key={i}
+                    className={
+                      i < activeWord ? 'rm-w rm-past' :
+                      i === activeWord ? 'rm-w rm-now' :
+                      'rm-w'
+                    }
+                  >{w} </span>
+                ))}
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Bottom nav */}

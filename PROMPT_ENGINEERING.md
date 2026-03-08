@@ -10,13 +10,15 @@ A comprehensive record of how we designed, iterated, and refined prompts across 
 3. [Character Consistency -- Hybrid Prompt Architecture](#character-consistency----hybrid-prompt-architecture)
 4. [Director -- Scene Analysis](#director----scene-analysis)
 5. [Director Chat -- Voice Brainstorming](#director-chat----voice-brainstorming)
-6. [Director Intent Detection](#director-intent-detection)
+6. [Director Intent Detection (Removed -- Native Tool Calling)](#director-intent-detection-removed----native-tool-calling)
 7. [Gemini Native Audio -- Story Narration](#gemini-native-audio----story-narration)
 8. [Content Filtering -- Pre-Pipeline Validation](#content-filtering----pre-pipeline-validation)
 9. [Book Meta -- Title & Cover Generation](#book-meta----title--cover-generation)
 10. [Art Style Suffixes](#art-style-suffixes)
-11. [Portrait Generation](#portrait-generation)
-12. [Key Lessons & Patterns](#key-lessons--patterns)
+11. [Portrait Generation (Disabled — Future Work)](#portrait-generation-disabled--future-work)
+12. [Visual Narrative Scene Composition](#visual-narrative-scene-composition)
+13. [Split DNA — Physical vs. Style Traits](#split-dna--physical-vs-style-traits)
+14. [Key Lessons & Patterns](#key-lessons--patterns)
 
 ---
 
@@ -139,6 +141,19 @@ The `_create_image_prompt()` method assembles four layers into the final Imagen 
 [3. Scene composition -- from Gemini via SCENE_COMPOSER_INSTRUCTION]
 [4. Art style suffix -- appended programmatically]
 ```
+
+For visual narrative templates (comic/manga/webtoon), the prompt uses a different structure with a **text-free prefix** placed at the very beginning:
+
+```
+[0. Text-free prefix -- "Clean illustration without any text, speech bubbles, captions, or written words."]
+[1. Character descriptions -- verbatim from reference sheet]
+[2. Anti-drift anchor -- "Render EXACTLY as described"]
+[3. Scene composition -- from Gemini via VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION]
+[4. Art style suffix -- appended programmatically (includes "text-free panel art" for comic/manga/webtoon)]
+[5. Negative constraints -- "[NO text, NO speech bubbles, NO dialog bubbles, ...]"]
+```
+
+The text-free prefix is a positive instruction placed UP FRONT because Imagen weights the beginning of prompts most heavily for subject matter. This was a strategic reversal from the earlier approach of relying solely on negative constraints at the end -- telling the model what TO do ("clean illustration without any text") is more effective than only telling it what NOT to do. The negative constraints remain at the end as a safety net.
 
 This separation of concerns is fundamental. Before this architecture, a single Gemini call would generate the entire prompt -- and it would routinely "improve" character descriptions, dropping hex colors, simplifying outfits, or swapping accessories. The hybrid approach ensures character details survive untouched.
 
@@ -384,6 +399,8 @@ giving notes between takes.
 
 This produces spoken audio commentary (voice: Charon) that plays alongside scene generation, making the Director feel like a real creative collaborator.
 
+**Proactive comment skip when Director Chat is active:** When `director_chat_session` is active during generation, per-scene `proactive_comment()` calls are skipped entirely to prevent audio overlap. The `_director_live()` orchestrator still runs `analyze_scene()` (for structured data and live notes), but `live_commentary()` is bypassed -- voice is routed through the Director Chat session instead. The Director Chat's `generation_wrapup()` handles the combined reaction and continuation prompt at the end, so the user gets a single coherent audio response rather than competing audio messages stepping on each other during generation.
+
 ---
 
 ## Director Chat -- Voice Brainstorming
@@ -461,6 +478,33 @@ For non-English stories: `"The story prompt MUST be written in {language}."`
 
 **Configuration:** Temperature 0.7 (creative but grounded in conversation), max 200 tokens.
 
+### Generation Wrapup
+
+After the pipeline completes (and after `persist_story`), the Director Chat session receives a wrap-up prompt so it can react to what was generated and invite continuation. The `generation_wrapup()` method now receives a `scene_texts` parameter so the Director can react specifically to the content that was written, rather than giving a generic response:
+
+```python
+async def generation_wrapup(self, scene_count: int, scene_texts: list[str] | None = None) -> dict:
+```
+
+The prompt includes the actual scene text:
+
+```
+[The scene just finished generating!
+
+Here's what was just written:
+<scene 1 text>
+---
+<scene 2 text>
+
+React to the scene with a brief, vivid comment (1-2 sentences)
+and ask what they'd like to do next -- continue the story, change direction, etc.
+Do NOT call generate_story.]
+```
+
+Including the scene text was critical -- without it, the Director's wrapup was always vague ("That was great! What next?"). With the text, the Director can reference specific moments ("That reveal about the pendant was masterful! Where do you want to take the sister's reaction?").
+
+Any accidental tool calls in the wrapup response are rejected via `_reject_tool_call()` to prevent the session from getting stuck waiting for a `FunctionResponse`.
+
 ### Voice Preview Lines
 
 Each selectable Director voice has a curated preview line that showcases the voice's personality:
@@ -488,13 +532,13 @@ VOICE_PREVIEW_LINES = {
 
 ---
 
-## Director Intent Detection
+## Director Intent Detection (Removed -- Native Tool Calling)
 
-**File:** `backend/services/director_chat.py` -- `detect_intent()`
+**Status:** Removed. The `detect_intent()` function and its associated prompt have been deleted from the codebase.
 
-Intent detection determines when the brainstorming conversation has concluded and the user wants to actually generate a scene. This was surprisingly difficult to get right.
+### Historical Context
 
-### Current Prompt
+Intent detection was originally a separate Gemini Flash call that analyzed the brainstorming conversation to determine when the user wanted to generate a scene. It used a classification prompt:
 
 ```
 You are analyzing a brainstorming conversation between a user and a story director.
@@ -521,21 +565,27 @@ DIRECTOR'S LATEST RESPONSE: {director_text}
 Return JSON: {"intent": "generate" or "continue", "confidence": 0.0 to 1.0}
 ```
 
-### Evolution
+### Why It Was Removed
+
+This approach was replaced by **native tool calling** via the Gemini Live API. Instead of a separate classification call after each exchange, the Director Chat model is given a `GENERATE_STORY_TOOL` function declaration. The model itself decides when brainstorming is complete and calls the tool, which triggers generation.
+
+Advantages of native tool calling over `detect_intent()`:
+- **No extra API call** -- eliminates the latency of a separate classification request after every exchange
+- **Context-native** -- the model making the decision has full conversation context, not a truncated summary
+- **Natural flow** -- the Director naturally says "Let me write that for you!" and calls the tool, rather than an external classifier deciding
+- **No confidence threshold tuning** -- the old approach needed an 0.8 confidence gate to prevent premature triggers; native tool calling handles this implicitly
+
+The manual "Suggest" button via `request_suggestion()` serves as a fallback, since native tool calling reliability in audio mode is approximately 60-70%.
+
+### Historical Evolution (for reference)
 
 **v1 (User-only analysis):** The original intent detection only looked at the user's latest message. If the user said "let's do it" or "sounds great," it would trigger generation. The problem: the Director might still be mid-exploration. The user says "sounds great" to acknowledge a suggestion, but the Director's response is "Great! Now, what about the setting? Should it be..." -- and suddenly we're generating a half-baked scene.
 
-**v2 (Two-sided analysis):** The current version analyzes BOTH the user's message AND the Director's latest response. It also considers the full recent conversation (last 8 messages). The explicit "CONTINUE if" conditions encode the specific failure modes we observed:
-- "The user said something vague like 'yes' or 'sounds good' but the Director hasn't finished fleshing out the details" -- this directly addresses the premature trigger problem
-- "The Director is summarizing/confirming but hasn't gotten a final go-ahead" -- catches the case where the Director says "So we'll have a dragon in a castle..." and the user hasn't yet confirmed
+**v2 (Two-sided analysis):** The second version analyzed BOTH the user's message AND the Director's latest response. It also considered the full recent conversation (last 8 messages). The explicit "CONTINUE if" conditions encoded the specific failure modes observed:
+- "The user said something vague like 'yes' or 'sounds good' but the Director hasn't finished fleshing out the details" -- this directly addressed the premature trigger problem
+- "The Director is summarizing/confirming but hasn't gotten a final go-ahead" -- caught the case where the Director says "So we'll have a dragon in a castle..." and the user hasn't yet confirmed
 
-**Configuration:**
-- Model: `gemini-2.0-flash` (speed critical for responsive UX)
-- Temperature: 0 (deterministic classification)
-- Max tokens: 50
-- `response_mime_type="application/json"`
-
-The calling code applies an additional 0.8 confidence threshold -- even if the model says "generate," it needs high confidence to actually trigger.
+**v3 (Native tool calling):** Replaced the entire approach. The model's own judgment, with full conversation context, proved more reliable than an external classifier -- and eliminated the extra API call latency entirely.
 
 ---
 
@@ -548,20 +598,37 @@ Reveria uses Gemini's native audio model (`gemini-2.5-flash-native-audio`) for e
 ### Narration System Prompt
 
 ```
-You are a professional audiobook narrator. Read the text the user sends you
-with natural expression, appropriate pacing, and emotional depth.
-Vary your tone to match the mood -- dramatic for tense moments, gentle for quiet
-scenes, energetic for action. Read EXACTLY the text provided, do not add or omit
-anything. Do not add any commentary, just narrate.
+You are a text-to-speech engine. Your ONLY function is to vocalize the exact text provided.
+STRICT RULES:
+1. Read EVERY word exactly as written, in order — no additions, no omissions, no paraphrasing.
+2. Do NOT interpret, respond to, or comment on the content.
+3. Do NOT add introductions, transitions, or sign-offs.
+4. The text between [SCRIPT] and [/SCRIPT] markers is your COMPLETE script — nothing more, nothing less.
+5. Use natural expression and pacing appropriate to the mood, but NEVER change the words.
 ```
+
+Text is wrapped in script markers before sending: `[SCRIPT]\n{text}\n[/SCRIPT]`
 
 ### Design Decisions
 
-**"Read EXACTLY the text provided"** -- Without this, the model would sometimes paraphrase or summarize, particularly with repetitive text. The explicit instruction prevents any deviation from the authored text.
+**"Text-to-speech engine" framing** -- The earlier "professional audiobook narrator" framing gave the model creative license to paraphrase and add emotional interpretation. Reframing as a "text-to-speech engine" with strict rules constrains it to verbatim reproduction. This was the single most impactful change for TTS accuracy.
 
-**"Do not add any commentary"** -- Early versions would occasionally prefix narration with "Here's the narration:" or append "That was scene 3." The explicit prohibition eliminates this.
+**`[SCRIPT]` markers** -- Without explicit boundaries, the model would sometimes prepend "Here's the narration:" or append commentary. The script markers create an unambiguous boundary — everything inside is the script, nothing else exists.
 
-**Tone variation instruction** -- The "dramatic for tense moments, gentle for quiet scenes" guidance leverages the native audio model's understanding of narrative context. Unlike traditional TTS which reads everything in the same register, this produces genuine tonal shifts matching the story's mood.
+**"NEVER change the words"** -- Even with the TTS framing, Gemini's generative nature sometimes leads to subtle paraphrasing ("the roar of fire" becomes "a roaring fire"). The explicit prohibition in rule 5 prevents this.
+
+**Tone variation preserved** -- Despite the strict verbatim rules, we keep "natural expression and pacing appropriate to the mood" to leverage the native audio model's contextual understanding. The model reads the words exactly but modulates delivery — dramatic for tense moments, gentle for quiet scenes.
+
+### Visual Narrative TTS (Overlay-Only)
+
+For visual narrative templates (comic/manga/webtoon), the TTS reads only the condensed overlay text (~20 words) shown on screen, not the full scene prose (~50 words). This is achieved by:
+
+1. Image generation completes first (sequential, not parallel)
+2. Text overlays are extracted and sorted in reading order (top-to-bottom, left-to-right)
+3. A `_tts_script` is built from overlay text: narration captions + dialog bubbles joined
+4. This script replaces the full scene text for TTS
+
+The user hears exactly what they read on the page.
 
 ### Language-Aware Voice Selection
 
@@ -695,7 +762,7 @@ Cover generation uses 3:4 aspect ratio and retries up to 3 times with quota cool
 
 ## Art Style Suffixes
 
-**File:** `backend/agents/illustrator.py` -- `ART_STYLES`
+**File:** `backend/agents/illustrator_prompts.py` -- `ART_STYLES`
 
 Art style suffixes are appended programmatically to every image prompt. They evolved from terse labels to rich, 20-25 word rendering instructions.
 
@@ -703,6 +770,7 @@ Art style suffixes are appended programmatically to every image prompt. They evo
 
 ```python
 ART_STYLES = {
+    # ── Storybook styles ──
     "cinematic": (
         "cinematic digital painting, highly detailed, dramatic volumetric lighting, "
         "depth of field, rich color grading, photorealistic textures, "
@@ -714,9 +782,9 @@ ART_STYLES = {
         "hand-painted look, luminous highlights, muted pastel palette"
     ),
     "comic": (
-        "comic book panel art, bold clean ink outlines, vibrant flat colors with cel shading, "
-        "dynamic composition, halftone dot texture, strong shadows, "
-        "graphic novel style, pop art color palette, action lines"
+        "bold clean ink outlines, vibrant flat colors with cel shading, "
+        "dynamic composition, strong black shadows, "
+        "pop art color palette, action lines, high contrast illustration"
     ),
     "anime": (
         "anime illustration in Studio Ghibli style, detailed lush backgrounds, "
@@ -733,6 +801,128 @@ ART_STYLES = {
         "precise line weight variation, realistic proportions, "
         "high contrast black and white, subtle smudge shading, technical illustration quality"
     ),
+
+    # ── Comic styles (all include "text-free panel art" to suppress Imagen text rendering) ──
+    "classic_comic": (
+        "bold clean ink outlines, flat vibrant colors, cel shading, "
+        "pop art palette, dynamic composition, retro illustration feel, "
+        "strong black shadows, high contrast, text-free panel art"
+    ),
+    "noir_comic": (
+        "high-contrast black and white with selective red and yellow accents, "
+        "heavy ink shadows, gritty atmosphere, dramatic chiaroscuro lighting, "
+        "rain-slicked surfaces, noir detective comic style, text-free panel art"
+    ),
+    "superhero": (
+        "dynamic action poses, saturated bold colors, speed lines, "
+        "dramatic foreshortening, heroic proportions, energy effects, "
+        "modern superhero illustration, cinematic action composition, text-free panel art"
+    ),
+    "indie_comic": (
+        "hand-drawn imperfect ink lines, muted earthy palette, "
+        "watercolor washes over ink outlines, organic textures, "
+        "indie graphic novel aesthetic, subtle cross-hatching, intimate compositions, text-free panel art"
+    ),
+
+    # ── Webtoon styles (all include "text-free panel art") ──
+    "romantic_webtoon": (
+        "soft pastel palette, sparkle and bokeh effects, beautiful expressive eyes, "
+        "dreamy atmosphere, clean digital lineart, soft cel shading, "
+        "romance manhwa style, gentle lighting, flower accents, text-free panel art"
+    ),
+    "action_webtoon": (
+        "dynamic poses, bold saturated colors, speed lines, sharp clean lineart, "
+        "dramatic camera angles, impact frames, action manhwa style, "
+        "glowing energy effects, high contrast lighting, text-free panel art"
+    ),
+    "slice_of_life": (
+        "warm soft colors, gentle natural lighting, cozy atmosphere, "
+        "natural expressions, everyday settings, clean digital art, "
+        "slice-of-life manhwa style, soft shadows, inviting composition, text-free panel art"
+    ),
+    "fantasy_webtoon": (
+        "ethereal glowing effects, rich jewel-tone colors, ornate magical details, "
+        "fantasy manhwa style, luminous particle effects, detailed costumes, "
+        "mystical atmosphere, dramatic lighting, intricate backgrounds, text-free panel art"
+    ),
+
+    # ── Manga styles (all include "text-free panel art") ──
+    "shonen_manga": (
+        "shonen manga, bold dynamic action, speed lines, intense expressions, "
+        "high contrast black and white, screentone shading, dramatic angles, text-free panel art"
+    ),
+    "shojo_manga": (
+        "shojo manga, delicate lineart, flower and sparkle accents, "
+        "soft screentone, emotional expressions, romantic atmosphere, "
+        "elegant compositions, text-free panel art"
+    ),
+    "seinen_manga": (
+        "seinen manga, detailed realistic proportions, heavy crosshatching, "
+        "dark atmospheric shading, mature gritty tone, cinematic framing, text-free panel art"
+    ),
+    "chibi": (
+        "chibi manga, super-deformed cute proportions, oversized expressive heads, "
+        "simplified bodies, playful pastel colors, comedic poses, text-free panel art"
+    ),
+
+    # ── Additional styles ──
+    "pixar": (
+        "3D animated movie style, Pixar-inspired character design, soft subsurface scattering, "
+        "vibrant color palette, large expressive eyes, clean high-end CG render, "
+        "whimsical atmosphere, detailed micro-textures, cinematic lighting"
+    ),
+    "ghibli": (
+        "traditional hand-painted anime, Studio Ghibli background art, lush nature, "
+        "nostalgic atmosphere, soft watercolor-like colors, charming simplicity, "
+        "dreamy lighting, hand-drawn character lines, serene mood"
+    ),
+    "marvel": (
+        "modern superhero illustration, high-detail dynamic shading, vibrant colors, "
+        "strong ink outlines, cinematic action composition, "
+        "dramatic lighting, pop-art influences"
+    ),
+    "cyberpunk": (
+        "cyberpunk aesthetic, synthwave neon lighting, rainy night cityscapes, "
+        "glowing blue and pink accents, tech-wear fashion, hyper-detailed futuristic "
+        "elements, high contrast, misty atmosphere, sleek chrome textures"
+    ),
+    "epic_fantasy": (
+        "high fantasy digital painting, sweeping landscapes, dramatic skies, "
+        "golden rim lighting, heroic proportions, epic scale, "
+        "detailed armor and magical effects"
+    ),
+    "journal_sketch": (
+        "loose pencil journal sketch, rough gestural lines, coffee-stained paper texture, "
+        "marginal doodles, personal and imperfect, warm sepia tones"
+    ),
+    "ink_wash": (
+        "East Asian ink wash painting, sumi-e inspired, flowing black ink on rice paper, "
+        "minimalist brushstrokes, subtle gray gradients, contemplative mood"
+    ),
+    "impressionist": (
+        "French impressionist painting, visible dappled brushstrokes, soft natural light, "
+        "plein air atmosphere, Monet-inspired palette, dreamy landscape quality"
+    ),
+    "ethereal": (
+        "ethereal dreamscape, luminous soft-focus glow, translucent layered forms, "
+        "iridescent pastel colors, otherworldly atmosphere, floating light particles"
+    ),
+    "minimalist": (
+        "minimalist illustration, clean sparse composition, large negative space, "
+        "single focal element, muted two-tone palette, geometric simplicity"
+    ),
+    "photorealistic": (
+        "ultra-photorealistic photography, sharp focus, natural available light, "
+        "shallow depth of field, professional DSLR quality, authentic textures"
+    ),
+    "documentary": (
+        "documentary photojournalism, candid unposed moments, natural harsh lighting, "
+        "gritty real-world textures, wide-angle environmental context"
+    ),
+    "retro_film": (
+        "vintage analog film photography, warm film grain, faded color palette, "
+        "light leaks, 1970s Kodachrome aesthetic, nostalgic soft contrast"
+    ),
 }
 ```
 
@@ -743,11 +933,15 @@ ART_STYLES = {
 **v2 (Rich rendering instructions):** Each style now contains specific rendering technique keywords that image models recognize:
 - **Volumetric lighting** and **atmospheric perspective** for cinematic depth
 - **Wet-on-wet brushstrokes** and **visible paper texture** for authentic watercolor
-- **Halftone dot texture** and **action lines** for comic authenticity
+- **Bold ink outlines** and **action lines** for comic authenticity
 - **Impasto brushstrokes** and **palette knife texture** for oil painting physicality
 - **Cross-hatching** and **line weight variation** for pencil sketch realism
 
 The key insight: image models respond better to *technique-specific* language than *aesthetic-descriptive* language. "Rich impasto brushstrokes" produces more authentic oil painting than "rich, textured oil painting."
+
+**v3 (Text-trigger cleanup):** Comic art styles initially triggered Imagen to render speech bubbles, sound effects, and caption text into images. Phrases like "comic book panel art", "halftone dot texture", "graphic novel style", and "Ben-Day dots pattern" are strong textual signals to Imagen that the output should contain comic-style text elements. These were replaced with non-text-triggering alternatives: "bold clean ink outlines", "cel shading", "dynamic composition". Similarly, manga's "panel-inspired composition" was removed.
+
+**v4 ("text-free panel art" suffix):** Despite the v3 cleanup, comic/manga/webtoon styles still occasionally produced images with speech bubbles or sound effects. Adding `"text-free panel art"` as the final token in every visual narrative art style acts as a style-level signal to Imagen. Combined with the text-free prefix instruction and negative constraints in the prompt assembly, this creates a three-layer text suppression system. All 12 comic/manga/webtoon styles (`classic_comic`, `noir_comic`, `superhero`, `indie_comic`, `romantic_webtoon`, `action_webtoon`, `slice_of_life`, `fantasy_webtoon`, `shonen_manga`, `shojo_manga`, `seinen_manga`, `chibi`) include this suffix.
 
 ### Programmatic Attachment
 
@@ -762,11 +956,9 @@ Early versions asked Gemini to "end the prompt with the art style." It would som
 
 ---
 
-## Portrait Generation
+## Portrait Generation (Disabled — Future Work)
 
-**File:** `backend/services/portrait_service.py`
-
-Character portraits are auto-generated after each story batch. The portrait prompt reuses the character sheet from the illustrator and constructs a focused face portrait prompt:
+The initial portrait approach used separate Imagen 3 calls with a 1:1 close-up prompt:
 
 ```python
 prompt = (
@@ -777,9 +969,113 @@ prompt = (
 )
 ```
 
-The character description is prepended verbatim (same hybrid architecture principle), followed by portrait-specific framing instructions. The "looking at the viewer" and "head and shoulders" constraints ensure consistent portrait composition across all characters. Images are generated at 1:1 aspect ratio.
+**Problem**: Portraits looked visually different from scene images because each Imagen call produces independent results. A character with brown hair in the scene might get blonde hair in the portrait.
 
-Only new characters get portraits -- `existing_names` filtering prevents regenerating portraits for characters already portrayed in earlier batches.
+**Planned approach (face-crop from scene images)**: Use Gemini Vision to detect character bounding boxes in scene images, then crop + resize with Pillow. The `CHARACTER_REGION_INSTRUCTION` prompt was built and tested — it asks Gemini to return `{name, box: [y_min, x_min, y_max, x_max]}` in 0-1000 normalized coordinates. This guarantees visual consistency (the portrait IS the scene character) and eliminates extra Imagen calls. Currently disabled because detection accuracy on comic/manga art styles wasn't production-ready.
+
+## Visual Narrative Scene Composition
+
+**File:** `backend/agents/illustrator_prompts.py` — `VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION`
+
+A dedicated scene composer for comic, manga, and webtoon templates. Unlike the storybook composer which balances characters with environment, visual narrative composition puts characters front-and-center.
+
+### Key Design: Character vs. Setting Classification
+
+The prompt first classifies the scene type, then applies different rules:
+
+```
+FIRST, decide: does this scene have CHARACTERS or is it a SETTING-ONLY scene?
+
+═══ IF CHARACTERS ARE PRESENT ═══
+Characters are the PRIMARY FOCUS:
+1. CHARACTERS FIRST: Physical traits, 60%+ of frame
+2. ACTION & EXPRESSION: Poses, gestures, facial expressions
+3. CAMERA: Medium shot or close-up preferred
+4. ENVIRONMENT: Brief, secondary to characters
+
+═══ IF SETTING-ONLY ═══
+Focus on environment:
+1. SUBJECT: Building, landscape, object
+2. ATMOSPHERE: Lighting, weather, mood
+3. CAMERA: Most dramatic angle
+4. DETAILS: Architecture, textures, colors
+```
+
+This dual-mode approach was critical — without it, every scene was environment-only because the generic storybook composer prioritized setting over characters.
+
+### RULES FOR ALL SCENES
+
+The rules section enforces a comprehensive text-free policy with explicit enumeration of all text types to suppress:
+
+```
+═══ RULES FOR ALL SCENES ═══
+- Keep it under 100 words total
+- Do NOT use hex color codes — use descriptive color names only
+- Do NOT include any character names — describe appearance only
+- ABSOLUTELY NO TEXT IN THE IMAGE: no speech bubbles, no dialog, no captions,
+  no narration boxes, no sound effects, no onomatopoeia, no written words of
+  any kind. The app handles all text overlay separately.
+- Do NOT include art style, rendering style, or medium descriptions
+- Output ONLY the prompt, nothing else
+```
+
+The text-free rule was significantly strengthened from the earlier "Do NOT include text, labels, words, or watermarks" formulation. The exhaustive enumeration ("no speech bubbles, no dialog, no captions, no narration boxes, no sound effects, no onomatopoeia, no written words of any kind") was necessary because Gemini would find loopholes in the shorter rule -- it would avoid "text" but still describe "a speech bubble near the character's head" or "a sound effect of BOOM in the background." The explicit "The app handles all text overlay separately" gives the model a reason WHY text should be excluded, which improves compliance.
+
+### Character Fallback for Short Scenes
+
+Visual narrative scenes are short (~30-50 words), so character identification sometimes returns empty. A fallback check looks for dialog markers (`"`, `"`) or character name references in the scene text. If found, the full character sheet is injected regardless of character ID results.
+
+### Image Prompt Assembly for Visual Narratives
+
+The final prompt for visual narrative templates follows a specific structure designed to maximize text suppression:
+
+```python
+# 1. Positive text-free instruction UP FRONT (Imagen weights beginning most)
+text_free = "Clean illustration without any text, speech bubbles, captions, or written words."
+
+# 2. Character descriptions (verbatim from reference sheet)
+# 3. Anti-drift anchor
+# 4. Scene composition (from VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION)
+# 5. Art style suffix (includes "text-free panel art" for comic/manga/webtoon)
+# 6. Negative constraints at the END
+negative = "[NO text, NO speech bubbles, NO dialog bubbles, NO captions, NO letters, NO words, ...]"
+```
+
+This creates a **three-layer text suppression** system:
+1. **Positive prefix** ("Clean illustration without any text...") -- tells the model what TO produce
+2. **Art style suffix** ("...text-free panel art") -- embedded in the style description itself
+3. **Negative constraints** ("[NO text, NO speech bubbles, ...]") -- explicit prohibitions as a safety net
+
+The positive-first approach was a strategic reversal. The earlier approach relied only on negative constraints at the end of the prompt. But Imagen weights the beginning of prompts most heavily for subject matter -- placing "no text" at the end consumed less attention budget but also had less effect. The positive instruction at the front ("Clean illustration without any text") occupies prime prompt real estate and tells the model what the image IS (a clean illustration) rather than what it ISN'T.
+
+---
+
+## Split DNA — Physical vs. Style Traits
+
+**File:** `backend/agents/illustrator.py` — `_filter_character_descriptions()`
+
+When a scene describes a character changing clothes, the character sheet's outfit description conflicts with the narrative, producing confused hybrid images.
+
+### Solution
+
+`_filter_character_descriptions()` accepts a `scene_text` parameter. A regex detects outfit-change keywords:
+
+```python
+_OUTFIT_KEYWORDS = re.compile(
+    r'\b(wearing|wore|changed into|put on|dressed in|slipped on|'
+    r'donned|outfit|uniform|costume|armor|armour|disguise|cloak)\b',
+    re.IGNORECASE,
+)
+```
+
+When detected, bracketed style sections are stripped from character descriptions:
+
+```python
+# Remove [outfit: ...], [signature items: ...], [clothing: ...] etc.
+re.sub(r'\[(?:outfit|signature items?|clothing|costume|armor|armour):\s*[^\]]*\]', '', desc)
+```
+
+Physical traits (face, hair, skin, build) always survive. The scene's own description takes precedence for clothing.
 
 ---
 
@@ -814,9 +1110,9 @@ Without all three, models drift back to English, especially when the user's inpu
 
 Telling the narrator to refuse inappropriate content breaks immersion and makes the AI nature obvious. Telling it to redirect in-character ("That part of the library is forbidden! Let's explore this mysterious path instead...") maintains the story world while achieving the same safety goal. Users experience a story beat, not a policy message.
 
-### 7. Two-Sided Intent Detection Prevents Premature Triggers
+### 7. Native Tool Calling Over External Intent Classification
 
-Analyzing only the user's message for generation intent produces false positives. "Sounds great!" might mean "I agree with your suggestion, tell me more" rather than "Generate the scene now." Analyzing both the user's message AND the Director's response (is the Director still asking questions?) dramatically reduces premature triggers.
+Analyzing user intent via a separate API call (the old `detect_intent()` approach) adds latency and loses context. Native tool calling lets the model itself decide when to act, with full conversation history. The tradeoff is reliability (~60-70% in audio mode), mitigated by a manual fallback button.
 
 ### 8. System Prompts Need Explicit Workflow Instructions
 
@@ -826,7 +1122,7 @@ A personality description ("passionate, insightful creative collaborator") is no
 
 | Temperature | Use Case | Examples |
 |-------------|----------|----------|
-| **0** | Deterministic classification | Content filter, intent detection |
+| **0** | Deterministic classification | Content filter |
 | **0.1** | High-consistency extraction | Character sheet extraction |
 | **0.3** | Structured creative output | Scene composition, Director live analysis |
 | **0.4** | Analytical with some creativity | Full Director batch analysis |
@@ -838,3 +1134,7 @@ The pattern: classification and extraction need near-zero temperature; creative 
 ### 10. Separation of Concerns in Prompt Assembly
 
 Scene composition should only describe *what a camera would capture*. Character appearance is handled by the character sheet. Art style is handled by the suffix. This separation means each component can be independently tuned, replaced, or bypassed without affecting the others. It also means the scene composer cannot accidentally override character details or art style, which happened constantly in the monolithic single-prompt approach.
+
+### 11. Positive Instructions Beat Negative-Only Constraints for Image Generation
+
+Telling an image model "Clean illustration without any text" is more effective than only saying "NO text, NO speech bubbles." Positive framing occupies the high-attention beginning of the prompt and tells the model what the image IS, not just what it ISN'T. The most robust approach is a three-layer system: positive prefix, in-style signal ("text-free panel art"), and negative suffix constraints.

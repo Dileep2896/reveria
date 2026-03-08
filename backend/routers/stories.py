@@ -40,6 +40,7 @@ async def get_public_story(story_id: str) -> dict[str, Any]:
             "image_url": s.get("image_url"),
             "audio_url": s.get("audio_url"),
             "word_timestamps": s.get("word_timestamps"),
+            "text_overlays": s.get("text_overlays"),
         })
 
     # Load generations
@@ -62,6 +63,7 @@ async def get_public_story(story_id: str) -> dict[str, Any]:
         "author_photo_url": data.get("author_photo_url"),
         "art_style": data.get("art_style", "cinematic"),
         "language": data.get("language", "English"),
+        "template": data.get("template", "storybook"),
         "scenes": scenes,
         "generations": generations,
         "status": data.get("status", "completed"),
@@ -107,8 +109,9 @@ async def export_story_pdf(
     title = data.get("title", "Untitled Story")
     author = data.get("author_name", "Anonymous")
     cover_url = data.get("cover_image_url")
+    template = data.get("template", "storybook")
 
-    pdf_bytes = await asyncio.to_thread(generate_story_pdf, title, author, cover_url, scenes)
+    pdf_bytes = await asyncio.to_thread(generate_story_pdf, title, author, cover_url, scenes, template=template)
 
     # Increment PDF export usage
     await increment_usage(uid, "pdf_export")

@@ -273,6 +273,34 @@
   50% { opacity: 1; }
 }
 
+/* --- Scene-fallback cover: "Generate Cover" prompt --- */
+.book-cover-upgrade {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7) 30%);
+  border: none;
+  color: var(--accent-primary);
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.book-3d:hover .book-cover-upgrade {
+  opacity: 1;
+}
+
 /* --- Page edges (rotated 90° perpendicular at right edge of cover) --- */
 .book-3d::before {
   content: '';

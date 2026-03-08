@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import useVoiceCapture from '../hooks/useVoiceCapture';
-import { ART_STYLES } from '../data/artStyles';
+import { ART_STYLES, ART_STYLE_MAP } from '../data/artStyles';
+import { getTemplate } from '../data/templates';
 import { PLACEHOLDERS } from '../data/languages';
 import { useToast } from '../contexts/ToastContext';
 import Tooltip from './Tooltip';
 
-export default function ControlBar({ onSend, onSendAudio, onSteer, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, usage, onHeroPhoto, heroMode }) {
+export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, usage, onHeroPhoto, heroMode, template = 'storybook' }) {
   const { addToast } = useToast();
   const [focused, setFocused] = useState(false);
   const [heroPhoto, setHeroPhotoRaw] = useState(() => {
@@ -133,26 +134,25 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
   });
 
   const heroAnalyzing = !!heroMode?.analyzing || heroLoading;
-  const isDisabled = !connected || (!generating && quotaCooldown > 0) || heroAnalyzing;
-  const isSteerMode = generating && connected;
+  const isHeroTemplate = template === 'hero';
+  const heroReady = heroActive || heroAnalyzing;
+  const heroBlocked = isHeroTemplate && !heroReady;
+  const isDisabled = !connected || (!generating && quotaCooldown > 0) || heroAnalyzing || heroBlocked;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const text = inputValue.trim();
     if (!text) return;
-    if (isSteerMode) {
-      onSteer?.(text);
-      setInputValue('');
-      return;
-    }
     if (isDisabled || generating) return;
-    onSend(text, { artStyle, sceneCount, language });
+    onSend(text, { artStyle, sceneCount, language, template });
     setInputValue('');
   };
   const hasText = inputValue.trim().length > 0;
 
-  // Styles list for dropdown — only trend styles when hero mode active
-  const dropdownStyles = heroActive ? ART_STYLES.filter(s => s.trend) : ART_STYLES;
+  // Styles list for dropdown — trend-only in hero mode, otherwise template-filtered
+  const dropdownStyles = heroActive
+    ? ART_STYLES.filter(s => s.trend)
+    : getTemplate(template).artStyles.map(k => ART_STYLE_MAP[k]).filter(Boolean);
 
   return (
     <div className="control-bar">
@@ -201,7 +201,7 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
               className="control-style-trigger"
               onClick={() => styleOpen ? setStyleOpen(false) : openMenu()}
             >
-              <span>{ART_STYLES.find((s) => s.key === artStyle)?.label}</span>
+              <span>{ART_STYLE_MAP[artStyle]?.label || artStyle}</span>
               <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, transition: 'transform 0.2s ease', transform: styleOpen ? 'rotate(180deg)' : 'none' }}>
                 <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -228,8 +228,8 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
             )}
           </div>
 
-          {/* Hero mode: photo upload / loading / badge with name */}
-          <div className="control-hero-upload flex items-center px-1">
+          {/* Hero mode: photo upload / loading / badge with name — only for hero template */}
+          {isHeroTemplate && <div className="control-hero-upload flex items-center px-1">
             <input
               type="file"
               ref={fileInputRef}
@@ -356,7 +356,7 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
               </button>
               </Tooltip>
             )}
-          </div>
+          </div>}
 
           {/* Usage counter pill — hidden for pro (limit is effectively unlimited) */}
           {usage && usage.limits?.generations_today > 0 && usage.usage?.tier !== 'pro' && (
@@ -401,35 +401,15 @@ export default function ControlBar({ onSend, onSendAudio, onSteer, connected, ge
                 handleSubmit(e);
               }
             }}
-            placeholder={recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : generating ? 'Steer the story... (e.g. make it scarier)' : (PLACEHOLDERS[language] || PLACEHOLDERS.English)}
-            disabled={isDisabled && !isSteerMode}
+            placeholder={heroBlocked ? 'Upload your photo to begin Hero Quest...' : recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : generating ? 'Generating...' : (getTemplate(template).placeholder || PLACEHOLDERS[language] || PLACEHOLDERS.English)}
+            disabled={isDisabled || generating}
             className="flex-1 bg-transparent outline-none control-input"
             style={{ color: 'var(--text-primary)', resize: 'none', overflowY: 'auto' }}
             rows={1}
           />
 
-          {/* Single morphing action button: mic → send → steer/spinner */}
-          {generating && hasText ? (
-            <Tooltip label="Steer the story">
-            <button
-              type="submit"
-              className="flex-shrink-0 rounded-full flex items-center justify-center transition-all control-action-btn"
-              style={{
-                background: 'var(--accent-secondary)',
-                color: 'var(--text-inverse)',
-                border: '1px solid var(--accent-secondary)',
-                boxShadow: 'var(--shadow-glow-secondary)',
-                cursor: 'pointer',
-              }}
-            >
-              {/* Compass icon */}
-              <svg className="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-              </svg>
-            </button>
-            </Tooltip>
-          ) : generating ? (
+          {/* Single morphing action button: mic → send → spinner */}
+          {generating ? (
             <div
               className="flex-shrink-0 rounded-full flex items-center justify-center control-action-btn"
               style={{

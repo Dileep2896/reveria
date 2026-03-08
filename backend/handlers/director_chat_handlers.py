@@ -37,6 +37,7 @@ async def handle_director_chat_start(
             story_ctx = "No story yet \u2014 starting fresh."
         chat_language = message.get("language", state.language_current)
         chat_voice = message.get("voice_name", "Charon")
+        chat_template = message.get("template", state.template_current)
         state.director_chat = DirectorChatSession()
         
         # Pass hero info to greeting if available
@@ -51,9 +52,10 @@ async def handle_director_chat_start(
             )
             
         result = await state.director_chat.start(
-            story_ctx + hero_info, 
-            language=chat_language, 
-            voice_name=chat_voice
+            story_ctx + hero_info,
+            language=chat_language,
+            voice_name=chat_voice,
+            template=chat_template,
         )
         await _safe_send(websocket, {
             "type": "director_chat_started",
@@ -137,6 +139,7 @@ async def handle_director_chat_audio(
                         "art_style": state.art_style_current,
                         "scene_count": state.scene_count_current,
                         "language": state.language_current,
+                        "template": state.template_current,
                     })
     except Exception as e:
         logger.error("Director chat audio failed: %s", e)
@@ -209,6 +212,7 @@ async def handle_director_chat_text(
                             "art_style": state.art_style_current,
                             "scene_count": state.scene_count_current,
                             "language": state.language_current,
+                            "template": state.template_current,
                         })
     except Exception as e:
         logger.error("Director chat text failed: %s", e)

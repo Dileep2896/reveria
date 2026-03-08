@@ -7,7 +7,7 @@ export default function useAppEffects({
   storyId, urlStoryId, isLibrary, isExplore, navigate,
   scenes, generating, initialState, idToken,
   bookMeta, setBookmarkedSceneIndex, resetSaved,
-  setStoryStatus, setIsPublished, setArtStyle, setLanguage,
+  setStoryStatus, setIsPublished, setArtStyle, setLanguage, setTemplate,
   setViewingReadOnly, setStoryDeletedHandler,
   clearState, addToast,
   location,
@@ -82,8 +82,9 @@ export default function useAppEffects({
       setIsPublished(initialState.is_public || false);
       if (initialState.art_style) setArtStyle(initialState.art_style);
       if (initialState.language) setLanguage(initialState.language);
+      if (initialState.template) setTemplate(initialState.template);
     }
-  }, [initialState, setStoryStatus, setIsPublished, setArtStyle, setLanguage]);
+  }, [initialState, setStoryStatus, setIsPublished, setArtStyle, setLanguage, setTemplate]);
 
   // Handle backend deleting the entire story (all scenes removed)
   useEffect(() => {
@@ -92,10 +93,11 @@ export default function useAppEffects({
       setStoryStatus(null);
       setIsPublished(false);
       setArtStyle('cinematic');
+      setTemplate('storybook');
       setLanguage('English');
       setBookmarkedSceneIndex(null);
       navigate(ROUTES.HOME);
       addToast('Story deleted - all scenes were removed', 'info');
     });
-  }, [setStoryDeletedHandler, clearState, navigate, addToast, setStoryStatus, setIsPublished, setLanguage, setArtStyle, setBookmarkedSceneIndex]);
+  }, [setStoryDeletedHandler, clearState, navigate, addToast, setStoryStatus, setIsPublished, setLanguage, setArtStyle, setTemplate, setBookmarkedSceneIndex]);
 }

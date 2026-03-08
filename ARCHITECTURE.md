@@ -72,11 +72,14 @@ export const ROUTES = {
 ### Cinematic Book Opening (First Prompt)
 When a user sends their first prompt, the transition is cinematic rather than a hard cut:
 1. **T=0** (Send pressed): Idle BookCover starts pulsing violet glow (`tc-idle-preparing` class, `idleCoverPulse` animation)
-2. **T≈500-1000ms** (`generating=true`): HTMLFlipBook mounts on **cover page** (page 0). Cover shows shimmer overlay (`book-cover-shimmer`) + icon pulse (`book-cover-icon--generating`). Entrance animation plays (700ms `bookEntrance` with brightness bloom + slight overshoot)
-3. **T≈800-1500ms**: First scene text arrives, fills page 1 (behind cover)
-4. **T≈1600-2300ms**: `flip(1)` fires after 800ms delay — satisfying page-flip from cover to first scene
+2. **T≈500-1000ms** (`generating=true`): HTMLFlipBook mounts on **cover page** (page 0). Cover shows faux spine (14px `::before` on `.stf__wrapper`), left-page clip-path (`inset(0 0 0 50%)`) hides blank left page, book shadow visible. Shimmer overlay + icon pulse. Entrance animation plays (600ms `bookEntrance` with brightness bloom at 50%)
+3. **T≈350ms**: `flip(1)` fires — overlaps with entrance animation for one fluid motion. `setCurrentPage(1)` removes `book-cover-centered` class: clip-path opens (0.5s), wrapper slides right (0.8s), faux spine unmounts
+4. **T≈800-1500ms**: First scene text arrives on left page, page flip animation (700ms) completes
 
 Key implementation:
+- Faux spine: CSS `::before` on `.stf__wrapper` with `overflow: visible`, 14px gradient matching template spine color
+- Left-page clip: `.book-cover-centered .stf__wrapper { clip-path: inset(0 0 0 50%); }` — reveals via transition when class removed
+- Center offset: `translateX(calc(var(--book-page-w) * -0.5 - 7px))` accounts for spine width
 - `firstGenFlipDone` ref in `StoryCanvas` tracks the cover→content flip; scene 2+ uses standard flip logic
 - `useStoryNavigation` accepts `generating` flag — suppresses cover-bounce during generation
 - Resumed stories (`/story/:id`) skip the cover entirely (start at page 1)
@@ -129,22 +132,27 @@ Key implementation:
 1. `stories`: (uid ASC, status ASC, updated_at DESC) — Library page
 2. `stories`: (is_public ASC, published_at DESC) — Explore page
 
-## Character Portraits (Disabled — Future Work)
+## Character Portraits & Visual DNA
 
-Portrait generation is currently disabled. The initial approach (separate Imagen 3 calls for 1:1 close-up portraits) produced inconsistent visuals — portraits looked different from the same characters in scene images. A face-crop approach (Gemini Vision bounding box detection + Pillow cropping from scene images) was prototyped but detection accuracy on illustrated/comic art was insufficient.
+### Anchor Portraits
+- Generated BEFORE scene images in `narrator_agent.py`
+- Imagen generates portrait → Gemini Vision analyzes → visual DNA stored on `illustrator._visual_dna[name_lower]`
+- Hero character skipped for anchor portraits; post-batch portraits dedup against anchors
+- Firestore persist: `ArrayUnion` on story doc `portraits` field. GCS index: `900 + idx` for anchors
 
-### Planned Approach (Face-Crop from Scene Images)
-- Per-scene: after image generation, send scene image + character names to Gemini Vision
-- Gemini returns bounding boxes for character upper-body regions
+### Visual DNA
+- `analyze_visual_dna()` extracts 100-150 word natural-language description from portrait (temp 0.1, 250 tokens)
+- Prefers visual DNA over raw character sheet lines for scene prompts
+- State persistence: `_visual_dna` dict serialized via `illustrator.serialize_state()`. `_anchor_portraits` transient (cleared on restore)
+
+### Portrait Detection (Face-Crop from Scene Images)
+- `detect_and_crop_portraits()`: sends scene image + character names to Gemini Vision
+- Gemini returns bounding boxes for character upper-body regions (`CHARACTER_REGION_INSTRUCTION`)
 - Pillow crops + pads to 512x512 square portraits
 - Guaranteed visual consistency (portrait IS the scene character), zero extra Imagen calls
-- Tracking state: `_portrait_extracted: set[str]` on Illustrator prevents duplicate portraits
 
-### Infrastructure Still in Place
-- `portrait_service.py` exists but is a no-op (immediately sends `portraits_done`)
-- `CHARACTER_REGION_INSTRUCTION` prompt in `illustrator_prompts.py` (tested, works for storybook art; needs improvement for comic/manga)
-- `detect_and_crop_portraits()` method on Illustrator (disabled in `_generate_image`)
-- Frontend `PortraitGallery` removed from `DirectorCardList.jsx`
+### Frontend
+- `PortraitGallery.jsx`: horizontal scroll layout (`overflowX: auto`), shows only when portraits exist or loading
 
 ## GCS Structure
 - Scene media: `stories/{story_id}/scenes/{scene_number}/{image|audio}.{ext}`
@@ -181,8 +189,12 @@ Portrait generation is currently disabled. The initial approach (separate Imagen
 Visual narrative templates use a different per-scene flow than storybook:
 - **Scene composition**: `VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION` classifies scenes as character-present vs. setting-only, applies different composition rules (characters 60%+ of frame for character scenes)
 - **Character fallback**: If character identification returns empty but scene has dialog or character name references, full character sheet is injected
-- **Prompt structure**: Characters FIRST → scene composition → art style → negative constraints at END (Imagen weights prompt start most heavily)
-- **Negative constraints**: `[NO text, NO speech bubbles, NO dialog bubbles, NO captions, NO letters, NO words]` — placed at end to avoid consuming attention budget
+- **Prompt structure**: Text-free prefix → Characters → scene composition → art style (with `text-free panel art`) → negative constraints at END
+- **Text-free image enforcement (triple layer defense)**:
+  1. **Scene composer instruction**: `ABSOLUTELY NO TEXT IN THE IMAGE` rule in `VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION`
+  2. **Imagen prompt prefix**: `"Clean illustration without any text, speech bubbles, captions, or written words."` at START of prompt (Imagen weights beginning most)
+  3. **Art style suffix**: All comic/manga/webtoon styles include `"text-free panel art"` (e.g. `classic_comic`, `shonen_manga`, `romantic_webtoon`, etc.)
+  4. **Negative constraints**: `[NO text, NO speech bubbles, NO dialog bubbles, NO captions, NO letters, NO words, NO writing, NO sound effects]` at end
 - **Sequential image→audio**: Audio waits for image generation to complete, then builds TTS script from overlay text only (~20 words), not full scene prose (~50 words)
 - **Split DNA**: Character descriptions split into physical traits (permanent) vs. style traits (outfit, changeable). When scene text contains outfit-change keywords, style traits are stripped to avoid conflicts
 
@@ -266,7 +278,7 @@ The image pipeline separates character definition from scene composition:
 - `respond_to_tool_call(tool_call, success)`: Sends `FunctionResponse` back so model can acknowledge (lock-wrapped); returns follow-up audio
 - `request_suggestion(story_context)`: Asks the Live session directly for a story prompt (lock-wrapped, no extra API call)
 - `proactive_comment(scene_text, scene_number)`: During generation, sends scene to Live session for in-conversation Director reaction. Lock-wrapped. Strips `tool_calls` from response. Returns response dict.
-- `generation_wrapup(scene_count)`: Post-generation wrap-up — Director summarizes and invites continuation. Lock-wrapped. Strips `tool_calls`.
+- `generation_wrapup(scene_count, scene_texts)`: Post-generation wrap-up — Director reacts to scene content and invites continuation. Receives actual scene text for context. Lock-wrapped. Strips `tool_calls`.
 - `_collect_response(session, timeout)`: Collects audio chunks + native transcriptions + tool calls from receive loop
 - `_trim_log()`: Caps `conversation_log` at 20 non-system entries (prevents unbounded growth)
 - `close()`: Closes Live session via `__aexit__`
@@ -312,19 +324,18 @@ Director Chat active → generate_story tool fires → generation starts
   ├── Frontend orb → "watching" state (eye icon + accent-primary pulse)
   ├── Scene N text completes:
   │   ├── analyze_scene() runs (structured data: mood, tension, emoji, suggestion)
-  │   ├── SKIP standalone live_commentary()
-  │   └── proactive_comment(scene_text) → same Live session reacts
-  │       └── Audio sent as director_chat_response (plays in chat thread)
-  ├── Pipeline done → generation_wrapup(scene_count)
-  │   └── Director summarizes + asks "what next?" → audio in chat
+  │   ├── SKIP standalone live_commentary() (no per-scene voice)
+  │   └── SKIP proactive_comment() — prevents audio overlap with wrapup
+  ├── Pipeline done → generation_wrapup(scene_count, scene_texts)
+  │   └── Director reacts to scene + asks "what next?" → single audio in chat
   └── Frontend orb auto-resumes recording after 800ms
 ```
 
 #### Backend Changes
 - `SharedPipelineState.director_enabled`: Set from `from_director` message flag; gates all Director work
 - `SharedPipelineState.director_chat_session`: Only set when `director_enabled=True`
-- `_director_live()` in orchestrator: only fires when `director_enabled=True`. Checks `s.director_chat_session`; if active, routes voice through `proactive_comment()` instead of `live_commentary()`. Falls back to standalone on failure.
-- `main.py`: passes `director_chat=director_chat` + `director_enabled=from_director` kwargs to `_run_adk_pipeline()`; calls `generation_wrapup()` after persist + batch_index increment (only when `from_director=True`)
+- `_director_live()` in orchestrator: only fires when `director_enabled=True`. When `director_chat_session` is active, per-scene voice (`proactive_comment()` and `live_commentary()`) is SKIPPED — only `generation_wrapup()` provides voice. Structured data (`director_live` WS message) still sent either way.
+- `main.py`: passes `director_chat=director_chat` + `director_enabled=from_director` kwargs to `_run_adk_pipeline()`; calls `generation_wrapup(scene_count, scene_texts)` after persist + batch_index increment (only when `from_director=True`)
 
 #### Frontend Changes
 - `DirectorChat.jsx`: new `generating` prop → `watching` orbState; auto-resume suppressed during generation; auto-resumes 800ms after generation ends via `prevGenerating` ref
@@ -344,6 +355,10 @@ Director Chat active → generate_story tool fires → generation starts
 - Constants: `SILENCE_THRESHOLD = 0.01`, `SILENCE_DURATION_MS = 1200`, `VAD_POLL_INTERVAL_MS = 100`
 - Detects speech → silence transition; auto-stops `MediaRecorder` after 1.2s of continuous silence post-speech
 - Graceful degradation: try/catch around AudioContext — manual stop still works if VAD fails
+
+### Book Layout & Scene Count
+- **Always spread mode**: `singlePage` hardcoded to `false` in `App.jsx`. Book Layout toggle removed from SettingsDialog. No `bookLayout` state or localStorage.
+- **Single scene generation**: Scene count hardcoded to 1 per generation. The "Crafting your story..." generating placeholder is disabled (`const showGenerating = false` in `StoryCanvas.jsx`). Scenes arrive directly on their page without a preview placeholder.
 
 ### Frontend: Settings Dialog
 - `SettingsDialog.jsx`: Theme toggle (Light/Dark) + Director voice selection (8 voices in 2-column grid)
@@ -477,13 +492,6 @@ Director Chat active → generate_story tool fires → generation starts
 - Applied to both `handle_director_chat_audio` and `handle_director_chat_text`.
 
 ## Future Work
-
-### Character Portrait System (Face-Crop from Scene Images)
-- Detect character regions in scene images using Gemini Vision bounding box detection
-- Crop with Pillow to 512x512 square portraits — guaranteed visual consistency with zero extra Imagen calls
-- Per-scene extraction (portraits appear as characters first show up, not batched at end)
-- Infrastructure partially built: `CHARACTER_REGION_INSTRUCTION` prompt, `detect_and_crop_portraits()` method
-- Blocker: face detection accuracy on illustrated/comic art needs improvement
 
 ### Character Consistency via Visual Anchor API
 - Use Imagen's `ControlReferenceImage` with `CONTROL_TYPE_FACE_MESH` to reference first scene's character render in subsequent scenes

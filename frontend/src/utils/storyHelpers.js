@@ -43,7 +43,7 @@ export async function loadStoryById(storyId) {
     console.info('[Reveria] Loaded story %s: %d scenes, %d generations', storyId, scenes.length, generations.length);
   }
 
-  return { storyId, scenes, generations, status: storyData.status || 'draft', is_public: storyData.is_public || false, art_style: storyData.art_style || 'cinematic', language: storyData.language || 'English', portraits: storyData.portraits || [] };
+  return { storyId, scenes, generations, status: storyData.status || 'draft', is_public: storyData.is_public || false, art_style: storyData.art_style || 'cinematic', language: storyData.language || 'English', template: storyData.template || 'storybook', portraits: storyData.portraits || [] };
 }
 
 export function findFallbackCover(scenes) {

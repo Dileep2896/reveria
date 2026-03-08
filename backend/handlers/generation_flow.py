@@ -15,8 +15,8 @@ from services.content_filter import is_refusal as _is_refusal, validate_prompt a
 from services.gemini_client import ContentBlockedError
 from services.imagen_client import is_quota_available, get_quota_cooldown_remaining
 from services.firestore_client import persist_story
+from templates.registry import validate_art_style
 from services.book_meta import auto_generate_meta as _auto_generate_meta
-from services.portrait_service import generate_portraits as _generate_portraits
 from services.usage import check_limit, increment_usage, decrement_usage, build_usage_message
 from services.hero_service import analyze_hero_photo
 
@@ -55,6 +55,7 @@ async def _run_adk_pipeline(
 
     illustrator.art_style = art_style
     illustrator.trend_style = kwargs.get("trend_style")
+    illustrator.template = kwargs.get("template", "storybook")
 
     shared_state.user_input = user_input
     shared_state.art_style = art_style
@@ -69,6 +70,7 @@ async def _run_adk_pipeline(
     shared_state.hero_name = kwargs.get("hero_name", "")
     shared_state.trend_style = kwargs.get("trend_style")
     shared_state.language = kwargs.get("language", "English")
+    shared_state.template = kwargs.get("template", "storybook")
     director_enabled = kwargs.get("director_enabled", False)
     shared_state.director_enabled = director_enabled
     shared_state.director_chat_session = kwargs.get("director_chat") if director_enabled else None
@@ -121,14 +123,19 @@ async def _run_adk_pipeline(
     adk_scenes: list[dict[str, Any]] = shared_state.scenes
     scenes_with_urls: list[dict[str, Any]] = []
     for scene_dict in adk_scenes:
-        scenes_with_urls.append({
+        scene_out: dict[str, Any] = {
             "scene_number": scene_dict["scene_number"],
             "text": scene_dict["text"],
             "scene_title": scene_dict.get("scene_title"),
             "image_url": scene_dict.get("image_url"),
             "audio_url": scene_dict.get("audio_url"),
             "prompt": user_input,
-        })
+        }
+        if scene_dict.get("text_overlays"):
+            scene_out["text_overlays"] = scene_dict["text_overlays"]
+        if scene_dict.get("word_timestamps"):
+            scene_out["word_timestamps"] = scene_dict["word_timestamps"]
+        scenes_with_urls.append(scene_out)
 
     return shared_state.total_scene_count, [], scenes_with_urls, shared_state.director_result
 
@@ -243,6 +250,8 @@ async def handle_generate(
     except (ValueError, TypeError):
         scene_count = 1
     language = message.get("language", "English")
+    template = message.get("template", "storybook")
+    art_style = validate_art_style(template, art_style)
     from_director = message.get("from_director", False)
 
     # Pre-filter: reject non-story prompts before creating story doc
@@ -318,7 +327,7 @@ async def handle_generate(
                 state.session_service, user_input, art_style,
                 scene_count, state.total_scene_count, state.illustrator,
                 state.active_story_id, language=language,
-                uid=state.uid,
+                template=template, uid=state.uid,
                 hero_description=state.hero_description,
                 hero_name=state.hero_name,
                 trend_style=state.trend_style,
@@ -348,6 +357,7 @@ async def handle_generate(
                     director_data=state.director_result,
                     director_live_notes=live_notes_snapshot,
                     language=language,
+                    template=template,
                     author_name=state.author_name,
                     author_photo_url=state.author_photo_url,
                 )
@@ -378,63 +388,22 @@ async def handle_generate(
                     "content": "Could not save your scenes — they may disappear on reload. Try sending the same prompt again.",
                 })
 
-            # Persist anchor portraits generated during pipeline (visual DNA)
-            _anchor_names: list[str] = []
-            if state.illustrator._anchor_portraits:
-                _anchor_names = [p["name"] for p in state.illustrator._anchor_portraits]
-                try:
-                    from google.cloud.firestore_v1.transforms import ArrayUnion
-                    from services.firestore_client import get_db as _get_db_anchor
-                    _db_anchor = _get_db_anchor()
-                    try:
-                        await _db_anchor.collection("stories").document(state.active_story_id).update({
-                            "portraits": ArrayUnion(state.illustrator._anchor_portraits)
-                        })
-                    except Exception:
-                        await _db_anchor.collection("stories").document(state.active_story_id).set(
-                            {"portraits": state.illustrator._anchor_portraits}, merge=True
-                        )
-                    logger.info("Persisted %d anchor portraits for story %s", len(state.illustrator._anchor_portraits), state.active_story_id)
-                except Exception as e:
-                    logger.error("Failed to persist anchor portraits: %s", e)
-                state.illustrator._anchor_portraits = []  # consumed
-
-            # Meta + portraits run independently of persist success
+            # Meta generation runs independently of persist success
             try:
                 meta_task = asyncio.create_task(
-                    _auto_generate_meta(state.active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send, language=language, character_sheet=state.illustrator._character_sheet)
+                    _auto_generate_meta(state.active_story_id, current_batch_scenes, art_style, websocket, safe_send=_safe_send, language=language, character_sheet=state.illustrator._character_sheet, visual_dna=dict(state.illustrator._visual_dna))
                 )
                 state.pipeline_tasks.append(meta_task)
             except Exception as e:
                 logger.error("Meta task creation error: %s", e)
-
-            try:
-                from services.firestore_client import get_db
-                _db = get_db()
-                _doc = await _db.collection("stories").document(state.active_story_id).get()
-                _existing_portraits = (_doc.to_dict() or {}).get("portraits", []) if _doc.exists else []
-                _existing_names = [p["name"] for p in _existing_portraits if p.get("name")]
-            except Exception:
-                _existing_names = []
-            # Also include anchor portrait names for dedup (in case Firestore read missed them)
-            for _aname in _anchor_names:
-                if _aname not in _existing_names:
-                    _existing_names.append(_aname)
-            try:
-                portrait_task = asyncio.create_task(_generate_portraits(
-                    websocket, state.illustrator, state.active_story_id,
-                    safe_send=_safe_send, existing_names=_existing_names,
-                ))
-                state.pipeline_tasks.append(portrait_task)
-            except Exception as e:
-                logger.error("Portrait task creation error: %s", e)
 
             state.batch_index += 1
 
             # Director Chat wrap-up — invite continuation (only for Director-triggered generation)
             if from_director and state.director_chat and current_batch_scenes:
                 try:
-                    wrapup = await state.director_chat.generation_wrapup(len(current_batch_scenes))
+                    scene_texts = [s.get("text", "") for s in current_batch_scenes]
+                    wrapup = await state.director_chat.generation_wrapup(len(current_batch_scenes), scene_texts=scene_texts)
                     if wrapup.get("audio_url"):
                         await _safe_send(websocket, {
                             "type": "director_chat_response",
@@ -473,6 +442,7 @@ async def handle_generate(
         state.art_style_current = art_style
         state.scene_count_current = scene_count
         state.language_current = language
+        state.template_current = template
         await _safe_send(websocket, {"type": "status", "content": "done"})
     except asyncio.CancelledError:
         logger.info("Generation cancelled (disconnect or reset)")

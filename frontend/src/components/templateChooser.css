@@ -1,0 +1,625 @@
+/* ============================================
+   TEMPLATE CHOOSER — 3D Coverflow + Grid
+   ============================================ */
+
+.template-chooser {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem 1rem;
+  width: 100%;
+  margin: 0 auto;
+  animation: fadeIn 0.5s ease-out;
+  outline: none;
+  flex: 1;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ---- Header ---- */
+.tc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 900px;
+  flex-shrink: 0;
+}
+
+.tc-title {
+  font-family: var(--font-heading, 'Cormorant Garamond', serif);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.tc-view-toggle {
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tc-view-toggle:hover {
+  background: var(--glass-bg-strong);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+/* ============================================
+   3D COVERFLOW
+   ============================================ */
+.tc-coverflow {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1000px;
+  overflow: hidden;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.tc-coverflow-track {
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.tc-coverflow-item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  /* Base translate(-50%,-50%) is in inline style along with 3D transforms */
+  transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              opacity 0.45s ease;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+}
+
+.tc-coverflow-item.focused {
+  cursor: pointer;
+}
+
+/* Arrow buttons */
+.tc-coverflow-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.tc-coverflow-arrow:hover:not(:disabled) {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 12px var(--accent-primary-glow);
+}
+
+.tc-coverflow-arrow:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.tc-coverflow-arrow--left {
+  left: 1rem;
+}
+
+.tc-coverflow-arrow--right {
+  right: 1rem;
+}
+
+/* ---- Grid ---- */
+.tc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  width: 100%;
+  padding: 0.5rem 0.5rem 1rem;
+  justify-items: center;
+  align-content: start;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================================
+   BOOK — Book cover unit
+   ============================================ */
+.tc-book {
+  flex: 0 0 auto;
+  display: flex;
+  cursor: pointer;
+  font-family: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  position: relative;
+  transition: filter 0.3s ease;
+  filter: brightness(0.82);
+}
+
+.tc-book:hover {
+  filter: brightness(1);
+}
+
+.tc-book.selected {
+  filter: brightness(1.05);
+}
+
+/* Standalone idle book — no hover effects */
+.tc-book.standalone {
+  cursor: default;
+  filter: brightness(1);
+}
+
+.tc-book.standalone:hover {
+  filter: brightness(1);
+}
+
+/* ---- Spine ---- */
+.tc-book-spine {
+  flex-shrink: 0;
+  background: var(--book-spine);
+  border-radius: 3px 0 0 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: inset -2px 0 4px rgba(0,0,0,0.3);
+}
+
+.tc-book-spine::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 4px;
+  right: 4px;
+  border: 0.5px solid rgba(255,255,255,0.06);
+  border-radius: 1px;
+}
+
+.tc-book-spine-title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.3);
+  white-space: nowrap;
+  overflow: hidden;
+  max-height: 80%;
+}
+
+.tc-book.standalone .tc-book-spine-title {
+  font-size: 0.65rem;
+}
+
+/* ---- Cover face ---- */
+.tc-book-cover {
+  background: var(--book-gradient);
+  border-radius: 0 4px 4px 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    2px 4px 12px rgba(0,0,0,0.4),
+    4px 8px 24px rgba(0,0,0,0.25),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+.tc-book.selected .tc-book-cover {
+  box-shadow:
+    2px 4px 12px rgba(0,0,0,0.4),
+    4px 8px 24px rgba(0,0,0,0.25),
+    0 0 30px color-mix(in srgb, var(--book-accent) 25%, transparent),
+    0 0 60px color-mix(in srgb, var(--book-accent) 10%, transparent),
+    inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+
+.tc-book.standalone .tc-book-cover {
+  box-shadow:
+    4px 6px 20px rgba(0,0,0,0.5),
+    8px 12px 40px rgba(0,0,0,0.3),
+    0 0 40px color-mix(in srgb, var(--book-accent) 15%, transparent),
+    inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+/* Pattern texture overlay */
+.tc-book-pattern {
+  position: absolute;
+  inset: 0;
+  background-image: var(--book-pattern);
+  background-size: var(--book-pattern-size);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ---- Thematic scene illustration ---- */
+.tc-book-scene {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.tc-scene-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--book-gradient, #000);
+}
+
+.tc-scene-cutout {
+  mix-blend-mode: multiply;
+}
+
+/* Page edges */
+.tc-book-pages {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  right: 0;
+  width: 4px;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255,255,255,0.06) 0px,
+    rgba(255,255,255,0.06) 1px,
+    rgba(255,255,255,0.02) 1px,
+    rgba(255,255,255,0.02) 3px
+  );
+  border-radius: 0 2px 2px 0;
+  z-index: 2;
+}
+
+/* ---- Inner frame ---- */
+.tc-book-frame {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  padding: 10% 8%;
+  width: calc(100% - 20px);
+  height: calc(100% - 20px);
+}
+
+.tc-book-frame--ornate {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 2px;
+}
+
+.tc-book-frame--ornate::before,
+.tc-book-frame--ornate::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: var(--book-accent);
+  opacity: 0.3;
+}
+
+.tc-book-frame--ornate::before {
+  top: -1px; left: -1px;
+  border-top: 1.5px solid; border-left: 1.5px solid;
+}
+
+.tc-book-frame--ornate::after {
+  bottom: -1px; right: -1px;
+  border-bottom: 1.5px solid; border-right: 1.5px solid;
+}
+
+.tc-book-frame--double {
+  border: 1.5px solid rgba(255,255,255,0.07);
+  border-radius: 1px;
+  outline: 1px solid rgba(255,255,255,0.04);
+  outline-offset: 3px;
+}
+
+.tc-book-frame--minimal {
+  border: 0.5px solid rgba(255,255,255,0.06);
+  border-radius: 1px;
+}
+
+/* ---- Ornaments ---- */
+.tc-book-ornament {
+  flex-shrink: 0;
+  opacity: 0.8;
+  width: 60%;
+}
+
+.tc-ornament-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ---- Icon SVGs ---- */
+.tc-icon-svg {
+  width: 65%;
+  height: 65%;
+}
+
+/* ---- Emblem icon ---- */
+.tc-book-emblem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--book-icon-bg);
+  color: var(--book-accent);
+  border: 1px solid color-mix(in srgb, var(--book-accent) 15%, transparent);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  flex-shrink: 0;
+}
+
+.tc-book.selected .tc-book-emblem {
+  transform: scale(1.08);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--book-accent) 25%, transparent);
+  border-color: color-mix(in srgb, var(--book-accent) 30%, transparent);
+}
+
+/* ---- Title + description ---- */
+.tc-book-title {
+  font-family: var(--font-heading, 'Cormorant Garamond', serif);
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.2;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+.tc-book-tagline {
+  font-family: var(--font-heading, 'Cormorant Garamond', serif);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--book-accent, rgba(255,255,255,0.5));
+  opacity: 0.7;
+  line-height: 1.3;
+  text-align: center;
+  margin: 0;
+  letter-spacing: 0.03em;
+}
+
+.tc-book-desc {
+  color: rgba(255,255,255,0.4);
+  line-height: 1.45;
+  text-align: center;
+  margin: 0;
+  max-width: 85%;
+}
+
+/* ---- Selection glow (grid mode only, carousel uses coverflow focus) ---- */
+.tc-grid .tc-book.selected::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 4px 6px 6px 4px;
+  border: 1.5px solid var(--book-accent);
+  opacity: 0.6;
+  pointer-events: none;
+  animation: bookGlowPulse 2s ease-in-out infinite;
+}
+
+@keyframes bookGlowPulse {
+  0%, 100% { opacity: 0.4; box-shadow: 0 0 8px color-mix(in srgb, var(--book-accent) 15%, transparent); }
+  50% { opacity: 0.7; box-shadow: 0 0 16px color-mix(in srgb, var(--book-accent) 25%, transparent); }
+}
+
+/* (exit transitions handled by GSAP timeline in StoryCanvas) */
+
+/* ---- Standalone idle cover container ---- */
+.tc-idle-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+/* Back button pinned at top — book auto-margins handle centering below it */
+.tc-idle-back {
+  flex-shrink: 0;
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.2);
+  animation: tcBackBtnIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+@keyframes tcBackBtnIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Book centers vertically in the remaining space after the button */
+.tc-idle-cover > .tc-book {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+/* Back-to-templates button */
+.tc-back-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.4rem 0.85rem 0.4rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: 0.03em;
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.tc-back-btn:hover {
+  background: var(--glass-bg-strong);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+/* ---- Footer ---- */
+.tc-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+.tc-confirm {
+  padding: 0.6rem 2rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: 0.03em;
+  background: var(--glass-bg-strong);
+  color: var(--confirm-accent, var(--accent-primary));
+  border: 1.5px solid var(--confirm-accent, var(--accent-primary));
+  cursor: pointer;
+  transition: all 0.25s ease;
+  backdrop-filter: var(--glass-blur);
+}
+
+.tc-confirm:hover {
+  background: color-mix(in srgb, var(--confirm-accent, var(--accent-primary)) 12%, transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--confirm-accent, var(--accent-primary)) 20%, transparent);
+  transform: translateY(-1px);
+}
+
+/* ---- Language picker ---- */
+.tc-lang-picker {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.tc-lang-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-family: inherit;
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tc-lang-trigger:hover {
+  background: var(--glass-bg-strong);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.tc-lang-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-glass);
+  z-index: 50;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.tc-lang-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-family: inherit;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tc-lang-option:hover {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+}
+
+.tc-lang-option.active {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* ---- Animations ---- */
+@keyframes bookRevealIn {
+  0%   { opacity: 0; transform: scale(0.95); filter: blur(1px) brightness(1.3); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0) brightness(1); }
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 640px) {
+  .tc-coverflow-arrow {
+    width: 32px;
+    height: 32px;
+  }
+  .tc-coverflow-arrow--left { left: 0.5rem; }
+  .tc-coverflow-arrow--right { right: 0.5rem; }
+}

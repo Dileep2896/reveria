@@ -1,138 +1,11 @@
 import { useState } from 'react';
 import { useSceneActions } from '../../contexts/SceneActionsContext';
+import { getTemplate } from '../../data/templates';
 import IconBtn from '../IconBtn';
 
-export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, isBusy, showError, preloaded, skip, wasRegenerated, singlePage, visualNarrative }) {
+export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, isBusy, showError, preloaded, skip, wasRegenerated, singlePage, visualNarrative, template }) {
   const { regenImage, isReadOnly, canRegen } = useSceneActions();
   const [showBrief, setShowBrief] = useState(false);
-
-  // ── Visual narrative with per-panel images ──
-  if (visualNarrative && scene.panel_images?.length > 0) {
-    return (
-      <div
-        style={{
-          flex: '1 1 0',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: `${2 * scale}px`,
-          overflow: 'hidden',
-          position: 'relative',
-        }}
-      >
-        {scene.panel_images.map((panel, i) => (
-          <div
-            key={i}
-            style={{
-              flex: '1 1 0',
-              minHeight: 0,
-              position: 'relative',
-              borderRadius: `${4 * scale}px`,
-              overflow: 'hidden',
-              border: '1px solid rgba(255,255,255,0.06)',
-              background: 'var(--book-page-bg)',
-            }}
-          >
-            {panel?.url ? (
-              <img
-                src={panel.url}
-                alt={`Scene ${displayIndex ?? scene.scene_number} panel ${i + 1}`}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                  animation: skip ? 'none' : 'imageFadeIn 0.8s ease-out',
-                }}
-              />
-            ) : (
-              /* Shimmer placeholder per panel */
-              <div
-                className="painting-loader"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  background: 'var(--glass-bg)',
-                  overflow: 'hidden',
-                  position: 'relative',
-                }}
-              >
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  background: 'linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.04) 35%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 65%, transparent 100%)',
-                  animation: 'shimmer 2.5s ease-in-out infinite',
-                }} />
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <span style={{ fontSize: `${8 * scale}px`, color: 'var(--text-muted)', opacity: 0.5 }}>
-                    Panel {i + 1}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-
-        {/* Regen Image button for panel layout */}
-        {!isReadOnly && !isBusy && canRegen && (
-          <div
-            className="scene-action-bar"
-            style={{
-              position: 'absolute',
-              top: `${4 * scale}px`,
-              right: `${4 * scale}px`,
-              zIndex: 10,
-              display: 'flex',
-            }}
-          >
-            <IconBtn
-              label="Regenerate panels"
-              size={22 * scale}
-              dark
-              onPointerDown={(e) => { e.stopPropagation(); }}
-              onClick={(e) => { e.stopPropagation(); regenImage?.(scene.scene_number, scene.text); }}
-            >
-              <svg width={11 * scale} height={11 * scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-            </IconBtn>
-          </div>
-        )}
-
-        {/* Busy overlay for panel regeneration */}
-        {isBusy && (
-          <div
-            style={{
-              position: 'absolute', inset: 0, zIndex: 10,
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(0, 0, 0, 0.55)',
-              backdropFilter: 'blur(2px)',
-              borderRadius: 'inherit',
-            }}
-          >
-            <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'inherit' }}>
-              <div style={{
-                position: 'absolute', inset: 0,
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 40%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 60%, transparent 100%)',
-                animation: 'shimmer 2s ease-in-out infinite',
-              }} />
-            </div>
-            <span style={{
-              fontSize: `${9 * scale}px`, fontWeight: 500,
-              color: 'rgba(255,255,255,0.7)', letterSpacing: '0.05em',
-              textTransform: 'uppercase', position: 'relative',
-            }}>
-              Regenerating...
-            </span>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   // Collapsed error / no-image indicator
   if (showError || (preloaded && !scene.image_url)) {
@@ -323,6 +196,77 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
         />
         )}
       </>
+
+      {/* Text overlays for visual narrative templates — decouple from imageLoaded to prevent flicker */}
+      {visualNarrative && scene.text_overlays && scene.image_url && (() => {
+        const os = getTemplate(template).overlayStyle || {};
+        return (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none' }}>
+          {scene.text_overlays.map((ov, i) => {
+            const isDialog = ov.type === 'dialog';
+            const bg = isDialog ? (os.dialogBg || 'rgba(255,255,255,0.94)') : (os.narrationBg || 'rgba(255,220,80,0.92)');
+            const border = isDialog ? (os.dialogBorder || '#1a1a1a') : (os.narrationBorder || 'rgba(180,140,0,0.5)');
+            const color = isDialog ? (os.dialogColor || '#1a1a1a') : (os.narrationColor || '#1a1a1a');
+            const weight = isDialog ? (os.dialogFontWeight || 700) : (os.fontWeight || 700);
+            return (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: `${ov.x}%`,
+                  top: `${ov.y}%`,
+                  width: `${ov.width}%`,
+                  minHeight: `${ov.height}%`,
+                  padding: `${4 * scale}px ${6 * scale}px`,
+                  fontSize: `${(isDialog ? 8.5 : 7.5) * scale}px`,
+                  lineHeight: 1.3,
+                  fontFamily: "'Outfit', sans-serif",
+                  fontWeight: weight,
+                  textTransform: (os.uppercase && !isDialog) ? 'uppercase' : 'none',
+                  letterSpacing: !isDialog ? '0.04em' : 'normal',
+                  color,
+                  background: bg,
+                  border: `${1.5 * scale}px solid ${border}`,
+                  borderRadius: isDialog ? `${12 * scale}px` : `${2 * scale}px`,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  animation: `overlayFadeIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) ${0.3 + i * 0.15}s both`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {ov.text}
+                {/* Speech bubble tail */}
+                {isDialog && ov.tail_x != null && ov.tail_y != null && (
+                  <svg
+                    style={{
+                      position: 'absolute',
+                      bottom: `${-10 * scale}px`,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: `${16 * scale}px`,
+                      height: `${12 * scale}px`,
+                      overflow: 'visible',
+                    }}
+                    viewBox="0 0 16 12"
+                  >
+                    <polygon
+                      points="3,0 13,0 8,12"
+                      fill={bg}
+                      stroke={border}
+                      strokeWidth="1.5"
+                    />
+                    <rect x="3" y="-0.5" width="10" height="2" fill={bg} />
+                  </svg>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        );
+      })()}
 
       {/* Creative Brief overlay */}
       {scene.image_brief && imageLoaded && (

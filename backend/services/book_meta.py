@@ -54,11 +54,14 @@ async def gen_title(full_text: str, language: str = "English") -> str:
 async def gen_cover(
     full_text: str, art_style: str, story_id: str,
     character_sheet: str = "",
+    visual_dna: dict[str, str] | None = None,
 ) -> str | None:
     """Generate a portrait book cover using the character-focused prompt architecture.
 
     Same approach as scene images: Gemini weaves character appearance directly
     into the prompt (Imagen can't parse separate character sheets).
+    Prefers visual DNA (vision-anchored descriptions) over raw character sheet
+    for better consistency with scene images and portraits.
     """
     from agents.illustrator_prompts import ART_STYLES as ILLUSTRATOR_ART_STYLES
     from agents.illustrator import Illustrator
@@ -74,8 +77,20 @@ async def gen_cover(
         client = get_gemini_client()
         model = get_gemini_model()
 
-        # Strip hex codes — Imagen uses natural language colors, not hex
-        clean_chars = Illustrator._strip_hex_codes(character_sheet) if character_sheet else ""
+        # Build character descriptions — prefer visual DNA (anchored to actual portraits)
+        vdna = visual_dna or {}
+        if character_sheet:
+            lines = []
+            for line in character_sheet.strip().splitlines():
+                if ":" in line:
+                    name = line.split(":", 1)[0].strip()
+                    if name.lower() in vdna:
+                        lines.append(f"{name}: {vdna[name.lower()]}")
+                    else:
+                        lines.append(line.strip())
+            clean_chars = Illustrator._strip_hex_codes("\n".join(lines)) if lines else ""
+        else:
+            clean_chars = ""
 
         if clean_chars:
             # Character-focused: Gemini weaves protagonist appearance INTO the prompt
@@ -176,27 +191,18 @@ async def auto_generate_meta(
     safe_send=None,
     language: str = "English",
     character_sheet: str = "",
+    visual_dna: dict[str, str] | None = None,
 ) -> None:
-    """Background task: generate title + cover after pipeline run, notify frontend via WS."""
+    """Background task: generate title + use first scene image as cover.
+
+    A proper cover is generated on demand via the regenerate-meta endpoint,
+    which has full story context for a better result. This avoids an extra
+    Imagen call on first batch when story context is still limited.
+    """
     try:
         scene_texts = [s.get("text", "") for s in scenes if s.get("text")]
         if not scene_texts:
             return
-
-        full_text = "\n\n".join(scene_texts)
-        title, cover_url = await asyncio.gather(
-            gen_title(full_text, language=language),
-            gen_cover(full_text, art_style, story_id, character_sheet=character_sheet),
-        )
-
-        # Fall back to first scene image if cover generation failed
-        # Filter out base64 data URLs (can happen if GCS upload failed)
-        if not cover_url:
-            cover_url = next(
-                (s.get("image_url") for s in scenes
-                 if s.get("image_url") and not s["image_url"].startswith("data:")),
-                None,
-            )
 
         db = get_db()
         doc_ref = db.collection("stories").document(story_id)
@@ -204,14 +210,25 @@ async def auto_generate_meta(
         if snap.exists and snap.to_dict().get("title_generated"):
             return  # Already done (race guard)
 
+        full_text = "\n\n".join(scene_texts)
+        title = await gen_title(full_text, language=language)
+
+        # Use first scene image as initial cover (zero extra Imagen calls)
+        cover_url = next(
+            (s.get("image_url") for s in scenes
+             if s.get("image_url") and not s["image_url"].startswith("data:")),
+            None,
+        )
+
         update: dict[str, Any] = {
             "title": title,
             "title_generated": True,
+            "cover_generated": False,  # scene fallback — not a proper generated cover
         }
         if cover_url:
             update["cover_image_url"] = cover_url
         await doc_ref.update(update)
-        logger.info("Auto-generated meta for %s: title=%r, cover=%s", story_id, title, bool(cover_url))
+        logger.info("Auto-generated meta for %s: title=%r, cover=scene_fallback", story_id, title)
         if websocket and safe_send:
             await safe_send(websocket, {
                 "type": "book_meta",
@@ -220,7 +237,6 @@ async def auto_generate_meta(
             })
     except Exception as e:
         logger.error("Auto meta generation failed for %s: %s", story_id, e)
-        # Still mark as done with fallbacks so Library never gets stuck
         try:
             db = get_db()
             doc_ref = db.collection("stories").document(story_id)

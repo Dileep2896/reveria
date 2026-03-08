@@ -40,6 +40,8 @@ StoryOrchestrator (SequentialAgent)
 
 Unlike a traditional sequential pipeline where the Narrator must fully complete before images/audio start, Reveria fires off image, audio, and Director commentary generation **per-scene** as each scene's text completes. This means the user sees Scene 1's image painting in while Scene 2's text is still streaming. The experience feels truly live and agentic.
 
+**Single scene generation**: Each prompt generates exactly one scene. This keeps the feedback loop tight — describe what you want, watch it materialize, steer, repeat. No batch of five scenes where the third one goes off-rails. The user is always one prompt away from the next scene, making the creative process feel like a conversation rather than a batch job.
+
 **Mid-generation steering**: Users can type direction changes (e.g. "make it scarier") while generation is active. The steering text is injected into the Narrator's history between scenes, so the next scene picks up the new direction seamlessly.
 
 **Director Live Commentary**: Each scene triggers a lightweight Gemini Flash analysis that streams a creative note (mood, tension level, craft observation) to the Director panel in real-time - before the full post-batch analysis arrives.
@@ -103,7 +105,7 @@ Story generation takes 15-30 seconds end-to-end. Making the user wait for a comp
 
 - Text arrives chunk-by-chunk as Gemini generates it
 - Images arrive as soon as Imagen completes each scene
-- Audio arrives per-scene from Cloud TTS
+- Audio arrives per-scene from Gemini Native Audio
 - Director analysis arrives as structured JSON
 
 The frontend renders each modality as it arrives. You see text flowing in, then images "painting" in with a shimmer effect, then audio becoming playable - all progressively. It feels alive.
@@ -120,7 +122,7 @@ The background task starts automatically after the first generation batch comple
 
 ### Art Style as a First-Class Citizen
 
-We offer 10 art styles: Cinematic, Watercolor, Comic Book, Anime, Pixar 3D, Studio Ghibli, Marvel Comic, Cyberpunk, Oil Painting, and Pencil Sketch. Each has a rich suffix with rendering-specific details (20-25 words):
+We offer **32+ art styles** spanning every template type — from cinematic digital painting and watercolor to manga ink, webtoon cel, pop art, and dark fantasy. Each has a rich suffix with rendering-specific details (20-25 words):
 
 ```python
 ART_STYLES = {
@@ -139,6 +141,7 @@ The art style is:
 - Used in book cover generation
 - Persisted per story in Firestore
 - Restored when reopening a story from the Library
+- **Curated per template** — each story template offers a subset of styles that suit its format (e.g., manga templates surface ink-and-screentone styles, storybook templates surface watercolor and painterly styles)
 
 This means if you created a watercolor story last week, opening it today shows "Watercolor" in the dropdown - and any new scenes you generate will match.
 
@@ -159,7 +162,7 @@ The user sees a clean error message, not garbled AI refusal text.
 
 ### The Flipbook
 
-We use `react-pageflip` for realistic page-turn animations. Each scene is a full page with:
+We use `react-pageflip` for realistic page-turn animations in **always-spread mode** — every story displays as a two-page spread, like an open book. Each scene is a full page with:
 - A scene image (16:9, with shimmer loading state)
 - A decorative drop-cap first letter
 - Story text with sentence-by-sentence reveal animation
@@ -167,6 +170,16 @@ We use `react-pageflip` for realistic page-turn animations. Each scene is a full
 - Scene title in italic serif
 
 Pages flip with arrow keys, dot navigation, or swipe gestures. The URL updates via `history.replaceState` so you can bookmark `/story/abc123?page=3` and return exactly there.
+
+### The Cinematic Book Opening
+
+New stories don't just appear — they *open*. The first generation triggers a carefully choreographed entrance sequence that makes the book feel like a physical object coming to life:
+
+1. **Closed-book illusion**: Before generation, the book sits closed with a faux spine and `clip-path` masking that hides the right-side pages. An idle violet glow pulses on the cover, signaling that something is about to happen.
+2. **Entrance bloom** (600ms): The book scales in with a brightness bloom at 60% and slight overshoot — like it's materializing from imagination.
+3. **Overlapping flip** (starts at 350ms): Before the entrance fully settles, the cover page begins flipping open. The entrance and flip overlap, creating one fluid motion rather than two distinct steps. The book appears *and* opens in a single breath.
+
+The timing was critical. Earlier iterations had the entrance finish (700ms) before the flip started (800ms delay) — a visible pause that broke the illusion. Overlapping the two animations by starting the flip at 350ms eliminated the gap entirely.
 
 ### Director Mode
 
@@ -192,6 +205,44 @@ While a cover is being generated, the book shows the scene image with a blur+gra
 ---
 
 ## New Features: Pushing the Boundaries
+
+### Story Templates: A Coverflow of Creative Formats
+
+One of the biggest leaps in Reveria's creative range was the introduction of **story templates** — 12+ curated formats that transform how stories are generated, illustrated, and presented.
+
+Templates aren't just labels. Each one bundles a unique cover design, curated art styles, formatting rules, and composition instructions into a cohesive creative package:
+
+- **Storybook** — Classic illustrated prose with decorative drop caps and painterly art
+- **Comic Book** — Bold panel compositions with character-dominant framing
+- **Manga** — Black-and-white ink with screentone shading and dramatic angles
+- **Webtoon** — Vertical-scroll aesthetic with clean cel shading and vibrant colors
+- **Hero Quest** — Epic fantasy with cinematic scale and dramatic lighting
+- **Noir Detective** — High-contrast shadows, rain-slicked streets, moody atmosphere
+- **Fairy Tale** — Soft watercolors, enchanted forests, whimsical characters
+- **Sci-Fi Chronicle** — Futuristic environments, holographic interfaces, volumetric lighting
+- **Horror** — Dark palettes, unsettling compositions, atmospheric tension
+- And more...
+
+The template selector uses a **3D coverflow carousel** — each template card tilts in perspective as you scroll, with the active template front-and-center at full scale. The cover designs are unique per template, giving each one a distinct visual identity before you've written a single word.
+
+When you select a template, three things happen:
+1. The art style dropdown filters to styles curated for that format
+2. The Narrator's system prompt adapts its tone and structure (fairy tales get "Once upon a time" pacing; noir gets clipped, hard-boiled prose)
+3. The scene composer switches composition instructions — visual narrative templates (Comic, Manga, Webtoon) use character-focused framing rules, while prose templates prioritize environmental storytelling
+
+### Text-Free Image Generation for Visual Narratives
+
+Comic Book, Manga, and Webtoon templates share a problem that plagued early versions: Imagen would render speech bubbles, sound effects, and caption text directly into the generated images. Art style descriptions containing phrases like "comic book panel art" and "graphic novel style" are strong signals to Imagen that the output should include text elements. The result was garbled, AI-generated text baked into otherwise beautiful illustrations.
+
+Our solution is a **triple-layer defense** against AI-rendered text:
+
+1. **Scene composer instruction**: The visual narrative scene composer explicitly instructs Gemini to compose scenes without any text, captions, or speech bubbles — pure visual storytelling.
+2. **Positive "text-free" prefix**: At the very start of the Imagen prompt (where attention weight is highest), we prepend "Text-free panel art:" before the character descriptions and scene composition. This positively frames the image as text-free rather than relying solely on negative constraints.
+3. **Art style suffix**: Every visual narrative art style includes "text-free panel art" in its suffix — reinforcing the instruction at the style level.
+
+On top of these three layers, a negative constraint `[NO text, NO speech bubbles, NO dialog bubbles, NO captions, NO letters]` is appended at the END of the prompt. We learned that putting negative constraints first consumed Imagen's attention budget and pushed character descriptions too far down in the prompt, degrading character consistency.
+
+All text overlay — narration captions, dialogue bubbles, sound effects — is handled separately by the app itself, using **Gemini Vision** to determine optimal text placement on the generated image. This separation of concerns means images stay clean and text stays sharp.
 
 ### Multi-Language Story Generation
 
@@ -229,17 +280,19 @@ Every saved story can be exported as a polished PDF storybook using `fpdf2`:
 
 The backend endpoint `GET /api/stories/{story_id}/pdf` downloads images from GCS, composites the PDF in memory, and returns it as a streaming response. Access control ensures only the owner (or anyone for public stories) can download.
 
-### Character Portrait Gallery
+### Character Portraits & Visual DNA
 
-After generating a story, the Director Panel offers a "Generate Portraits" button. This triggers a pipeline:
+Reveria's **anchor portrait system** generates character close-up portraits BEFORE scene images — not as an afterthought, but as a foundation for visual consistency. When the Narrator produces text mentioning characters, the Illustrator generates a 1:1 portrait for each named character via Imagen 3, then feeds that portrait to **Gemini Vision** for visual DNA extraction.
 
-1. **Parse character sheet** from the Illustrator's accumulated reference sheet (or auto-extract from story text if the sheet is empty)
-2. **Build portrait prompts** - "Close-up face portrait of {name}: {description}, {art_style}"
-3. **Generate via Imagen 3** at 1:1 aspect ratio
-4. **Upload to GCS** and send `portrait` WebSocket messages per character
-5. **Display** as a grid of circular thumbnails with name labels
+Visual DNA is a 100-150 word natural-language description of exactly what Imagen rendered — skin tone, hair texture, facial features, clothing details, color palette — extracted at temperature 0.1 for maximum precision. This description becomes the character's ground truth for all subsequent scene images, replacing the raw character sheet lines with descriptions anchored to an actual visual reference.
 
-The auto-extraction fallback was a critical fix. Some stories (especially ones with unnamed characters like "the detective" or "the ghost") returned NONE from the initial character extraction. The portrait system now re-extracts from the full story text as a fallback.
+The pipeline flow:
+1. **Portrait generation**: Imagen renders a character close-up from the character sheet description
+2. **Visual DNA extraction**: Gemini Vision analyzes the portrait and produces a detailed description of what it sees
+3. **Scene composition**: Subsequent scene prompts use the visual DNA (not the original text description) for character references
+4. **Persistence**: Visual DNA serializes with the Illustrator's state; portraits persist to Firestore via `ArrayUnion`
+
+The hero character is skipped for anchor portraits (since the user may have uploaded a reference photo), and post-batch portraits deduplicate against anchors to avoid redundant Imagen calls. The result: characters that look recognizably like *themselves* across every scene, because every scene's prompt is referencing a description derived from an actual rendered image rather than abstract text.
 
 ### Share Links & Public Viewing
 
@@ -488,6 +541,8 @@ The **VAD (Voice Activity Detection)** was the key UX breakthrough. Without it, 
 
 **Language-aware Director**: The Director speaks the story's language. For non-English stories, the system prompt appends language directives. Combined with configurable voice selection (8 voices from Charon to Zephyr), users get a personalized creative collaborator.
 
+**Seamless Director Chat during generation**: When the Director triggers story generation, per-scene `proactive_comment()` voice messages are skipped — instead, only `generation_wrapup()` fires at the end with a combined reaction covering all generated scenes plus a continuation prompt. This prevents audio messages from overlapping and interrupting the generation flow. The Director's voice orb switches to a "watching" state (eye icon with accent-primary pulse), and recording auto-resumes 800ms after generation completes.
+
 ### Settings Dialog: Centralized Configuration
 
 We replaced the standalone theme toggle button in the header with a **Settings Dialog** — a glassmorphism modal with two sections:
@@ -671,6 +726,10 @@ The key insight: avatars appear in 6+ places (header, dropdown, explore cards, b
 
 Best part: zero network requests. Boring Avatars generates SVGs client-side. No API dependency, no latency, no reliability concerns.
 
+### 21. Templates Are More Than Skins — They're Creative Constraints
+
+Adding 12+ story templates seemed like a cosmetic feature — pick a theme, get matching art. In practice, templates are a structural concern that reshapes the entire pipeline. A Manga template doesn't just swap the art style suffix; it changes the scene composer to use character-dominant framing, activates the text-free image defense stack, adjusts TTS to narrate only overlay text (not full prose), and shifts the Narrator's tone toward visual storytelling with shorter, punchier scene descriptions. The lesson: when a "configuration option" touches four or more pipeline stages, it's not configuration — it's a mode. Treat it as first-class architecture, not a dropdown value.
+
 ### 22. Scene Composition Should Tell the Story, Not Frame a Portrait
 
 Our Hero Mode lets users upload a selfie so their Visual DNA (appearance, build, clothing) gets injected into every scene's character sheet. But the original `SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION` was written to prioritize character appearance — every prompt started with "Medium shot portrait of..." and the character description took at least half the prompt, with the setting reduced to "2-3 details max."
@@ -689,11 +748,15 @@ Another was `asyncio.CancelledError` — Python's cancellation exception inherit
 
 The lesson: auditing code quality catches bugs in what you *wrote*. Auditing interaction flows catches bugs in what you *forgot*. Both are necessary — but if you only have time for one, test the flows a real user would take, especially the interrupted and concurrent ones.
 
-### 21. Use Native API Features Before Building Workarounds
+### 24. Use Native API Features Before Building Workarounds
 
-(Originally lesson 19.) Our Director Chat initially used 3-5 separate Gemini API calls per interaction: the Live session for conversation, `transcribe_audio()` for user speech, `transcribe_audio()` again for the Director's response, `detect_intent()` via Gemini Flash, and `suggest_prompt()` via Gemini Flash. This worked, but was slow, expensive, and fragile (a racy boolean flag, unbounded conversation logs, lossy transcription feeding intent detection).
+Our Director Chat initially used 3-5 separate Gemini API calls per interaction: the Live session for conversation, `transcribe_audio()` for user speech, `transcribe_audio()` again for the Director's response, `detect_intent()` via Gemini Flash, and `suggest_prompt()` via Gemini Flash. This worked, but was slow, expensive, and fragile (a racy boolean flag, unbounded conversation logs, lossy transcription feeding intent detection).
 
 The Gemini Live API natively supports `input_audio_transcription`, `output_audio_transcription`, function calling via `tools`, and `context_window_compression`. Enabling these four config options eliminated every extra API call and replaced our brittle intent detection with the model's own judgment. The lesson: before building workarounds (separate STT calls, external classifiers, manual context management), check if the API you're already using has native support. The platform team usually thought of it first.
+
+### 25. Defend Against AI Text in Images with Layered Constraints
+
+Negative prompting alone ("no text, no speech bubbles") is unreliable for preventing Imagen from rendering text into comic and manga art. The art style description itself triggers text generation — phrases like "comic book panel" and "graphic novel" are strong textual signals. The solution requires multiple reinforcing layers: a positive framing prefix ("Text-free panel art:") at the start of the prompt where attention is highest, clean art style suffixes that avoid text-triggering phrases, explicit scene composer instructions, AND negative constraints at the end. No single layer is reliable; together they're effective. The principle generalizes: when fighting model tendencies, attack from multiple angles rather than relying on a single instruction.
 
 ---
 
@@ -759,13 +822,59 @@ The result: **zero extra API calls per interaction** (was 3-5), no race conditio
 
 ---
 
+## Visual Narrative Templates: Comics, Manga & Webtoons
+
+One of the most exciting additions was **visual narrative templates** — Comic Book, Manga, and Webtoon formats that transform the storybook into a visual-first experience. Instead of traditional prose pages with illustrations, these templates put the image front-and-center with text overlays directly on the scene.
+
+### The Challenge: Characters Disappearing from Comics
+
+Our first comic generations looked stunning... but empty. Beautiful cityscapes, dramatic laboratories, ominous alleyways — all without a single character in frame. The scene composer was optimized for storybook layouts where characters share space with prose. For comics, characters need to dominate at least 60% of the frame.
+
+The fix was a dedicated `VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION` that first classifies whether a scene has characters or is setting-only, then applies different composition rules:
+
+- **Character scenes**: Characters fill 60%+ of frame, medium shot or close-up preferred, full physical appearance described, environment is secondary background
+- **Setting-only scenes**: Focus on architecture, atmosphere, dramatic angles — no forced character insertion
+
+A critical fallback handles edge cases: when character identification returns empty (common for short 30-50 word comic scenes), we inject the full character sheet if the scene contains dialogue or character name references. This ensures characters don't vanish from their own story.
+
+### Text Baked Into Images
+
+Comic art styles initially triggered Imagen to render speech bubbles, sound effects, and caption text right into the image. The culprit: art style descriptions containing phrases like "comic book panel art", "halftone dot texture", and "graphic novel style." These are strong textual signals to Imagen that the output should contain comic-style text elements.
+
+We cleaned every art style suffix to use non-text-triggering alternatives: "bold clean ink outlines", "cel shading", "dynamic composition" instead. The negative constraint `[NO text, NO speech bubbles, NO dialog bubbles, NO captions, NO letters]` is appended at the END of the prompt (not the beginning), because Imagen weights the start of prompts most heavily for subject matter — putting "no text" first consumed attention budget and pushed character descriptions too far down.
+
+On top of the cleaned suffixes and negative constraints, visual narrative templates deploy a **triple-layer text-free defense**: (1) the scene composer is explicitly instructed to describe pure visual scenes without any text elements, (2) a positive "Text-free panel art:" prefix is prepended at the very start of the Imagen prompt where attention weight is highest, and (3) "text-free panel art" appears in the art style suffix itself. All text overlay — narration captions, dialogue, sound effects — is handled separately by the app using Gemini Vision for optimal placement on the clean generated image.
+
+### Sequential Image → Audio for Visual Narratives
+
+For storybook templates, image and audio generation run in parallel per-scene. But visual narratives need a different pipeline: the text shown to the user is the condensed overlay text (~20 words), not the full scene prose (~50 words). The TTS should narrate only what the user reads on screen.
+
+The solution chains audio AFTER image generation for visual narratives. Once the image is ready (with its text overlays determined), we build a TTS script from the overlay text only, sorted top-to-bottom, left-to-right. The user hears exactly what they read — narration captions and dialog bubbles in reading order.
+
+### Split DNA for Character Consistency
+
+A subtle but impactful improvement: when a scene describes a character changing clothes ("she donned the armor"), the character sheet's outfit description conflicts with the narrative. The image ends up with a confused hybrid.
+
+We split character descriptions into **physical traits** (face, hair, skin, build — permanent) and **style traits** (outfit, signature items — changeable). When the scene text contains outfit-change keywords (`wearing`, `donned`, `changed into`, `disguise`), the style traits are stripped, letting the scene's own description take precedence while physical traits remain locked.
+
+---
+
 ## What's Next
 
-- **Demo video** — 4-minute walkthrough for submission
-- **Polish & edge cases** — Final round of UX polish, error handling hardening, and mobile responsiveness tuning
-- **Book layout preferences** — Let users choose between single-page and two-page spread layouts for different reading experiences
-- **Multi-voice narration** — Character-specific voices so dialogue scenes sound like distinct people, not one narrator doing all the parts
-- **Face mesh control** — `ControlReferenceImage` with `CONTROL_TYPE_FACE_MESH` for even stronger likeness preservation (deferred due to pose constraints in dynamic story scenes)
+### Character Consistency via Visual Anchor API
+The biggest remaining quality challenge. Even with our hybrid prompt architecture (verbatim character sheets, anti-drift anchoring, hex color codes, and vision-anchored visual DNA), characters can drift across scenes because each Imagen call is independent. Future approaches:
+- **Imagen's Visual Anchor API** (`CONTROL_TYPE_FACE_MESH`) — use the first scene's character render as a reference image for subsequent scenes. Deferred due to pose constraints in dynamic story scenes, but the most promising path.
+- **Dynamic weight adjustment** — boost character description weight in prompts when visual drift is detected between scenes
+- **Cross-scene visual DNA** — extract visual features from generated images and feed them back into subsequent scene prompts
+
+### Cinematic Video Scenes (Veo 2)
+Use Google Veo 2 API to generate short video clips for high-tension climax scenes. Trigger when the Director's `tension_level >= 8`. Auto-play on page flip with a golden "Cinematic" border treatment.
+
+### Floating Director Orb for Mobile
+Move the Director Chat voice orb out of the sidebar into a floating FAB (bottom-right) on mobile. Tap to expand into a bottom-sheet drawer showing the live transcript. Voice input is the most natural interaction on mobile.
+
+### Multi-Voice Narration
+Character-specific voices so dialogue scenes sound like distinct people, not one narrator doing all the parts. Map characters to Gemini voice presets based on personality traits from the Director's character analysis.
 
 ---
 

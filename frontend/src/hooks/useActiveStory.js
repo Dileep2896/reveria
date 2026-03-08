@@ -12,7 +12,7 @@ import {
 } from '../firebase';
 import { loadStoryById } from '../utils/storyHelpers';
 
-export default function useActiveStory(user, urlStoryId) {
+export default function useActiveStory(user, urlStoryId, { skip = false } = {}) {
   const [initialState, setInitialState] = useState(undefined);
   const [storyLoading, setStoryLoading] = useState(true);
   const hasLoaded = useRef(false);
@@ -28,6 +28,13 @@ export default function useActiveStory(user, urlStoryId) {
     // Only load once per user session - subsequent navigation uses handleOpenBook/load
     if (hasLoaded.current) return;
     hasLoaded.current = true;
+
+    // /new route — skip auto-resume, show template chooser
+    if (skip) {
+      setInitialState(null);
+      setStoryLoading(false);
+      return;
+    }
 
     setStoryLoading(true);
     setInitialState(undefined);

@@ -46,16 +46,6 @@ async def handle_resume(
             active_story_id = req_story_id
             generations_list: list[Any] = story_data.get("generations", [])
             batch_index = len(generations_list)
-            # Send persisted portraits to frontend
-            persisted_portraits = story_data.get("portraits", [])
-            if persisted_portraits:
-                for p in persisted_portraits:
-                    await _safe_send(websocket, {
-                        "type": "portrait",
-                        "name": p.get("name", ""),
-                        "image_url": p.get("image_url"),
-                    })
-                await _safe_send(websocket, {"type": "portraits_done"})
             logger.info("Resumed story %s (scene count: %d)", req_story_id, total_scene_count)
     return active_story_id, total_scene_count, batch_index
 

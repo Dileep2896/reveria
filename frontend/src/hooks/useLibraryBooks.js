@@ -54,6 +54,7 @@ export default function useLibraryBooks(user) {
             portraits: data.portraits || [],
             title_generated: !!data.title_generated
               || (Date.now() - (data.updated_at?.toDate?.()?.getTime() || 0) > 2 * 60 * 1000),
+            cover_generated: !!data.cover_generated,
           };
         });
         setBooks(results);

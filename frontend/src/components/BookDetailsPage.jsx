@@ -80,6 +80,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
             author_photo_url: data.author_photo_url,
             art_style: data.art_style || 'cinematic',
             language: data.language || 'English',
+            template: data.template || 'storybook',
             total_scene_count: data.total_scene_count || 0,
             is_public: true,
             status: 'completed',
@@ -117,6 +118,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
             author_photo_url: data.author_photo_url,
             art_style: data.art_style || 'cinematic',
             language: data.language || 'English',
+            template: data.template || 'storybook',
             total_scene_count: data.total_scene_count || 0,
             is_public: data.is_public || false,
             status: data.status || 'draft',
@@ -731,6 +733,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
           storyId={storyId}
           idToken={idToken}
           onExit={() => setReadingMode(false)}
+          template={storyData?.template || 'storybook'}
         />,
         document.body,
       )}

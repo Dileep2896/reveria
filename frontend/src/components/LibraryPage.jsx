@@ -172,6 +172,7 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
         title: data.title || b.title,
         cover_image_url: data.cover_image_url || b.cover_image_url,
         title_generated: true,
+        cover_generated: !!data.cover_image_url,
         _regenMeta: false,
       } : b));
       addToast('Cover & title regenerated!', 'success');

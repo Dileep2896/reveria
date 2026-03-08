@@ -90,6 +90,11 @@
   background: rgba(255,255,255,0.03); border-radius: 12px;
 }
 
+/* Visual narrative: image takes full body height */
+.rm-vn-wrap {
+  flex: 1 1 auto !important;
+}
+
 /* Ken Burns */
 .rm-kb-0 { animation: kb0 30s ease-in-out infinite alternate; }
 .rm-kb-1 { animation: kb1 28s ease-in-out infinite alternate; }

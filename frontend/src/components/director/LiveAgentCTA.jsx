@@ -1,6 +1,6 @@
-export default function LiveAgentCTA({ onStartChat }) {
+export default function LiveAgentCTA({ onStartChat, disabled }) {
   return (
-    <button onClick={onStartChat} className="live-agent-cta">
+    <button onClick={onStartChat} className="live-agent-cta" disabled={disabled} style={disabled ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'auto' } : undefined}>
       <div className="live-agent-cta-glow" />
       <div className="live-agent-cta-content">
         <div className="live-agent-orb">

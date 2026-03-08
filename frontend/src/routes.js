@@ -2,6 +2,7 @@
 
 export const ROUTES = {
   HOME: '/',
+  NEW: '/new',
   STORY: (id) => `/story/${id}`,
   STORY_PREFIX: '/story/',
   LIBRARY: '/library',

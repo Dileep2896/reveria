@@ -200,7 +200,10 @@
 /* Book depth shadow */
 .storybook-container .stf__wrapper {
   box-shadow: var(--book-shadow);
+  transition: box-shadow 0.5s ease;
 }
+
+/* (cover-centered inherits the same book-shadow from base rule above) */
 
 
 
@@ -266,84 +269,60 @@
    IDLE STATE - closed book + hint
    ============================================ */
 /* ============================================
-   COVER PAGE
+   COVER PAGE (uses BookCover from TemplateChooser)
    ============================================ */
-.book-page-cover {
-  background: var(--book-cover-bg);
-}
-
-/* Leather texture on cover */
-.book-page-cover::before {
-  opacity: 0.06;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
-}
-
-/* Cover frame border */
-.book-page-cover::after {
-  inset: 16px;
-  border: 1px solid var(--book-cover-frame);
-  border-radius: 3px;
-}
-
-/* Inner decorative frame */
-.book-cover-inner-frame {
-  position: absolute;
-  inset: 24px;
-  border: 1px solid var(--book-cover-frame);
-  border-radius: 2px;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.book-cover-content {
+.book-page-cover-host {
   position: relative;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
   width: 100%;
   height: 100%;
-  padding: calc(32px * var(--page-scale, 1));
-  text-align: center;
 }
 
-.book-cover-icon {
-  width: calc(68px * var(--page-scale, 1));
-  height: calc(68px * var(--page-scale, 1));
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
+.book-page-cover-host .tc-book {
+  pointer-events: none;
+  border-radius: 0;
+  cursor: default;
+  width: 100%;
+  height: 100%;
+}
+
+/* Hide spine inside flipbook once the book is open (not on cover) */
+.book-page-cover-host .tc-book-spine {
+  display: none;
+}
+
+/* Hide the left page slot when cover is showing (landscape mode) */
+.book-cover-centered .stf__wrapper {
+  clip-path: inset(0 0 0 50%);
+}
+.book-center-wrap:not(.book-cover-centered) .stf__wrapper {
+  clip-path: inset(0);
+  transition: clip-path 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Faux spine — sits at the left edge of the visible cover */
+.book-faux-spine {
+  position: absolute;
+  left: calc(50% - 14px);
+  width: 14px;
+  background: linear-gradient(180deg, #4a3070 0%, #2a1845 100%);
+  border-radius: 3px 0 0 3px;
+  box-shadow: inset -2px 0 4px rgba(0,0,0,0.3), -2px 0 8px rgba(0,0,0,0.2);
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Make the cover fill the entire page */
+.book-page-cover-host .tc-book-cover {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0;
+}
+
+/* Ensure the frame content fills the cover */
+.book-page-cover-host .tc-book-frame {
+  height: 100%;
   justify-content: center;
-  margin-bottom: 1.5rem;
-  background: var(--book-cover-accent);
-  border: 1px solid var(--book-cover-frame);
-  box-shadow: var(--shadow-glow-primary);
-}
-
-.book-cover-title {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: calc(32px * var(--page-scale, 1));
-  font-weight: 700;
-  color: var(--book-cover-text);
-  margin-bottom: 0.25rem;
-  letter-spacing: 0.03em;
-}
-
-.book-cover-ornament {
-  width: calc(60px * var(--page-scale, 1));
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
-  margin: calc(14px * var(--page-scale, 1)) auto;
-  opacity: 0.6;
-}
-
-.book-cover-subtitle {
-  font-size: calc(12.8px * var(--page-scale, 1));
-  color: var(--book-cover-text);
-  opacity: 0.5;
-  line-height: 1.7;
-  max-width: 260px;
 }
 
 /* ============================================
@@ -623,14 +602,24 @@
 }
 
 .storybook-entrance {
-  animation: bookEntrance 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bookEntrance 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes bookEntrance {
   0%   { opacity: 0; transform: translateY(20px) scale(0.96); filter: brightness(1); }
-  60%  { opacity: 1; transform: translateY(-2px) scale(1.01); filter: brightness(1.12); }
+  50%  { opacity: 1; transform: translateY(-2px) scale(1.01); filter: brightness(1.12); }
   100% { opacity: 1; transform: translateY(0) scale(1); filter: brightness(1); }
 }
+
+/* Centering wrapper — shifts book left so cover page appears centered */
+.book-center-wrap {
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.book-center-wrap.book-cover-centered {
+  transform: translateX(calc(var(--book-page-w, 0px) * -0.5 - 7px));
+}
+
 
 /* ---- Cover shimmer (diagonal sweep while generating) ---- */
 .book-cover-shimmer {

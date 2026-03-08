@@ -51,8 +51,9 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
   const [currentPage, setCurrentPage] = useState(initialPageRef.current);
   const bookSize = useBookSize(wrapperRef, singlePage);
 
-  const hasComposing = scenes.some((s) => s.image_url === null);
-  const showGenerating = generating && !hasComposing;
+  const scenesAtGenStart = useRef(0);
+  // Single-scene generation: no "Crafting..." placeholder needed
+  const showGenerating = false;
 
   /* ── Book entrance animation ── */
   const [entranceReady, setEntranceReady] = useState(false);
@@ -66,7 +67,6 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
 
   /* ── Auto-advance during generation ── */
   const lastFlipTarget = useRef(-1);
-  const scenesAtGenStart = useRef(0);
   const firstGenFlipDone = useRef(false);
   useEffect(() => {
     if (!bookRef.current) return;
@@ -84,10 +84,11 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
       firstGenFlipDone.current = true;
       const target = singlePage ? 1 : 1;
       lastFlipTarget.current = target;
-      // 800ms delay lets the 700ms entrance animation finish
+      // Start flip at 350ms — overlaps with entrance animation for one fluid motion
       setTimeout(() => {
+        setCurrentPage(target);
         try { bookRef.current.pageFlip().flip(target); } catch {}
-      }, 800);
+      }, 350);
     }
 
     // ── First generation, scene 2+: flip to new scene after cover flip done ──
@@ -189,14 +190,16 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
   const pageScale = bookSize ? bookSize.h / 640 : 1;
 
   /* ── Build fixed page array ── */
+  // Stable keys prevent React from issuing removeChild/insertBefore on DOM
+  // nodes that react-pageflip has rearranged during flip animations.
   const pageSlots = Math.max(MIN_PAGE_SLOTS, scenes.length + 2);
   const pages = [
-    <CoverPage key="cover" lang={lang} generating={generating && scenes.length === 0} />,
+    <CoverPage key="cover" lang={lang} generating={generating && scenes.length === 0} template={template} bookSize={bookSize} />,
     ...Array.from({ length: pageSlots }, (_, i) => {
       const pageIndex = i + 1;
       return (
         <ContentPage
-          key={i < scenes.length ? `scene-${scenes[i].scene_number}` : `slot-${i}`}
+          key={`slot-${i}`}
           scene={i < scenes.length ? scenes[i] : null}
           displayIndex={i < scenes.length ? i + 1 : undefined}
           isGenerating={i === scenes.length && showGenerating}
@@ -372,6 +375,10 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
             </div>
           );
         })()}
+        <div
+          className={`book-center-wrap${currentPage === 0 && !singlePage ? ' book-cover-centered' : ''}`}
+          style={{ '--book-page-w': `${bookSize.w}px` }}
+        >
         <div className={`storybook-container${!entranceReady ? ' storybook-entering' : ' storybook-entrance'}`}>
           <button
             className="book-nav-overlay book-nav-overlay-left"
@@ -384,6 +391,11 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
             </svg>
           </button>
 
+          {/* Faux spine — visible only when cover is centered */}
+          {!singlePage && currentPage === 0 && (
+            <div className="book-faux-spine" style={{ height: bookSize.h }} />
+          )}
+
           <div style={singlePage ? { maxWidth: bookSize.w + 1, margin: '0 auto' } : undefined}>
             <HTMLFlipBook
               key={singlePage ? 'portrait' : 'landscape'}
@@ -395,7 +407,7 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
               startPage={initialPageRef.current}
               drawShadow={true}
               maxShadowOpacity={theme === 'light' ? 0.12 : 0.5}
-              flippingTime={500}
+              flippingTime={700}
               usePortrait={singlePage}
               startZIndex={0}
               autoSize={true}
@@ -421,6 +433,7 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
+        </div>
         </div>
         </>
       )}

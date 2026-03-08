@@ -81,9 +81,52 @@ DIRECTOR_CHAT_SYSTEM = (
 )
 
 
-def build_system_prompt(language: str = "English") -> str:
-    """Build language-aware system prompt for the Director."""
+TEMPLATE_CREATIVE_GUIDANCE = {
+    "storybook": (
+        "The user is creating an ILLUSTRATED STORYBOOK — a flipbook with rich scene images. "
+        "Think vivid visual moments, clear scene breaks, and descriptive prose that pairs with illustrations."
+    ),
+    "comic": (
+        "The user is creating a COMIC BOOK — bold panels with dynamic action compositions. "
+        "Think dramatic poses, speech bubbles, onomatopoeia, panel-to-panel pacing, and visual storytelling."
+    ),
+    "webtoon": (
+        "The user is creating a WEBTOON — vertical scroll format with clean digital art. "
+        "Think cliffhanger panel endings, expressive character close-ups, romance/drama beats, and scroll-stopping moments."
+    ),
+    "hero": (
+        "The user is creating a HERO QUEST — an epic adventure where they ARE the protagonist. "
+        "Think second-person narrative, dramatic choices, quest objectives, and cinematic action set-pieces."
+    ),
+    "manga": (
+        "The user is creating a MANGA — Japanese-style with dramatic paneling. "
+        "Think manga tropes, speed lines, reaction shots, dramatic reveals, and chapter-style pacing."
+    ),
+    "novel": (
+        "The user is creating a NOVEL — long-form prose with chapters. "
+        "Think deeper character development, internal monologue, literary devices, and scene-setting prose."
+    ),
+    "diary": (
+        "The user is creating a DIARY — first-person journal entries. "
+        "Think intimate voice, dated entries, raw emotions, personal reflections, and slice-of-life moments."
+    ),
+    "poetry": (
+        "The user is creating POETRY — illustrated verse with atmosphere. "
+        "Think imagery, metaphor, rhythm, line breaks, emotional resonance, and evocative language."
+    ),
+    "photojournal": (
+        "The user is creating a PHOTO JOURNAL — documentary style with photorealistic scenes. "
+        "Think reportage, observational detail, real-world settings, and narrative captions."
+    ),
+}
+
+
+def build_system_prompt(language: str = "English", template: str = "storybook") -> str:
+    """Build language-aware, template-aware system prompt for the Director."""
     base = DIRECTOR_CHAT_SYSTEM
+    guidance = TEMPLATE_CREATIVE_GUIDANCE.get(template)
+    if guidance:
+        base += f"\n\nFORMAT CONTEXT: {guidance}"
     base += (
         " IMPORTANT: Always respond in the same language the user speaks in. "
         "If the user speaks Hindi, reply in Hindi. If they speak Spanish, reply in Spanish. "

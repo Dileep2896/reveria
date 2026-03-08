@@ -99,29 +99,19 @@ export function createWsHandlers({
         return true;
       }
 
-      case 'panel_image':
-        if (!storyIdRef.current) return true;
-        setScenes((prev) =>
-          prev.map((scene) => {
-            if (scene.scene_number !== data.scene_number) return scene;
-            const panels = [...(scene.panel_images || [])];
-            panels[data.panel_index] = { url: data.content, composition: data.composition };
-            return {
-              ...scene,
-              panel_images: panels,
-              // Set image_url to first panel for backward compat (covers, thumbnails)
-              ...(data.panel_index === 0 ? { image_url: data.content } : {}),
-            };
-          }),
-        );
-        return true;
-
       case 'image':
         if (!storyIdRef.current) return true;
         setScenes((prev) =>
           prev.map((scene) =>
             scene.scene_number === data.scene_number
-              ? { ...scene, image_url: data.content, image_tier: data.tier || 1, image_brief: data.image_brief || null }
+              ? {
+                  ...scene,
+                  image_url: data.content,
+                  image_tier: data.tier || 1,
+                  image_brief: data.image_brief || null,
+                  // Preserve existing text_overlays if message doesn't provide new ones
+                  ...(data.text_overlays ? { text_overlays: data.text_overlays } : {}),
+                }
               : scene,
           ),
         );
@@ -394,6 +384,7 @@ export function createWsHandlers({
             artStyle: data.art_style,
             sceneCount: data.scene_count,
             language: data.language,
+            template: data.template,
           });
         }
         return true;

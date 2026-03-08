@@ -22,6 +22,7 @@ export default function AppHeader({
   user, signOut,
   isAdmin,
   userTier,
+  template, heroMode,
 }) {
   // On /book/ pages, hide all story-specific action buttons
   const isNonStoryPage = isLibrary || isExplore || isBookPage;
@@ -120,7 +121,7 @@ export default function AppHeader({
         {/* New Story - only visible when there's content in story view */}
         {!isNonStoryPage && !viewingReadOnly && scenes.length > 0 && !generating && (
           <button
-            onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate(ROUTES.HOME); }}
+            onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate(ROUTES.NEW); }}
             disabled={saving || generatingCover}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{

@@ -160,6 +160,12 @@ body {
 /* ---- Director Panel ---- */
 .director-panel {
   width: clamp(260px, 24vw, 380px);
+  animation: directorPanelIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+@keyframes directorPanelIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 .director-panel.director-panel--wide {
   width: clamp(300px, 28vw, 440px);
@@ -182,6 +188,12 @@ body {
   padding: clamp(0.35rem, 1vw, 0.75rem) clamp(0.5rem, 1.5vw, 1rem);
   flex-shrink: 0;
   z-index: 20;
+  animation: controlBarIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes controlBarIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Custom art-style dropdown */

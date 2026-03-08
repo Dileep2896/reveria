@@ -14,7 +14,6 @@ from agents.narrator import Narrator
 from agents.illustrator import Illustrator
 from agents.director import Director
 from agents.shared_state import SharedPipelineState
-from services.imagen_client import generate_image
 from services.multi_voice_tts import synthesize_multi_voice
 from services.storage_client import upload_media
 from templates.registry import get_template
@@ -43,10 +42,6 @@ class NarratorADKAgent(BaseAgent):
         pending_tasks: list[asyncio.Task] = []
         characters_extracted = False
 
-        # Event signaling anchor portraits + visual DNA are ready
-        anchor_done = asyncio.Event()
-        first_scene_number: int | None = None
-
         limit = s.scene_count
         limit_hit = False
 
@@ -73,28 +68,29 @@ class NarratorADKAgent(BaseAgent):
 
         async def _on_scene_ready(scene: dict) -> None:
             """Fire per-scene image, audio, and director live tasks."""
-            nonlocal characters_extracted, first_scene_number
+            nonlocal characters_extracted
             # Character extraction: run once when first scene arrives
             if not characters_extracted:
                 characters_extracted = True
-                first_scene_number = scene["scene_number"]
                 story_so_far = "\n\n".join(sc["text"] for sc in scenes)
                 self.illustrator.accumulate_story(story_so_far)
                 await self.illustrator.extract_characters(story_so_far)
-                # Fire anchor portraits as background task (non-blocking)
-                # Scene 1 uses text-only character sheet; Scene 2+ awaits visual DNA
-                pending_tasks.append(asyncio.create_task(
-                    self._generate_anchor_portraits_async(anchor_done)
-                ))
 
-            # Image (serialised via semaphore)
-            pending_tasks.append(asyncio.create_task(
-                self._generate_image(scene, anchor_done=anchor_done, first_scene_number=first_scene_number)
-            ))
-            # Audio
-            pending_tasks.append(asyncio.create_task(
-                self._generate_audio(scene)
-            ))
+            is_visual_narrative = get_template(s.template).visual_narrative
+            if is_visual_narrative:
+                # Visual narrative: image first (determines text overlays),
+                # then audio reads ONLY the overlay text (not full scene prose)
+                pending_tasks.append(asyncio.create_task(
+                    self._generate_image_then_audio(scene)
+                ))
+            else:
+                # Standard: image + audio in parallel
+                pending_tasks.append(asyncio.create_task(
+                    self._generate_image(scene)
+                ))
+                pending_tasks.append(asyncio.create_task(
+                    self._generate_audio(scene)
+                ))
             # Director live commentary (only when Director-triggered generation)
             if s.director_enabled:
                 pending_tasks.append(asyncio.create_task(
@@ -177,221 +173,33 @@ class NarratorADKAgent(BaseAgent):
         s.scenes = scenes
         s.full_story = "\n\n".join(sc["text"] for sc in scenes)
 
-        # Wait for all per-scene tasks to finish
+        # Wait for all pending tasks (images + portraits, audio, director)
         if pending_tasks:
             await asyncio.gather(*pending_tasks, return_exceptions=True)
 
         yield Event(author=self.name)
 
-    # ── Anchor portrait generation ──────────────────────────────────
-
-    async def _generate_anchor_portraits_async(self, done_event: asyncio.Event) -> None:
-        """Generate anchor portraits in the background and signal completion.
-
-        Non-blocking — Scene 1 proceeds with text-only character sheet while
-        portraits generate. Scene 2+ can await done_event to get visual DNA.
-        """
-        try:
-            await self._generate_anchor_portraits()
-        finally:
-            done_event.set()
-
-    async def _generate_anchor_portraits(self) -> None:
-        """Generate anchor portraits for new characters and analyze with Gemini Vision.
-
-        For each character without visual DNA:
-        1. Generate a close-up portrait via Imagen
-        2. Analyze the portrait with Gemini Vision to extract precise visual description
-        3. Store visual DNA on the illustrator for use in all subsequent scene images
-        """
-        s = self.shared
-        sheet = self.illustrator._character_sheet
-        if not sheet:
-            return
-
-        # Parse character names from sheet
-        characters = []
-        for line in sheet.strip().splitlines():
-            if ":" in line:
-                name = line.split(":", 1)[0].strip()
-                desc = line.split(":", 1)[1].strip()
-                if name and desc and len(name) < 50:
-                    characters.append({"name": name, "description": desc})
-
-        if not characters:
-            return
-
-        # Determine existing portrait count for GCS index offset
-        existing_anchor_count = len(self.illustrator._anchor_portraits)
-
-        for idx, char in enumerate(characters):
-            name = char["name"]
-            # Skip characters that already have visual DNA (from previous batch)
-            if name.lower() in self.illustrator._visual_dna:
-                continue
-            # Skip hero character — already has photo-based description
-            if s.hero_name and name.lower() == s.hero_name.lower():
-                continue
-
-            try:
-                # Build portrait prompt from character sheet description
-                clean_desc = self.illustrator._strip_hex_codes(char["description"])
-                prompt = (
-                    f"{clean_desc}. "
-                    f"Close-up face portrait of {name}, head and shoulders, "
-                    f"looking at the viewer, detailed facial features, expressive eyes, "
-                    f"{self.illustrator.art_style_suffix}"
-                )
-
-                image_data, error_reason = await generate_image(prompt, aspect_ratio="1:1", uid=s.uid)
-                if not image_data:
-                    logger.warning("Anchor portrait failed for %s: %s", name, error_reason)
-                    continue
-
-                # Analyze with Gemini Vision to get precise visual description
-                visual_desc = await self.illustrator.analyze_visual_dna(image_data, name)
-                if visual_desc:
-                    self.illustrator._visual_dna[name.lower()] = visual_desc
-
-                # Upload to GCS and send to frontend
-                gcs_index = 900 + existing_anchor_count + idx
-                try:
-                    gcs_url = await upload_media(s.story_id, gcs_index, "portrait", image_data)
-                except Exception as e:
-                    logger.error("GCS upload failed for anchor portrait %s: %s", name, e)
-                    continue
-
-                # Send portrait WS message to frontend (same format as portrait_service)
-                if s.ws_callback:
-                    await s.ws_callback({
-                        "type": "portrait",
-                        "name": name,
-                        "image_url": gcs_url,
-                    })
-
-                # Track for Firestore persistence
-                self.illustrator._anchor_portraits.append({
-                    "name": name,
-                    "image_url": gcs_url,
-                })
-
-            except Exception as e:
-                logger.error("Anchor portrait error for %s: %s", name, e)
-                # Continue — character falls back to text-based DNA
-
-        if self.illustrator._anchor_portraits:
-            logger.info(
-                "Generated %d anchor portraits with visual DNA",
-                len(self.illustrator._anchor_portraits),
-            )
-
     # ── Per-scene helpers ──────────────────────────────────────────
 
-    async def _generate_image(
-        self,
-        scene: dict,
-        *,
-        anchor_done: asyncio.Event | None = None,
-        first_scene_number: int | None = None,
-    ) -> None:
-        """Generate and upload image for a single scene.
-
-        For visual narrative templates (comic/manga/webtoon), generates per-panel
-        images and sends progressive panel_image WS messages. For other templates,
-        generates a single image as before.
-
-        Scene 1 proceeds immediately with text-only character descriptions.
-        Scene 2+ awaits anchor_done to benefit from vision-anchored visual DNA.
-        """
+    async def _generate_image(self, scene: dict) -> None:
+        """Generate and upload image for a single scene, then extract portraits."""
         s = self.shared
         scene_num = scene["scene_number"]
-        is_visual_narrative = get_template(s.template).visual_narrative
-
-        # For scenes after the first, wait for anchor portraits to finish
-        # so they benefit from vision-anchored character descriptions
-        if anchor_done and first_scene_number and scene_num != first_scene_number:
-            try:
-                await asyncio.wait_for(anchor_done.wait(), timeout=120)
-            except asyncio.TimeoutError:
-                logger.warning("Anchor portrait timeout for scene %d, proceeding with text-only", scene_num)
-
-        # ── Visual narrative: per-panel generation ──
-        if is_visual_narrative:
-            try:
-                panels = await self.illustrator.generate_panels(scene["text"], uid=s.uid)
-                if not panels:
-                    if s.ws_callback:
-                        await s.ws_callback({
-                            "type": "image_error",
-                            "scene_number": scene_num,
-                            "reason": "generation_failed",
-                        })
-                    return
-
-                panel_images = []
-                for i, panel in enumerate(panels):
-                    image_data = panel.get("image_data")
-                    composition = panel.get("composition", "")
-                    if image_data:
-                        try:
-                            gcs_url = await upload_media(
-                                s.story_id, scene_num, "image", image_data,
-                                suffix=f"_panel_{i}",
-                            )
-                        except Exception as e:
-                            logger.error("GCS panel upload error scene %d panel %d: %s", scene_num, i, e)
-                            gcs_url = image_data  # fallback to data URL
-
-                        panel_images.append({"url": gcs_url, "composition": composition})
-
-                        # Set image_url to first panel for backward compat
-                        if i == 0:
-                            scene["image_url"] = gcs_url
-
-                        # Progressive WS message per panel
-                        if s.ws_callback:
-                            await s.ws_callback({
-                                "type": "panel_image",
-                                "scene_number": scene_num,
-                                "panel_index": i,
-                                "content": gcs_url,
-                                "composition": composition,
-                            })
-                    else:
-                        panel_images.append({"url": None, "composition": composition})
-                        logger.warning(
-                            "Panel %d failed for scene %d: %s",
-                            i, scene_num, panel.get("error_reason"),
-                        )
-
-                scene["panel_images"] = panel_images
-                scene["image_tier"] = 1
-
-                # Also send standard image message with first panel for backward compat
-                if scene.get("image_url") and s.ws_callback:
-                    await s.ws_callback({
-                        "type": "image",
-                        "scene_number": scene_num,
-                        "tier": 1,
-                        "content": scene["image_url"],
-                    })
-
-            except Exception as e:
-                logger.error("Panel generation error for scene %d: %s", scene_num, e)
-                if s.ws_callback:
-                    await s.ws_callback({
-                        "type": "image_error",
-                        "scene_number": scene_num,
-                        "reason": "generation_failed",
-                    })
-            return
-
-        # ── Standard single-image generation ──
         try:
             image_data, error_reason, tier, scene_composition = await self.illustrator.generate_for_scene(scene["text"], uid=self.shared.uid)
             scene["image_tier"] = tier
             if scene_composition:
                 scene["image_brief"] = scene_composition
+
+            # Text overlay placement for visual narrative templates
+            text_overlays = None
+            if image_data and get_template(s.template).visual_narrative:
+                text_overlays = await self.illustrator.analyze_text_placement(
+                    image_data, scene["text"], template=s.template
+                )
+                if text_overlays:
+                    scene["text_overlays"] = text_overlays
+
             if s.ws_callback:
                 if image_data:
                     img_msg = {
@@ -400,6 +208,8 @@ class NarratorADKAgent(BaseAgent):
                         "tier": tier,
                         "image_brief": scene_composition,
                     }
+                    if text_overlays:
+                        img_msg["text_overlays"] = text_overlays
                     try:
                         gcs_url = await upload_media(s.story_id, scene_num, "image", image_data)
                         scene["image_url"] = gcs_url
@@ -410,6 +220,8 @@ class NarratorADKAgent(BaseAgent):
                         scene["image_url"] = image_data
                         img_msg["content"] = image_data
                         await s.ws_callback(img_msg)
+
+                    # Portraits disabled — face-crop quality insufficient (future work)
                 else:
                     await s.ws_callback({
                         "type": "image_error",
@@ -426,13 +238,111 @@ class NarratorADKAgent(BaseAgent):
                     "reason": "generation_failed",
                 })
 
+    async def _extract_portraits_from_scene(self, scene: dict, image_data: str) -> None:
+        """Detect and crop character faces from a scene image as portraits.
+
+        For each new character face found:
+        1. Crop from scene image (guaranteed visual consistency)
+        2. Analyze visual DNA with Gemini Vision
+        3. Upload to GCS and send portrait WS message
+        """
+        s = self.shared
+        try:
+            # Identify characters in this scene
+            scene_characters = await self.illustrator._identify_scene_characters(scene["text"])
+            if not scene_characters:
+                return
+
+            # Filter to characters that don't have portraits yet
+            new_chars = [
+                name for name in scene_characters
+                if name.lower() not in self.illustrator._portrait_extracted
+                and not (s.hero_name and name.lower() == s.hero_name.lower())
+            ]
+            if not new_chars:
+                return
+
+            # Detect faces and crop
+            cropped_faces = await self.illustrator.detect_and_crop_portraits(image_data, new_chars)
+            if not cropped_faces:
+                return
+
+            existing_anchor_count = len(self.illustrator._anchor_portraits)
+
+            for idx, face in enumerate(cropped_faces):
+                name = face["name"]
+                face_data = face["image_data"]
+
+                # Mark as extracted immediately to prevent duplicates
+                self.illustrator._portrait_extracted.add(name.lower())
+
+                # Analyze visual DNA from the cropped face
+                visual_desc = await self.illustrator.analyze_visual_dna(face_data, name)
+                if visual_desc:
+                    self.illustrator._visual_dna[name.lower()] = visual_desc
+
+                # Upload to GCS
+                gcs_index = 900 + existing_anchor_count + idx
+                try:
+                    gcs_url = await upload_media(s.story_id, gcs_index, "portrait", face_data)
+                except Exception as e:
+                    logger.error("GCS upload failed for cropped portrait %s: %s", name, e)
+                    continue
+
+                # Send portrait WS message
+                if s.ws_callback:
+                    await s.ws_callback({
+                        "type": "portrait",
+                        "name": name,
+                        "image_url": gcs_url,
+                    })
+
+                # Track for Firestore persistence
+                self.illustrator._anchor_portraits.append({
+                    "name": name,
+                    "image_url": gcs_url,
+                })
+
+            if cropped_faces:
+                logger.info(
+                    "Extracted %d face-crop portraits from scene %d",
+                    len(cropped_faces), scene["scene_number"],
+                )
+
+        except Exception as e:
+            logger.error("Portrait extraction error for scene %d: %s", scene["scene_number"], e)
+
+    async def _generate_image_then_audio(self, scene: dict) -> None:
+        """For visual narratives: generate image first (to get text overlays),
+        then generate audio that reads ONLY the overlay text."""
+        await self._generate_image(scene)
+
+        # Build TTS script from the text overlays (what the user actually sees)
+        overlays = scene.get("text_overlays")
+        if overlays:
+            # Sort by vertical position for natural reading order
+            sorted_overlays = sorted(overlays, key=lambda o: (o.get("y", 0), o.get("x", 0)))
+            tts_parts = []
+            for ov in sorted_overlays:
+                text = ov.get("text", "").strip()
+                if text:
+                    tts_parts.append(text)
+            if tts_parts:
+                scene["_tts_script"] = " ".join(tts_parts)
+                logger.info("Visual narrative TTS script (%d words): %s",
+                            len(scene["_tts_script"].split()), scene["_tts_script"][:120])
+
+        await self._generate_audio(scene)
+
     async def _generate_audio(self, scene: dict) -> None:
         """Generate and upload audio for a single scene."""
         s = self.shared
         scene_num = scene["scene_number"]
+        # For visual narratives, use the overlay text (what's shown) instead of full prose
+        tts_text = scene.get("_tts_script") or scene["text"]
         try:
             audio_data, word_timestamps = await synthesize_multi_voice(
-                scene["text"],
+                tts_text,
                 character_sheet=self.illustrator._character_sheet,
                 language=s.language,
             )
@@ -477,28 +387,10 @@ class NarratorADKAgent(BaseAgent):
                 if suggestion:
                     s.director_suggestion = suggestion
 
-                # Route voice through Director Chat if active
-                if s.director_chat_session:
-                    try:
-                        chat_result = await s.director_chat_session.proactive_comment(
-                            scene["text"], scene["scene_number"]
-                        )
-                        if chat_result.get("audio_url") and s.ws_callback:
-                            await s.ws_callback({
-                                "type": "director_chat_response",
-                                "audio_url": chat_result["audio_url"],
-                            })
-                    except Exception as e:
-                        logger.warning("Director Chat proactive failed, falling back: %s", e)
-                        # Fallback to standalone voice
-                        audio_url = await self.director.live_commentary(
-                            scene_text=scene["text"],
-                            scene_number=scene["scene_number"],
-                            context=context,
-                        )
-                        if audio_url:
-                            note["audio_url"] = audio_url
-                else:
+                # Skip per-scene voice when Director Chat is active —
+                # generation_wrapup() handles the combined reaction + continuation prompt
+                # to avoid audio messages stepping on each other.
+                if not s.director_chat_session:
                     # No active chat — use standalone voice generation
                     audio_url = await self.director.live_commentary(
                         scene_text=scene["text"],

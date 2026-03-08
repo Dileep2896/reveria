@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-export default function useDirectorAutoGenerate(directorAutoGenerate, send, setDirectorAutoGenerate, generating, currentArtStyle) {
+export default function useDirectorAutoGenerate(directorAutoGenerate, send, setDirectorAutoGenerate, generating, currentArtStyle, currentTemplate) {
   useEffect(() => {
     if (!directorAutoGenerate) return;
     // Don't fire if already generating — would be rejected by backend anyway
@@ -11,10 +11,11 @@ export default function useDirectorAutoGenerate(directorAutoGenerate, send, setD
         artStyle: currentArtStyle || directorAutoGenerate.artStyle,
         sceneCount: directorAutoGenerate.sceneCount,
         language: directorAutoGenerate.language,
+        template: currentTemplate || 'storybook',
         fromDirector: true,
       });
       setDirectorAutoGenerate(null);
     }, 5000);
     return () => clearTimeout(timer);
-  }, [directorAutoGenerate, send, setDirectorAutoGenerate, generating, currentArtStyle]);
+  }, [directorAutoGenerate, send, setDirectorAutoGenerate, generating, currentArtStyle, currentTemplate]);
 }

@@ -86,6 +86,7 @@ class DirectorChatSession:
         story_context: str,
         language: str = "English",
         voice_name: str = "Charon",
+        template: str = "storybook",
     ) -> dict:
         """Open a Live session and get the Director's greeting.
 
@@ -93,7 +94,7 @@ class DirectorChatSession:
         """
         self.language = language
         client = get_client()
-        system_prompt = _build_system_prompt(language)
+        system_prompt = _build_system_prompt(language, template=template)
 
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
@@ -441,17 +442,21 @@ class DirectorChatSession:
                 logger.error("proactive_comment failed for scene %d: %s", scene_number, e)
                 return dict(_EMPTY_RESPONSE)
 
-    async def generation_wrapup(self, scene_count: int) -> dict:
-        """Post-generation wrap-up — Director summarizes and invites continuation."""
+    async def generation_wrapup(self, scene_count: int, scene_texts: list[str] | None = None) -> dict:
+        """Post-generation wrap-up — Director reacts to scene and invites continuation."""
         if not self._session:
             return dict(_EMPTY_RESPONSE)
 
         async with self._session_lock:
             try:
+                # Include scene text so Director can react specifically
+                scene_block = ""
+                if scene_texts:
+                    scene_block = "\n\nHere's what was just written:\n" + "\n---\n".join(scene_texts) + "\n\n"
                 prompt = (
-                    f"[All {scene_count} scene(s) just finished generating! "
-                    "Briefly tell the user what you thought of the result (1-2 sentences) "
-                    "and ask what they'd like to do next \u2014 continue the story, change direction, etc. "
+                    f"[The scene just finished generating!{scene_block}"
+                    "React to the scene with a brief, vivid comment (1-2 sentences) "
+                    "and ask what they'd like to do next — continue the story, change direction, etc. "
                     "Do NOT call generate_story.]"
                 )
                 content = types.Content(

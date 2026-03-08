@@ -12,7 +12,7 @@ import LiveNoteItem from './director/LiveNoteItem';
 import useDirectorAudioPlayback from '../hooks/useDirectorAudioPlayback';
 
 export default function DirectorPanel({
-  singlePage = false, heroMode,
+  singlePage = false, heroMode, template,
   data, generating, sceneNumbers, sceneTitles, imageTiers,
   portraits = [], portraitsLoading = false, language, liveNotes = [],
   chatActive, chatMessages = [], chatLoading, chatPrompt,
@@ -152,7 +152,7 @@ export default function DirectorPanel({
       )}
 
       {/* Live Agent CTA */}
-      {!chatActive && <LiveAgentCTA onStartChat={onStartChat} />}
+      {!chatActive && <LiveAgentCTA onStartChat={onStartChat} disabled={template === 'hero' && !heroMode?.active} />}
 
       {/* Voice chat orb — above the notes */}
       {chatActive && (

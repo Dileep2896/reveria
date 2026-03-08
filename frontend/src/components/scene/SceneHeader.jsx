@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useSceneActions } from '../../contexts/SceneActionsContext';
+import useCompactAudio from '../../hooks/useCompactAudio';
 import IconBtn from '../IconBtn';
 import Tooltip from '../Tooltip';
 
-export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, isBusy, onRegenSceneStart }) {
+export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, isBusy, onRegenSceneStart, visualNarrative }) {
   const { regenScene, deleteScene, isReadOnly, canRegen } = useSceneActions();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { audioRef, playing, togglePlay } = useCompactAudio(scene.audio_url);
 
   return (
   <>
@@ -25,6 +27,29 @@ export default function SceneHeader({ scene, scale, displayIndex, isBookmarked, 
       >
         Scene {displayIndex ?? scene.scene_number}
       </span>
+      {/* Audio play button for visual narrative templates */}
+      {visualNarrative && scene.audio_url && (
+        <>
+          <audio ref={audioRef} src={scene.audio_url} preload="none" />
+          <IconBtn
+            label={playing ? 'Pause narration' : 'Play narration'}
+            size={18 * scale}
+            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+            style={{ marginLeft: `${3 * scale}px`, verticalAlign: 'middle', display: 'inline-flex' }}
+          >
+            {playing ? (
+              <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16" rx="1" />
+                <rect x="14" y="4" width="4" height="16" rx="1" />
+              </svg>
+            ) : (
+              <svg width={9 * scale} height={9 * scale} viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="6,4 20,12 6,20" />
+              </svg>
+            )}
+          </IconBtn>
+        </>
+      )}
       {isBookmarked && (
         <Tooltip label="Bookmarked">
         <span
