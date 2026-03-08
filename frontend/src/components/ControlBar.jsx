@@ -1,20 +1,111 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import useVoiceCapture from '../hooks/useVoiceCapture';
-import { ART_STYLES } from '../data/artStyles';
-import { LANGUAGES, PLACEHOLDERS } from '../data/languages';
+import { ART_STYLES, ART_STYLE_MAP } from '../data/artStyles';
+import { getTemplate } from '../data/templates';
+import { PLACEHOLDERS } from '../data/languages';
+import { useToast } from '../contexts/ToastContext';
+import Tooltip from './Tooltip';
 
-export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, setLanguage, languageLocked, usage }) {
+export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, usage, onHeroPhoto, heroMode, template = 'storybook' }) {
+  const { addToast } = useToast();
   const [focused, setFocused] = useState(false);
-  const [sceneCount, setSceneCount] = useState(2);
+  const [heroPhoto, setHeroPhotoRaw] = useState(() => {
+    try { return localStorage.getItem('storyforge-hero-photo'); } catch { return null; }
+  });
+  const setHeroPhoto = useCallback((v) => {
+    setHeroPhotoRaw(v);
+    try { if (v) localStorage.setItem('storyforge-hero-photo', v); else localStorage.removeItem('storyforge-hero-photo'); } catch { /* quota */ }
+  }, []);
+  const [heroLoading, setHeroLoading] = useState(false);
+  const [heroName, setHeroNameRaw] = useState(() => {
+    try { return localStorage.getItem('storyforge-hero-name') || ''; } catch { return ''; }
+  });
+  const setHeroName = useCallback((v) => {
+    setHeroNameRaw(v);
+    try { if (v) localStorage.setItem('storyforge-hero-name', v); else localStorage.removeItem('storyforge-hero-name'); } catch { /* quota */ }
+  }, []);
+  // Name dialog state: pending file data before sending
+  const [pendingPhoto, setPendingPhoto] = useState(null);
+  const nameDialogInputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const sceneCount = 1;
   const [styleOpen, setStyleOpen] = useState(false);
-  const [langOpen, setLangOpen] = useState(false);
   const [menuPos, setMenuPos] = useState(null);
-  const [langMenuPos, setLangMenuPos] = useState(null);
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
-  const langTriggerRef = useRef(null);
-  const langMenuRef = useRef(null);
+
+  const heroActive = !!heroMode?.active;
+  const prevHeroActive = useRef(false);
+
+  // Auto-switch to trend style when hero mode activates
+  useEffect(() => {
+    if (heroActive && !prevHeroActive.current) {
+      const isTrend = ART_STYLES.find(s => s.key === artStyle)?.trend;
+      if (!isTrend) setArtStyle('ghibli');
+      setHeroLoading(false);
+      // Restore name from server on resume
+      if (heroMode?.heroName) setHeroName(heroMode.heroName);
+    }
+    if (!heroActive && prevHeroActive.current) {
+      setHeroLoading(false);
+      setHeroName('');
+      // Reset to default style when hero mode deactivates
+      const isTrend = ART_STYLES.find(s => s.key === artStyle)?.trend;
+      if (isTrend) setArtStyle('cinematic');
+    }
+    prevHeroActive.current = heroActive;
+  }, [heroActive, artStyle, setArtStyle, heroMode?.heroName, setHeroName]);
+
+  // Focus name dialog input when it appears
+  useEffect(() => {
+    if (pendingPhoto && nameDialogInputRef.current) {
+      nameDialogInputRef.current.focus();
+    }
+  }, [pendingPhoto]);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Reject files > 5MB before reading
+      if (file.size > 5 * 1024 * 1024) {
+        addToast?.('Photo too large (max 5 MB). Please use a smaller image.', 'warning');
+        e.target.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        // Store pending photo data and show name dialog
+        setPendingPhoto({ base64: reader.result, mimeType: file.type });
+        setHeroName('');
+      };
+      reader.readAsDataURL(file);
+    }
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+  };
+
+  const confirmHeroUpload = useCallback(() => {
+    if (!pendingPhoto) return;
+    const name = heroName.trim();
+    setHeroPhoto(pendingPhoto.base64);
+    setHeroLoading(true);
+    setPendingPhoto(null);
+    if (onHeroPhoto) onHeroPhoto(pendingPhoto.base64, pendingPhoto.mimeType, name);
+    setHeroName(name);
+  }, [pendingPhoto, heroName, onHeroPhoto, setHeroPhoto, setHeroName]);
+
+  const cancelHeroUpload = useCallback(() => {
+    setPendingPhoto(null);
+    setHeroName('');
+  }, [setHeroName]);
+
+  const removeHeroPhoto = () => {
+    setHeroPhoto(null);
+    setHeroLoading(false);
+    setHeroName('');
+    if (onHeroPhoto) onHeroPhoto(null, null);
+  };
 
   const openMenu = () => {
     if (triggerRef.current) {
@@ -24,32 +115,17 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
     setStyleOpen(true);
   };
 
-  const openLangMenu = () => {
-    if (langTriggerRef.current) {
-      const rect = langTriggerRef.current.getBoundingClientRect();
-      setLangMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
-    }
-    setLangOpen(true);
-  };
-
   // Close dropdown on outside click
   useEffect(() => {
-    if (!styleOpen && !langOpen) return;
+    if (!styleOpen) return;
     const onClickOutside = (e) => {
-      if (styleOpen) {
-        if (!menuRef.current?.contains(e.target) && !triggerRef.current?.contains(e.target)) {
-          setStyleOpen(false);
-        }
-      }
-      if (langOpen) {
-        if (!langMenuRef.current?.contains(e.target) && !langTriggerRef.current?.contains(e.target)) {
-          setLangOpen(false);
-        }
+      if (!menuRef.current?.contains(e.target) && !triggerRef.current?.contains(e.target)) {
+        setStyleOpen(false);
       }
     };
     document.addEventListener('pointerdown', onClickOutside);
     return () => document.removeEventListener('pointerdown', onClickOutside);
-  }, [styleOpen, langOpen]);
+  }, [styleOpen]);
 
   const { recording, startRecording, stopRecording } = useVoiceCapture({
     onAudioCaptured: (base64, mimeType) => {
@@ -57,15 +133,26 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
     },
   });
 
-  const isDisabled = !connected || generating || quotaCooldown > 0;
+  const heroAnalyzing = !!heroMode?.analyzing || heroLoading;
+  const isHeroTemplate = template === 'hero';
+  const heroReady = heroActive || heroAnalyzing;
+  const heroBlocked = isHeroTemplate && !heroReady;
+  const isDisabled = !connected || (!generating && quotaCooldown > 0) || heroAnalyzing || heroBlocked;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!inputValue.trim() || isDisabled) return;
-    onSend(inputValue.trim(), { artStyle, sceneCount, language });
+    const text = inputValue.trim();
+    if (!text) return;
+    if (isDisabled || generating) return;
+    onSend(text, { artStyle, sceneCount, language, template });
     setInputValue('');
   };
   const hasText = inputValue.trim().length > 0;
+
+  // Styles list for dropdown — trend-only in hero mode, otherwise template-filtered
+  const dropdownStyles = heroActive
+    ? ART_STYLES.filter(s => s.trend)
+    : getTemplate(template).artStyles.map(k => ART_STYLE_MAP[k]).filter(Boolean);
 
   return (
     <div className="control-bar">
@@ -76,7 +163,8 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
             position: 'relative',
             background: 'var(--glass-bg-input)',
             border: `1px solid ${quotaCooldown > 0 ? 'var(--status-error, #ef4444)' : generating ? 'var(--glass-border-accent)' : focused ? 'var(--glass-border-accent)' : 'var(--glass-border)'}`,
-            opacity: quotaCooldown > 0 ? 0.6 : 1,
+            opacity: heroAnalyzing ? 0.5 : quotaCooldown > 0 ? 0.6 : 1,
+            pointerEvents: heroAnalyzing ? 'none' : undefined,
             boxShadow: focused ? 'var(--shadow-glow-primary)' : 'var(--shadow-glass)',
             backdropFilter: 'var(--glass-blur)',
             WebkitBackdropFilter: 'var(--glass-blur)',
@@ -113,14 +201,14 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
               className="control-style-trigger"
               onClick={() => styleOpen ? setStyleOpen(false) : openMenu()}
             >
-              <span>{ART_STYLES.find((s) => s.key === artStyle)?.label}</span>
+              <span>{ART_STYLE_MAP[artStyle]?.label || artStyle}</span>
               <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, transition: 'transform 0.2s ease', transform: styleOpen ? 'rotate(180deg)' : 'none' }}>
                 <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
             {styleOpen && menuPos && createPortal(
               <div ref={menuRef} className="control-style-menu" style={{ bottom: menuPos.bottom, left: menuPos.left }}>
-                {ART_STYLES.map(({ key, label }) => (
+                {dropdownStyles.map(({ key, label }) => (
                   <button
                     key={key}
                     type="button"
@@ -140,60 +228,139 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
             )}
           </div>
 
-          {/* Scene count toggle (1 or 2) */}
-          <div className="control-scene-count">
-            {[1, 2].map((n) => (
-              <button
-                key={n}
-                type="button"
-                className={`control-scene-btn${sceneCount === n ? ' active' : ''}`}
-                onClick={() => setSceneCount(n)}
-                title={`Generate ${n} scene${n > 1 ? 's' : ''}`}
+          {/* Hero mode: photo upload / loading / badge with name — only for hero template */}
+          {isHeroTemplate && <div className="control-hero-upload flex items-center px-1">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              style={{ display: 'none' }}
+            />
+            {heroLoading && !heroActive ? (
+              /* Loading state — animated border around photo while analyzing */
+              <div
+                className="flex items-center"
+                style={{
+                  background: 'var(--accent-primary-soft)',
+                  border: '1px solid var(--glass-border-accent)',
+                  borderRadius: '9999px',
+                  padding: '2px 10px 2px 2px',
+                  gap: '6px',
+                }}
               >
-                {n}
-              </button>
-            ))}
-          </div>
-
-          {/* Language dropdown - only for new books before first generation */}
-          {!languageLocked && (
-          <div className="control-style-dropdown">
-            <button
-              ref={langTriggerRef}
-              type="button"
-              className="control-style-trigger"
-              onClick={() => langOpen ? setLangOpen(false) : openLangMenu()}
-            >
-              <span>{LANGUAGES.find((l) => l.key === language)?.label || 'English'}</span>
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, transition: 'transform 0.2s ease', transform: langOpen ? 'rotate(180deg)' : 'none' }}>
-                <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {langOpen && langMenuPos && createPortal(
-              <div ref={langMenuRef} className="control-style-menu" style={{ bottom: langMenuPos.bottom, left: langMenuPos.left }}>
-                {LANGUAGES.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`control-style-option${key === language ? ' active' : ''}`}
-                    onClick={() => { setLanguage(key); setLangOpen(false); }}
-                  >
-                    {key === language && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
+                <div style={{ position: 'relative', width: '24px', height: '24px', flexShrink: 0 }}>
+                  {/* Spinning conic gradient ring */}
+                  <div style={{
+                    position: 'absolute', inset: '-3px', borderRadius: '50%',
+                    background: 'conic-gradient(from 0deg, var(--accent-primary), var(--accent-secondary, #a855f7), transparent)',
+                    animation: 'heroRingSpin 1.2s linear infinite',
+                  }} />
+                  <div style={{
+                    position: 'absolute', inset: '0', borderRadius: '50%',
+                    overflow: 'hidden', border: '2px solid var(--bg-primary)',
+                  }}>
+                    {heroPhoto ? (
+                      <img src={heroPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', background: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      </div>
                     )}
-                    <span>{label}</span>
-                  </button>
-                ))}
-              </div>,
-              document.body
+                  </div>
+                </div>
+                <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Analyzing...
+                </span>
+              </div>
+            ) : heroActive ? (
+              /* Active hero pill: circular avatar + name + X */
+              <div
+                className="flex items-center"
+                style={{
+                  background: 'var(--accent-primary-soft)',
+                  border: '1px solid var(--glass-border-accent)',
+                  borderRadius: '9999px',
+                  padding: '2px 10px 2px 2px',
+                  gap: '6px',
+                }}
+              >
+                {heroPhoto ? (
+                  <div
+                    style={{
+                      width: '24px', height: '24px', borderRadius: '50%',
+                      overflow: 'hidden', border: '1.5px solid var(--accent-primary)',
+                      cursor: 'pointer', flexShrink: 0,
+                    }}
+                    onClick={() => fileInputRef.current.click()}
+                  >
+                    <img src={heroPhoto} alt="Hero" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      width: '24px', height: '24px', borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'var(--accent-primary)', cursor: 'pointer', flexShrink: 0,
+                    }}
+                    onClick={() => fileInputRef.current.click()}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                  </div>
+                )}
+                <span
+                  style={{
+                    fontSize: '9px',
+                    fontWeight: 800,
+                    color: 'var(--accent-primary)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    maxWidth: '80px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {heroName || heroMode?.heroName || 'Hero'}
+                </span>
+                <button
+                  type="button"
+                  onClick={removeHeroPhoto}
+                  className="flex items-center justify-center hover:opacity-70"
+                  style={{ color: 'var(--accent-primary)', cursor: 'pointer', flexShrink: 0, padding: 0, border: 'none', background: 'none' }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              /* Default: camera button to upload photo */
+              <Tooltip label="Add your photo for Hero Mode">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current.click()}
+                className="flex items-center justify-center p-2 rounded-lg transition-all"
+                style={{ color: 'var(--text-muted)', cursor: 'pointer' }}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent-primary)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </button>
+              </Tooltip>
             )}
-          </div>
-          )}
+          </div>}
 
           {/* Usage counter pill — hidden for pro (limit is effectively unlimited) */}
           {usage && usage.limits?.generations_today > 0 && usage.usage?.tier !== 'pro' && (
+            <Tooltip label="Generations used today">
             <div
               style={{
                 padding: '2px 8px',
@@ -208,15 +375,22 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
               }}
-              title="Generations used today"
             >
               {usage.usage?.generations_today || 0}/{usage.limits.generations_today}
             </div>
+            </Tooltip>
           )}
 
           <div className="control-input-divider" />
 
           <textarea
+            ref={(el) => {
+              // Auto-grow: reset height then set to scrollHeight
+              if (el) {
+                el.style.height = 'auto';
+                el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+              }
+            }}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onFocus={() => setFocused(true)}
@@ -227,10 +401,10 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 handleSubmit(e);
               }
             }}
-            placeholder={recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : generating ? 'Story is being crafted...' : (PLACEHOLDERS[language] || PLACEHOLDERS.English)}
-            disabled={isDisabled}
+            placeholder={heroBlocked ? 'Upload your photo to begin Hero Quest...' : recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : generating ? 'Generating...' : (getTemplate(template).placeholder || PLACEHOLDERS[language] || PLACEHOLDERS.English)}
+            disabled={isDisabled || generating}
             className="flex-1 bg-transparent outline-none control-input"
-            style={{ color: 'var(--text-primary)', resize: 'none' }}
+            style={{ color: 'var(--text-primary)', resize: 'none', overflowY: 'auto' }}
             rows={1}
           />
 
@@ -255,6 +429,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
               />
             </div>
           ) : hasText ? (
+            <Tooltip label="Send">
             <button
               type="submit"
               disabled={isDisabled}
@@ -267,14 +442,15 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 cursor: isDisabled ? 'not-allowed' : 'pointer',
                 opacity: isDisabled ? 0.3 : 1,
               }}
-              title="Send"
             >
               <svg className="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12" />
                 <polyline points="12 5 19 12 12 19" />
               </svg>
             </button>
+            </Tooltip>
           ) : (
+            <Tooltip label={recording ? 'Click to stop' : 'Click to record'}>
             <button
               type="button"
               className="flex-shrink-0 rounded-full flex items-center justify-center transition-all control-action-btn"
@@ -284,12 +460,11 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 border: `1px solid ${recording ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
                 boxShadow: recording ? '0 0 12px var(--accent-primary)' : 'none',
                 animation: recording ? 'micPulse 1.2s ease-in-out infinite' : 'none',
-                opacity: isDisabled ? 0.3 : 1,
-                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                opacity: (isDisabled || generating) ? 0.3 : 1,
+                cursor: (isDisabled || generating) ? 'not-allowed' : 'pointer',
               }}
-              title={recording ? 'Click to stop' : 'Click to record'}
-              onClick={!isDisabled ? (recording ? stopRecording : startRecording) : undefined}
-              disabled={isDisabled}
+              onClick={!(isDisabled || generating) ? (recording ? stopRecording : startRecording) : undefined}
+              disabled={isDisabled || generating}
             >
               <svg className="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -298,10 +473,146 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                 <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
             </button>
+            </Tooltip>
           )}
         </div>
 
       </form>
+
+      {/* Hero name dialog — appears after file selection */}
+      {pendingPhoto && createPortal(
+        <div
+          className="hero-dialog-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            animation: 'heroDialogFadeIn 0.2s ease-out',
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) cancelHeroUpload(); }}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(165deg, color-mix(in srgb, var(--bg-primary) 95%, var(--accent-primary) 5%), var(--bg-primary))',
+              border: '1px solid color-mix(in srgb, var(--accent-primary) 25%, var(--glass-border) 75%)',
+              borderRadius: '20px',
+              padding: '32px 28px 24px',
+              width: '340px',
+              maxWidth: '90vw',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.4), 0 0 40px var(--accent-primary-glow, rgba(255,165,0,0.08))',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '20px',
+              animation: 'heroDialogSlideUp 0.25s ease-out',
+            }}
+          >
+            {/* Photo with animated glow ring */}
+            <div style={{ position: 'relative' }}>
+              <div style={{
+                position: 'absolute', inset: '-4px', borderRadius: '18px',
+                background: 'conic-gradient(from 0deg, var(--accent-primary), var(--accent-secondary, #a855f7), var(--accent-primary))',
+                animation: 'heroRingSpin 3s linear infinite',
+                opacity: 0.8,
+              }} />
+              <div style={{
+                position: 'relative',
+                width: '96px', height: '96px', borderRadius: '14px',
+                overflow: 'hidden', border: '3px solid var(--bg-primary)',
+              }}>
+                <img src={pendingPhoto.base64} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            </div>
+
+            {/* Title + subtitle */}
+            <div style={{ textAlign: 'center' }}>
+              <h3 style={{
+                fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)',
+                margin: '0 0 6px 0', letterSpacing: '-0.01em',
+              }}>
+                Who is the hero?
+              </h3>
+              <p style={{
+                fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5,
+              }}>
+                Your character&apos;s name for the story
+              </p>
+            </div>
+
+            {/* Name input */}
+            <div style={{ width: '100%', position: 'relative' }}>
+              <input
+                ref={nameDialogInputRef}
+                type="text"
+                value={heroName}
+                onChange={(e) => setHeroName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && heroName.trim()) confirmHeroUpload(); if (e.key === 'Escape') cancelHeroUpload(); }}
+                maxLength={24}
+                placeholder="Enter a name..."
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: `1.5px solid ${heroName.trim() ? 'var(--accent-primary)' : 'var(--glass-border)'}`,
+                  background: 'var(--glass-bg-input)',
+                  color: 'var(--text-primary)',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  outline: 'none',
+                  textAlign: 'center',
+                  transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                  boxShadow: heroName.trim() ? '0 0 12px var(--accent-primary-glow, rgba(255,165,0,0.15))' : 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+              <button
+                type="button"
+                onClick={cancelHeroUpload}
+                style={{
+                  flex: 1, padding: '10px 14px', borderRadius: '12px',
+                  border: '1px solid var(--glass-border)',
+                  background: 'transparent',
+                  color: 'var(--text-secondary)',
+                  fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmHeroUpload}
+                disabled={!heroName.trim()}
+                style={{
+                  flex: 1.5, padding: '10px 14px', borderRadius: '12px',
+                  border: 'none',
+                  background: heroName.trim()
+                    ? 'linear-gradient(135deg, var(--accent-primary), color-mix(in srgb, var(--accent-primary) 80%, var(--accent-secondary, #a855f7) 20%))'
+                    : 'var(--glass-bg-strong)',
+                  color: heroName.trim() ? '#fff' : 'var(--text-muted)',
+                  fontSize: '13px', fontWeight: 700, letterSpacing: '0.02em',
+                  cursor: heroName.trim() ? 'pointer' : 'not-allowed',
+                  boxShadow: heroName.trim() ? '0 4px 16px var(--accent-primary-glow, rgba(255,165,0,0.3))' : 'none',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                Begin Hero Mode
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       <style>{`
         @keyframes micPulse {
@@ -312,7 +623,22 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
         }
+        @keyframes heroShimmer {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
+        }
         @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes heroDialogFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes heroDialogSlideUp {
+          from { opacity: 0; transform: translateY(16px) scale(0.97); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes heroRingSpin {
           to { transform: rotate(360deg); }
         }
       `}</style>

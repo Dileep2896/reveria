@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSceneActions } from '../contexts/SceneActionsContext';
 import { isImageCached } from '../utils/textUtils';
-import useCompactAudio from '../hooks/useCompactAudio';
+import { getTemplate } from '../data/templates';
 import SceneComposing from './scene/SceneComposing';
 import SceneHeader from './scene/SceneHeader';
 import SceneImageArea from './scene/SceneImageArea';
 import SceneTextArea from './scene/SceneTextArea';
 
 /* ── Revealed scene with cinematic animation ── */
-function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
+function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked, singlePage, visualNarrative, template }) {
   const { sceneBusy } = useSceneActions();
   const isBusy = sceneBusy.has(scene.scene_number);
 
@@ -46,17 +46,27 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
     }
   }, [imageLoaded, showError, noImage]);
 
-  // Reset image state when URL changes (e.g. regen)
+  // Reset image state when URL changes (e.g. regen) or scene identity changes (e.g. deletion shift)
   const prevImageUrl = useRef(scene.image_url);
+  const prevSceneNumber = useRef(scene.scene_number);
   const wasRegenerated = useRef(false);
   useEffect(() => {
+    const identityChanged = scene.scene_number !== prevSceneNumber.current;
+    if (identityChanged) {
+      prevSceneNumber.current = scene.scene_number;
+      prevImageUrl.current = scene.image_url;
+      wasRegenerated.current = false;
+      setImageLoaded(isError || isImageCached(scene.image_url));
+      setImageFailed(false);
+      return;
+    }
     if (scene.image_url && scene.image_url !== prevImageUrl.current) {
       wasRegenerated.current = !!prevImageUrl.current;
       prevImageUrl.current = scene.image_url;
       setImageLoaded(false);
       setImageFailed(false);
     }
-  }, [scene.image_url]);
+  }, [scene.image_url, scene.scene_number, isError]);
 
   useEffect(() => {
     if (scene.image_url && !isError && !imageLoaded && !imageFailed) {
@@ -64,6 +74,11 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
       img.onload = () => setImageLoaded(true);
       img.onerror = () => setImageFailed(true);
       img.src = scene.image_url;
+      return () => {
+        img.onload = null;
+        img.onerror = null;
+        img.src = '';
+      };
     }
   }, [scene.image_url, isError, imageLoaded, imageFailed]);
 
@@ -85,11 +100,19 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
     if (!isBusy) setAwaitingTextRegen(false);
   }, [isBusy]);
 
+  // Safety timeout: clear awaitingTextRegen after 60s in case regen fails silently
+  useEffect(() => {
+    if (!awaitingTextRegen) return;
+    const timer = setTimeout(() => setAwaitingTextRegen(false), 60000);
+    return () => clearTimeout(timer);
+  }, [awaitingTextRegen]);
+
   const isRegen = textWasRegenerated.current;
   const skip = hasAnimated.current && !isRegen;
   const animateText = (showText && !hasAnimated.current) || isRegen;
 
-  const audio = useCompactAudio(scene.audio_url);
+  // Capture at mount: is this a fresh scene arriving during generation?
+  const isTypewriterRef = useRef(!preloaded && !cached && !isError);
 
   return (
     <div
@@ -101,37 +124,38 @@ function SceneRevealed({ scene, scale = 1, displayIndex, isBookmarked }) {
         ...(skip && !preloaded ? {} : preloaded ? {} : { animation: 'sceneReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1)' }),
       }}
     >
-      {scene.audio_url && (
-        <audio ref={audio.audioRef} src={scene.audio_url} preload="metadata" style={{ display: 'none' }} />
-      )}
-
-      <SceneHeader scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} isBusy={isBusy} audio={audio} onRegenSceneStart={() => setAwaitingTextRegen(true)} />
+      <SceneHeader scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} isBusy={isBusy} onRegenSceneStart={() => setAwaitingTextRegen(true)} visualNarrative={visualNarrative} />
 
       <SceneImageArea
         scene={scene} scale={scale} displayIndex={displayIndex}
         imageLoaded={imageLoaded} imageFailed={imageFailed} isBusy={isBusy}
         showError={showError} preloaded={preloaded} skip={skip}
-        wasRegenerated={wasRegenerated}
+        wasRegenerated={wasRegenerated} singlePage={singlePage}
+        visualNarrative={visualNarrative} template={template}
       />
 
+      {!visualNarrative && (
       <SceneTextArea
         scene={scene} scale={scale} showText={showText} skip={skip}
         animateText={animateText} isRegen={isRegen} textRegenKey={textRegenKey}
         textWasRegenerated={textWasRegenerated}
         rewriting={awaitingTextRegen}
+        isTypewriter={isTypewriterRef.current && !isRegen}
       />
+      )}
     </div>
   );
 }
 
 /* ── Main SceneCard: decides composing vs revealed ── */
-export default function SceneCard({ scene, scale = 1, displayIndex, isBookmarked }) {
+export default function SceneCard({ scene, scale = 1, displayIndex, isBookmarked, singlePage, template }) {
+  const visualNarrative = getTemplate(template).visualNarrative;
   const wrapperStyle = scene._deleting
     ? { animation: 'sceneDeleteOut 0.5s ease-in forwards', height: '100%' }
     : { height: '100%' };
 
   const content = scene.text
-    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} />
+    ? <SceneRevealed scene={scene} scale={scale} displayIndex={displayIndex} isBookmarked={isBookmarked} singlePage={singlePage} visualNarrative={visualNarrative} template={template} />
     : <SceneComposing sceneNumber={scene.scene_number} displayIndex={displayIndex} scale={scale} />;
 
   return <div style={wrapperStyle}>{content}</div>;

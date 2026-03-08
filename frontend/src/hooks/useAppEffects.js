@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { ROUTES } from '../routes';
 import { db, getDoc, doc, updateDoc } from '../firebase';
 import { API_URL, findFallbackCover } from '../utils/storyHelpers';
 
@@ -6,20 +7,24 @@ export default function useAppEffects({
   storyId, urlStoryId, isLibrary, isExplore, navigate,
   scenes, generating, initialState, idToken,
   bookMeta, setBookmarkedSceneIndex, resetSaved,
-  setStoryStatus, setIsPublished, setArtStyle, setLanguage,
+  setStoryStatus, setIsPublished, setArtStyle, setLanguage, setTemplate,
   setViewingReadOnly, setStoryDeletedHandler,
   clearState, addToast,
   location,
 }) {
+  const scenesRef = useRef(scenes);
+  scenesRef.current = scenes;
+
   // Sync storyId → URL (skip for /book/ pages, library, explore, subscription, admin)
-  const isBookPage = location.pathname.startsWith('/book/');
-  const isSubscription = location.pathname === '/subscription';
-  const isAdminPage = location.pathname === '/admin';
-  const isTermsPage = location.pathname === '/terms';
+  const pathname = location.pathname.replace(/\/+$/, '') || '/';
+  const isBookPage = pathname.startsWith(ROUTES.BOOK_PREFIX);
+  const isSubscription = pathname === ROUTES.SUBSCRIPTION;
+  const isAdminPage = pathname === ROUTES.ADMIN;
+  const isTermsPage = pathname === ROUTES.TERMS;
   useEffect(() => {
     if (!storyId || isLibrary || isExplore || isBookPage || isSubscription || isAdminPage || isTermsPage) return;
     if (urlStoryId === storyId) return;
-    navigate(`/story/${storyId}`, { replace: true });
+    navigate(ROUTES.STORY(storyId), { replace: true });
   }, [storyId, urlStoryId, isLibrary, isExplore, isBookPage, isSubscription, isAdminPage, isTermsPage, navigate]);
 
   // Reset "Saved!" when new generation starts
@@ -35,12 +40,11 @@ export default function useAppEffects({
       if (snap.exists() && snap.data().title_generated) return;
       updateDoc(storyRef, {
         title: bookMeta.title || 'Untitled Story',
-        cover_image_url: bookMeta.coverUrl || findFallbackCover(scenes),
+        cover_image_url: bookMeta.coverUrl || findFallbackCover(scenesRef.current),
         title_generated: true,
         updated_at: new Date(),
       }).catch((err) => console.error('Failed to persist bookMeta:', err));
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookMeta, storyId]);
 
   // Fetch bookmark for current story
@@ -65,8 +69,8 @@ export default function useAppEffects({
 
   // Clear read-only mode when navigating away from story view
   useEffect(() => {
-    if (location.pathname !== '/' && !location.pathname.startsWith('/story/')) setViewingReadOnly(false);
-  }, [location.pathname, setViewingReadOnly]);
+    if (pathname !== ROUTES.HOME && !pathname.startsWith(ROUTES.STORY_PREFIX)) setViewingReadOnly(false);
+  }, [pathname, setViewingReadOnly]);
 
   // Sync storyStatus + artStyle from loaded initial state
   useEffect(() => {
@@ -78,8 +82,9 @@ export default function useAppEffects({
       setIsPublished(initialState.is_public || false);
       if (initialState.art_style) setArtStyle(initialState.art_style);
       if (initialState.language) setLanguage(initialState.language);
+      if (initialState.template) setTemplate(initialState.template);
     }
-  }, [initialState, setStoryStatus, setIsPublished, setArtStyle, setLanguage]);
+  }, [initialState, setStoryStatus, setIsPublished, setArtStyle, setLanguage, setTemplate]);
 
   // Handle backend deleting the entire story (all scenes removed)
   useEffect(() => {
@@ -88,10 +93,11 @@ export default function useAppEffects({
       setStoryStatus(null);
       setIsPublished(false);
       setArtStyle('cinematic');
+      setTemplate('storybook');
       setLanguage('English');
       setBookmarkedSceneIndex(null);
-      navigate('/');
+      navigate(ROUTES.HOME);
       addToast('Story deleted - all scenes were removed', 'info');
     });
-  }, [setStoryDeletedHandler, clearState, navigate, addToast, setStoryStatus, setIsPublished, setLanguage, setArtStyle, setBookmarkedSceneIndex]);
+  }, [setStoryDeletedHandler, clearState, navigate, addToast, setStoryStatus, setIsPublished, setLanguage, setArtStyle, setTemplate, setBookmarkedSceneIndex]);
 }

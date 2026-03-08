@@ -1,5 +1,8 @@
 import Logo from './Logo';
+import GeminiBadge from './GeminiBadge';
 import ProfileMenu from './ProfileMenu';
+import Tooltip from './Tooltip';
+import { ROUTES } from '../routes';
 import { API_URL } from '../utils/storyHelpers';
 
 export default function AppHeader({
@@ -15,10 +18,11 @@ export default function AppHeader({
   setReadingMode,
   idToken, addToast,
   directorOpen, setDirectorOpen,
-  theme, toggleTheme,
+  onOpenSettings,
   user, signOut,
   isAdmin,
   userTier,
+  template, heroMode,
 }) {
   // On /book/ pages, hide all story-specific action buttons
   const isNonStoryPage = isLibrary || isExplore || isBookPage;
@@ -36,39 +40,31 @@ export default function AppHeader({
           boxShadow: 'var(--shadow-glass)',
         }}
       >
-        <div onClick={() => navigate('/admin')} style={{ cursor: 'pointer' }}>
-          <Logo size="compact" />
+        <div className="flex items-center" style={{ gap: 10 }}>
+          <div onClick={() => navigate(ROUTES.ADMIN)} style={{ cursor: 'pointer' }}>
+            <Logo size="compact" />
+          </div>
+          <GeminiBadge />
         </div>
         <div className="flex items-center header-actions">
-          <button
-            onClick={toggleTheme}
-            className="rounded-full flex items-center justify-center transition-all header-theme-btn"
-            style={{
-              background: 'var(--glass-bg)',
-              border: '1px solid var(--glass-border)',
-              color: 'var(--text-secondary)',
-              backdropFilter: 'var(--glass-blur)',
-            }}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-          >
-            {theme === 'dark' ? (
+          <Tooltip label="Settings">
+            <button
+              onClick={onOpenSettings}
+              className="rounded-full flex items-center justify-center transition-all header-theme-btn"
+              style={{
+                background: 'var(--glass-bg)',
+                border: '1px solid var(--glass-border)',
+                color: 'var(--text-secondary)',
+                backdropFilter: 'var(--glass-blur)',
+              }}
+              aria-label="Settings"
+            >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="5" />
-                <line x1="12" y1="1" x2="12" y2="3" />
-                <line x1="12" y1="21" x2="12" y2="23" />
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                <line x1="1" y1="12" x2="3" y2="12" />
-                <line x1="21" y1="12" x2="23" y2="12" />
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
-            ) : (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-            )}
-          </button>
+            </button>
+          </Tooltip>
           <ProfileMenu user={user} onSignOut={signOut} onNavigate={navigate} isAdmin={isAdmin} userTier={userTier} />
         </div>
       </header>
@@ -86,8 +82,11 @@ export default function AppHeader({
         boxShadow: 'var(--shadow-glass)',
       }}
     >
-      <div onClick={() => navigate(storyId ? `/story/${storyId}` : '/')} style={{ cursor: 'pointer' }}>
-        <Logo size="compact" />
+      <div className="flex items-center" style={{ gap: 10 }}>
+        <div onClick={() => navigate(storyId ? ROUTES.STORY(storyId) : ROUTES.HOME)} style={{ cursor: 'pointer' }}>
+          <Logo size="compact" />
+        </div>
+        <GeminiBadge />
       </div>
 
       <div className="flex items-center header-actions">
@@ -122,7 +121,7 @@ export default function AppHeader({
         {/* New Story - only visible when there's content in story view */}
         {!isNonStoryPage && !viewingReadOnly && scenes.length > 0 && !generating && (
           <button
-            onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate('/'); }}
+            onClick={async () => { await autoSaveCurrent(); clearState(); reset(); setStoryStatus(null); setIsPublished(false); setArtStyle('cinematic'); setLanguage('English'); setBookmarkedSceneIndex(null); navigate(ROUTES.NEW); }}
             disabled={saving || generatingCover}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
@@ -180,7 +179,7 @@ export default function AppHeader({
         {/* Publish - navigates to Book Details pre-publish page */}
         {!isNonStoryPage && !viewingReadOnly && storyStatus === 'completed' && storyId && !isPublished && (
           <button
-            onClick={() => navigate(`/book/${storyId}`, { state: { prepublish: true } })}
+            onClick={() => navigate(ROUTES.BOOK(storyId), { state: { prepublish: true } })}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
               background: 'var(--glass-bg)',
@@ -195,7 +194,7 @@ export default function AppHeader({
         {/* Published - "Book Page" button to navigate to /book/:storyId */}
         {!isNonStoryPage && !viewingReadOnly && storyStatus === 'completed' && storyId && isPublished && (
           <button
-            onClick={() => navigate(`/book/${storyId}`)}
+            onClick={() => navigate(ROUTES.BOOK(storyId))}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
               background: 'var(--accent-primary-soft)',
@@ -267,7 +266,7 @@ export default function AppHeader({
               if (!isLibrary && storyId && scenes.length > 0 && !generating) {
                 await autoSaveCurrent();
               }
-              navigate(isLibrary ? (storyId ? `/story/${storyId}` : '/') : '/library');
+              navigate(isLibrary ? (storyId ? ROUTES.STORY(storyId) : ROUTES.HOME) : ROUTES.LIBRARY);
             }}
             className={`header-nav-seg${isLibrary ? ' header-nav-seg--active' : ''}`}
           >
@@ -278,7 +277,7 @@ export default function AppHeader({
               if (!isExplore && storyId && scenes.length > 0 && !generating) {
                 await autoSaveCurrent();
               }
-              navigate(isExplore ? (storyId ? `/story/${storyId}` : '/') : '/explore');
+              navigate(isExplore ? (storyId ? ROUTES.STORY(storyId) : ROUTES.HOME) : ROUTES.EXPLORE);
             }}
             className={`header-nav-seg${isExplore ? ' header-nav-seg--active' : ''}`}
           >
@@ -303,36 +302,25 @@ export default function AppHeader({
           </button>
         )}
 
-        {/* Theme toggle - glass circle */}
-        <button
-          onClick={toggleTheme}
-          className="rounded-full flex items-center justify-center transition-all header-theme-btn"
-          style={{
-            background: 'var(--glass-bg)',
-            border: '1px solid var(--glass-border)',
-            color: 'var(--text-secondary)',
-            backdropFilter: 'var(--glass-blur)',
-          }}
-          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-        >
-          {theme === 'dark' ? (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="5" />
-              <line x1="12" y1="1" x2="12" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="23" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="1" y1="12" x2="3" y2="12" />
-              <line x1="21" y1="12" x2="23" y2="12" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-            </svg>
-          ) : (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          )}
+        {/* Settings gear */}
+        <Tooltip label="Settings">
+          <button
+            onClick={onOpenSettings}
+            className="rounded-full flex items-center justify-center transition-all header-theme-btn"
+            style={{
+              background: 'var(--glass-bg)',
+              border: '1px solid var(--glass-border)',
+              color: 'var(--text-secondary)',
+              backdropFilter: 'var(--glass-blur)',
+            }}
+            aria-label="Settings"
+          >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
         </button>
+        </Tooltip>
 
         {/* Profile menu */}
         <ProfileMenu user={user} onSignOut={signOut} onNavigate={navigate} isAdmin={isAdmin} userTier={userTier} />

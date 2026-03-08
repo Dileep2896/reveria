@@ -87,8 +87,6 @@ _OFFTOPIC_PATTERNS = [
     "\u30b3\u30fc\u30c9\u3092\u66f8\u304f\u3053\u3068\u304c\u3067\u304d\u307e\u305b\u3093",  # コードを書くことができません
 ]
 
-_ALL_PATTERNS = _SAFETY_PATTERNS + _OFFTOPIC_PATTERNS
-
 
 def is_refusal(text: str) -> str | None:
     """Detect if text is an AI refusal. Returns 'safety', 'offtopic', or None."""
@@ -104,7 +102,7 @@ def is_refusal(text: str) -> str | None:
 # Pre-pipeline prompt validation (Gemini Flash - fast, multilingual)
 # ---------------------------------------------------------------------------
 
-_CLASSIFY_PROMPT = """You are a classifier for StoryForge, a storytelling app where users describe stories they want created.
+_CLASSIFY_PROMPT = """You are a classifier for Reveria, a storytelling app where users describe stories they want created.
 
 Decide if the user's message is a valid storytelling request. Valid requests include:
 - Story ideas, plot descriptions, character descriptions, settings

@@ -1,5 +1,5 @@
 /* ============================================
-   StoryForge - Glassmorphism Theme System
+   Reveria - Glassmorphism Theme System
    ============================================ */
 
 :root {
@@ -10,8 +10,8 @@
   --bg-gradient: linear-gradient(135deg, #07060e 0%, #0d0b1a 40%, #0a0818 100%);
 
   /* Floating color orbs (applied as pseudo-elements) */
-  --orb-1: radial-gradient(circle at 20% 30%, rgba(139, 92, 246, 0.12) 0%, transparent 50%);
-  --orb-2: radial-gradient(circle at 80% 70%, rgba(245, 158, 11, 0.08) 0%, transparent 50%);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(180, 140, 255, 0.12) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(255, 168, 108, 0.08) 0%, transparent 50%);
   --orb-3: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.06) 0%, transparent 50%);
 
   /* Glass surfaces */
@@ -21,8 +21,8 @@
   --glass-bg-input: rgba(255, 255, 255, 0.04);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-border-hover: rgba(255, 255, 255, 0.15);
-  --glass-border-accent: rgba(245, 158, 11, 0.25);
-  --glass-border-secondary: rgba(139, 92, 246, 0.2);
+  --glass-border-accent: rgba(180, 140, 255, 0.25);
+  --glass-border-secondary: rgba(255, 168, 108, 0.2);
   --glass-blur: blur(20px);
   --glass-blur-strong: blur(40px);
   --dropdown-bg: rgba(15, 12, 30, 0.92);
@@ -33,15 +33,15 @@
   --text-muted: rgba(255, 255, 255, 0.35);
   --text-inverse: #07060e;
 
-  /* Accent - Amber/Gold (story warmth) */
-  --accent-primary: #f59e0b;
-  --accent-primary-soft: rgba(245, 158, 11, 0.1);
-  --accent-primary-glow: rgba(245, 158, 11, 0.25);
+  /* Accent - Dream Violet (primary) */
+  --accent-primary: #b48cff;
+  --accent-primary-soft: rgba(180, 140, 255, 0.1);
+  --accent-primary-glow: rgba(180, 140, 255, 0.25);
 
-  /* Accent - Violet (director / AI) */
-  --accent-secondary: #a78bfa;
-  --accent-secondary-soft: rgba(167, 139, 250, 0.1);
-  --accent-secondary-glow: rgba(167, 139, 250, 0.2);
+  /* Accent - Story Amber (secondary) */
+  --accent-secondary: #ffa86c;
+  --accent-secondary-soft: rgba(255, 168, 108, 0.1);
+  --accent-secondary-glow: rgba(255, 168, 108, 0.2);
 
   /* Status */
   --status-success: #34d399;
@@ -49,8 +49,8 @@
   /* Shadows & Effects */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.4);
-  --shadow-glow-primary: 0 0 30px rgba(245, 158, 11, 0.12), 0 0 60px rgba(245, 158, 11, 0.06);
-  --shadow-glow-secondary: 0 0 30px rgba(167, 139, 250, 0.12), 0 0 60px rgba(167, 139, 250, 0.06);
+  --shadow-glow-primary: 0 0 30px rgba(180, 140, 255, 0.12), 0 0 60px rgba(180, 140, 255, 0.06);
+  --shadow-glow-secondary: 0 0 30px rgba(255, 168, 108, 0.12), 0 0 60px rgba(255, 168, 108, 0.06);
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
   /* Book */
@@ -64,8 +64,8 @@
   --book-page-border: rgba(255, 255, 255, 0.06);
   --book-noise-opacity: 0.03;
   --book-cover-bg: linear-gradient(145deg, #2d1e3e 0%, #1f1430 50%, #2a1b3a 100%);
-  --book-cover-accent: rgba(245, 158, 11, 0.18);
-  --book-cover-frame: rgba(245, 158, 11, 0.08);
+  --book-cover-accent: rgba(180, 140, 255, 0.18);
+  --book-cover-frame: rgba(180, 140, 255, 0.08);
   --book-cover-text: rgba(255, 255, 255, 0.95);
 
   /* 3D Book (Library) */
@@ -180,13 +180,159 @@
   50% { opacity: 0.6; }
 }
 
+/* ---- Template Accent Overrides (Dark) ---- */
+[data-template="comic"] {
+  --accent-primary: #ff4444;
+  --accent-primary-soft: rgba(255, 68, 68, 0.1);
+  --accent-primary-glow: rgba(255, 68, 68, 0.25);
+  --accent-secondary: #ffcc33;
+  --accent-secondary-soft: rgba(255, 204, 51, 0.1);
+  --accent-secondary-glow: rgba(255, 204, 51, 0.2);
+  --glass-border-accent: rgba(255, 68, 68, 0.25);
+  --glass-border-secondary: rgba(255, 204, 51, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(255, 68, 68, 0.12), 0 0 60px rgba(255, 68, 68, 0.06);
+  --shadow-glow-secondary: 0 0 30px rgba(255, 204, 51, 0.12), 0 0 60px rgba(255, 204, 51, 0.06);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(255, 68, 68, 0.10) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(255, 204, 51, 0.06) 0%, transparent 50%);
+  --book-page-bg: linear-gradient(145deg, #1e1218 0%, #18101a 50%, #1e1218 100%);
+  --book-cover-bg: linear-gradient(145deg, #3a1020 0%, #2a0a18 50%, #3e1222 100%);
+  --book-cover-accent: rgba(255, 68, 68, 0.18);
+  --book-cover-frame: rgba(255, 68, 68, 0.08);
+}
+[data-template="webtoon"] {
+  --accent-primary: #f472b6;
+  --accent-primary-soft: rgba(244, 114, 182, 0.1);
+  --accent-primary-glow: rgba(244, 114, 182, 0.25);
+  --accent-secondary: #a78bfa;
+  --accent-secondary-soft: rgba(167, 139, 250, 0.1);
+  --accent-secondary-glow: rgba(167, 139, 250, 0.2);
+  --glass-border-accent: rgba(244, 114, 182, 0.25);
+  --glass-border-secondary: rgba(167, 139, 250, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(244, 114, 182, 0.12), 0 0 60px rgba(244, 114, 182, 0.06);
+  --shadow-glow-secondary: 0 0 30px rgba(167, 139, 250, 0.12), 0 0 60px rgba(167, 139, 250, 0.06);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(244, 114, 182, 0.10) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(167, 139, 250, 0.07) 0%, transparent 50%);
+  --book-page-bg: linear-gradient(145deg, #1c1420 0%, #16101c 50%, #1c1420 100%);
+  --book-cover-bg: linear-gradient(145deg, #3a1a30 0%, #2a1028 50%, #3e1c34 100%);
+  --book-cover-accent: rgba(244, 114, 182, 0.18);
+  --book-cover-frame: rgba(244, 114, 182, 0.08);
+}
+[data-template="hero"] {
+  --accent-primary: #f5b642;
+  --accent-primary-soft: rgba(245, 182, 66, 0.1);
+  --accent-primary-glow: rgba(245, 182, 66, 0.25);
+  --accent-secondary: #e85454;
+  --accent-secondary-soft: rgba(232, 84, 84, 0.1);
+  --accent-secondary-glow: rgba(232, 84, 84, 0.2);
+  --glass-border-accent: rgba(245, 182, 66, 0.25);
+  --glass-border-secondary: rgba(232, 84, 84, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(245, 182, 66, 0.12), 0 0 60px rgba(245, 182, 66, 0.06);
+  --shadow-glow-secondary: 0 0 30px rgba(232, 84, 84, 0.12), 0 0 60px rgba(232, 84, 84, 0.06);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(245, 182, 66, 0.10) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(232, 84, 84, 0.06) 0%, transparent 50%);
+  --book-page-bg: linear-gradient(145deg, #1c1810 0%, #161210 50%, #1c1810 100%);
+  --book-cover-bg: linear-gradient(145deg, #2e2210 0%, #221a0a 50%, #302412 100%);
+  --book-cover-accent: rgba(245, 182, 66, 0.18);
+  --book-cover-frame: rgba(245, 182, 66, 0.08);
+}
+[data-template="manga"] {
+  --accent-primary: #ff5555;
+  --accent-primary-soft: rgba(255, 85, 85, 0.1);
+  --accent-primary-glow: rgba(255, 85, 85, 0.25);
+  --accent-secondary: #4488ff;
+  --accent-secondary-soft: rgba(68, 136, 255, 0.1);
+  --accent-secondary-glow: rgba(68, 136, 255, 0.2);
+  --glass-border-accent: rgba(255, 85, 85, 0.25);
+  --glass-border-secondary: rgba(68, 136, 255, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(255, 85, 85, 0.12), 0 0 60px rgba(255, 85, 85, 0.06);
+  --shadow-glow-secondary: 0 0 30px rgba(68, 136, 255, 0.12), 0 0 60px rgba(68, 136, 255, 0.06);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(255, 85, 85, 0.10) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(68, 136, 255, 0.07) 0%, transparent 50%);
+  --book-page-bg: linear-gradient(145deg, #1e1218 0%, #18101a 50%, #1e1218 100%);
+  --book-cover-bg: linear-gradient(145deg, #301018 0%, #220a12 50%, #34121a 100%);
+  --book-cover-accent: rgba(255, 85, 85, 0.18);
+  --book-cover-frame: rgba(255, 85, 85, 0.08);
+}
+[data-template="novel"] {
+  --accent-primary: #50c8a0;
+  --accent-primary-soft: rgba(80, 200, 160, 0.1);
+  --accent-primary-glow: rgba(80, 200, 160, 0.25);
+  --accent-secondary: #c8a050;
+  --accent-secondary-soft: rgba(200, 160, 80, 0.1);
+  --accent-secondary-glow: rgba(200, 160, 80, 0.2);
+  --glass-border-accent: rgba(80, 200, 160, 0.25);
+  --glass-border-secondary: rgba(200, 160, 80, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(80, 200, 160, 0.12), 0 0 60px rgba(80, 200, 160, 0.06);
+  --shadow-glow-secondary: 0 0 30px rgba(200, 160, 80, 0.12), 0 0 60px rgba(200, 160, 80, 0.06);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(80, 200, 160, 0.10) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(200, 160, 80, 0.06) 0%, transparent 50%);
+  --book-page-bg: linear-gradient(145deg, #12181c 0%, #0e1418 50%, #12181c 100%);
+  --book-cover-bg: linear-gradient(145deg, #102a22 0%, #0a1e18 50%, #122e24 100%);
+  --book-cover-accent: rgba(80, 200, 160, 0.18);
+  --book-cover-frame: rgba(80, 200, 160, 0.08);
+}
+[data-template="diary"] {
+  --accent-primary: #c89060;
+  --accent-primary-soft: rgba(200, 144, 96, 0.1);
+  --accent-primary-glow: rgba(200, 144, 96, 0.25);
+  --accent-secondary: #d4889a;
+  --accent-secondary-soft: rgba(212, 136, 154, 0.1);
+  --accent-secondary-glow: rgba(212, 136, 154, 0.2);
+  --glass-border-accent: rgba(200, 144, 96, 0.25);
+  --glass-border-secondary: rgba(212, 136, 154, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(200, 144, 96, 0.12), 0 0 60px rgba(200, 144, 96, 0.06);
+  --shadow-glow-secondary: 0 0 30px rgba(212, 136, 154, 0.12), 0 0 60px rgba(212, 136, 154, 0.06);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(200, 144, 96, 0.10) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(212, 136, 154, 0.06) 0%, transparent 50%);
+  --book-page-bg: linear-gradient(145deg, #1c1610 0%, #161210 50%, #1c1610 100%);
+  --book-cover-bg: linear-gradient(145deg, #2a2018 0%, #1e1610 50%, #2e221a 100%);
+  --book-cover-accent: rgba(200, 144, 96, 0.18);
+  --book-cover-frame: rgba(200, 144, 96, 0.08);
+}
+[data-template="poetry"] {
+  --accent-primary: #c4a0e8;
+  --accent-primary-soft: rgba(196, 160, 232, 0.1);
+  --accent-primary-glow: rgba(196, 160, 232, 0.25);
+  --accent-secondary: #e8a0b8;
+  --accent-secondary-soft: rgba(232, 160, 184, 0.1);
+  --accent-secondary-glow: rgba(232, 160, 184, 0.2);
+  --glass-border-accent: rgba(196, 160, 232, 0.25);
+  --glass-border-secondary: rgba(232, 160, 184, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(196, 160, 232, 0.12), 0 0 60px rgba(196, 160, 232, 0.06);
+  --shadow-glow-secondary: 0 0 30px rgba(232, 160, 184, 0.12), 0 0 60px rgba(232, 160, 184, 0.06);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(196, 160, 232, 0.10) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(232, 160, 184, 0.06) 0%, transparent 50%);
+  --book-page-bg: linear-gradient(145deg, #1a1622 0%, #14101c 50%, #1a1622 100%);
+  --book-cover-bg: linear-gradient(145deg, #281e38 0%, #1e1430 50%, #2c203c 100%);
+  --book-cover-accent: rgba(196, 160, 232, 0.18);
+  --book-cover-frame: rgba(196, 160, 232, 0.08);
+}
+[data-template="photojournal"] {
+  --accent-primary: #60a0d0;
+  --accent-primary-soft: rgba(96, 160, 208, 0.1);
+  --accent-primary-glow: rgba(96, 160, 208, 0.25);
+  --accent-secondary: #e0a050;
+  --accent-secondary-soft: rgba(224, 160, 80, 0.1);
+  --accent-secondary-glow: rgba(224, 160, 80, 0.2);
+  --glass-border-accent: rgba(96, 160, 208, 0.25);
+  --glass-border-secondary: rgba(224, 160, 80, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(96, 160, 208, 0.12), 0 0 60px rgba(96, 160, 208, 0.06);
+  --shadow-glow-secondary: 0 0 30px rgba(224, 160, 80, 0.12), 0 0 60px rgba(224, 160, 80, 0.06);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(96, 160, 208, 0.10) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(224, 160, 80, 0.06) 0%, transparent 50%);
+  --book-page-bg: linear-gradient(145deg, #121820 0%, #0e141c 50%, #121820 100%);
+  --book-cover-bg: linear-gradient(145deg, #14202e 0%, #0e1822 50%, #162430 100%);
+  --book-cover-accent: rgba(96, 160, 208, 0.18);
+  --book-cover-frame: rgba(96, 160, 208, 0.08);
+}
+
 /* ---- Light Mode ---- */
 [data-theme="light"] {
   --bg-primary: #e8e6f0;
   --bg-gradient: linear-gradient(135deg, #e8e6f0 0%, #f0edf7 40%, #e4e1ed 100%);
 
-  --orb-1: radial-gradient(circle at 20% 30%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
-  --orb-2: radial-gradient(circle at 80% 70%, rgba(245, 158, 11, 0.12) 0%, transparent 50%);
+  --orb-1: radial-gradient(circle at 20% 30%, rgba(139, 95, 191, 0.15) 0%, transparent 50%);
+  --orb-2: radial-gradient(circle at 80% 70%, rgba(212, 132, 42, 0.12) 0%, transparent 50%);
   --orb-3: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 50%);
 
   --glass-bg: rgba(255, 255, 255, 0.5);
@@ -195,8 +341,8 @@
   --glass-bg-input: rgba(255, 255, 255, 0.45);
   --glass-border: rgba(255, 255, 255, 0.6);
   --glass-border-hover: rgba(255, 255, 255, 0.8);
-  --glass-border-accent: rgba(217, 119, 6, 0.3);
-  --glass-border-secondary: rgba(124, 58, 237, 0.25);
+  --glass-border-accent: rgba(139, 95, 191, 0.25);
+  --glass-border-secondary: rgba(212, 132, 42, 0.2);
   --dropdown-bg: rgba(245, 242, 250, 0.95);
 
   --text-primary: rgba(15, 10, 30, 0.9);
@@ -204,20 +350,20 @@
   --text-muted: rgba(15, 10, 30, 0.35);
   --text-inverse: #ffffff;
 
-  --accent-primary: #d97706;
-  --accent-primary-soft: rgba(217, 119, 6, 0.12);
-  --accent-primary-glow: rgba(217, 119, 6, 0.2);
+  --accent-primary: #8b5fbf;
+  --accent-primary-soft: rgba(139, 95, 191, 0.12);
+  --accent-primary-glow: rgba(139, 95, 191, 0.2);
 
-  --accent-secondary: #7c3aed;
-  --accent-secondary-soft: rgba(124, 58, 237, 0.1);
-  --accent-secondary-glow: rgba(124, 58, 237, 0.15);
+  --accent-secondary: #d4842a;
+  --accent-secondary-soft: rgba(212, 132, 42, 0.1);
+  --accent-secondary-glow: rgba(212, 132, 42, 0.15);
 
   --status-success: #059669;
   --status-error: #dc2626;
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.08);
-  --shadow-glow-primary: 0 0 30px rgba(217, 119, 6, 0.1), 0 0 60px rgba(217, 119, 6, 0.05);
-  --shadow-glow-secondary: 0 0 30px rgba(124, 58, 237, 0.1), 0 0 60px rgba(124, 58, 237, 0.05);
+  --shadow-glow-primary: 0 0 30px rgba(139, 95, 191, 0.1), 0 0 60px rgba(139, 95, 191, 0.05);
+  --shadow-glow-secondary: 0 0 30px rgba(212, 132, 42, 0.1), 0 0 60px rgba(212, 132, 42, 0.05);
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 
   /* Book */
@@ -231,8 +377,8 @@
   --book-page-border: rgba(0, 0, 0, 0.06);
   --book-noise-opacity: 0.04;
   --book-cover-bg: linear-gradient(145deg, #3b1f4a 0%, #2a1538 50%, #3d2050 100%);
-  --book-cover-accent: rgba(245, 158, 11, 0.18);
-  --book-cover-frame: rgba(245, 158, 11, 0.1);
+  --book-cover-accent: rgba(139, 95, 191, 0.18);
+  --book-cover-frame: rgba(139, 95, 191, 0.1);
   --book-cover-text: rgba(255, 255, 255, 0.95);
 
   /* 3D Book (Library) */
@@ -248,4 +394,135 @@
 
   --skeleton-shimmer: rgba(0, 0, 0, 0.06);
   --skeleton-shimmer-peak: rgba(0, 0, 0, 0.1);
+}
+
+/* ---- Template Accent Overrides (Light) ---- */
+[data-theme="light"][data-template="comic"] {
+  --accent-primary: #cc2222; --accent-primary-soft: rgba(204, 34, 34, 0.12); --accent-primary-glow: rgba(204, 34, 34, 0.2);
+  --accent-secondary: #cc9900; --accent-secondary-soft: rgba(204, 153, 0, 0.1); --accent-secondary-glow: rgba(204, 153, 0, 0.15);
+  --glass-border-accent: rgba(204, 34, 34, 0.25); --glass-border-secondary: rgba(204, 153, 0, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(204, 34, 34, 0.1); --shadow-glow-secondary: 0 0 30px rgba(204, 153, 0, 0.1);
+}
+[data-theme="light"][data-template="webtoon"] {
+  --accent-primary: #c74890; --accent-primary-soft: rgba(199, 72, 144, 0.12); --accent-primary-glow: rgba(199, 72, 144, 0.2);
+  --accent-secondary: #7c5cc8; --accent-secondary-soft: rgba(124, 92, 200, 0.1); --accent-secondary-glow: rgba(124, 92, 200, 0.15);
+  --glass-border-accent: rgba(199, 72, 144, 0.25); --glass-border-secondary: rgba(124, 92, 200, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(199, 72, 144, 0.1); --shadow-glow-secondary: 0 0 30px rgba(124, 92, 200, 0.1);
+}
+[data-theme="light"][data-template="hero"] {
+  --accent-primary: #c48a20; --accent-primary-soft: rgba(196, 138, 32, 0.12); --accent-primary-glow: rgba(196, 138, 32, 0.2);
+  --accent-secondary: #c03838; --accent-secondary-soft: rgba(192, 56, 56, 0.1); --accent-secondary-glow: rgba(192, 56, 56, 0.15);
+  --glass-border-accent: rgba(196, 138, 32, 0.25); --glass-border-secondary: rgba(192, 56, 56, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(196, 138, 32, 0.1); --shadow-glow-secondary: 0 0 30px rgba(192, 56, 56, 0.1);
+}
+[data-theme="light"][data-template="manga"] {
+  --accent-primary: #cc3333; --accent-primary-soft: rgba(204, 51, 51, 0.12); --accent-primary-glow: rgba(204, 51, 51, 0.2);
+  --accent-secondary: #2266cc; --accent-secondary-soft: rgba(34, 102, 204, 0.1); --accent-secondary-glow: rgba(34, 102, 204, 0.15);
+  --glass-border-accent: rgba(204, 51, 51, 0.25); --glass-border-secondary: rgba(34, 102, 204, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(204, 51, 51, 0.1); --shadow-glow-secondary: 0 0 30px rgba(34, 102, 204, 0.1);
+}
+[data-theme="light"][data-template="novel"] {
+  --accent-primary: #2a9070; --accent-primary-soft: rgba(42, 144, 112, 0.12); --accent-primary-glow: rgba(42, 144, 112, 0.2);
+  --accent-secondary: #a07828; --accent-secondary-soft: rgba(160, 120, 40, 0.1); --accent-secondary-glow: rgba(160, 120, 40, 0.15);
+  --glass-border-accent: rgba(42, 144, 112, 0.25); --glass-border-secondary: rgba(160, 120, 40, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(42, 144, 112, 0.1); --shadow-glow-secondary: 0 0 30px rgba(160, 120, 40, 0.1);
+}
+[data-theme="light"][data-template="diary"] {
+  --accent-primary: #9a6838; --accent-primary-soft: rgba(154, 104, 56, 0.12); --accent-primary-glow: rgba(154, 104, 56, 0.2);
+  --accent-secondary: #b06070; --accent-secondary-soft: rgba(176, 96, 112, 0.1); --accent-secondary-glow: rgba(176, 96, 112, 0.15);
+  --glass-border-accent: rgba(154, 104, 56, 0.25); --glass-border-secondary: rgba(176, 96, 112, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(154, 104, 56, 0.1); --shadow-glow-secondary: 0 0 30px rgba(176, 96, 112, 0.1);
+}
+[data-theme="light"][data-template="poetry"] {
+  --accent-primary: #8a60b8; --accent-primary-soft: rgba(138, 96, 184, 0.12); --accent-primary-glow: rgba(138, 96, 184, 0.2);
+  --accent-secondary: #c07090; --accent-secondary-soft: rgba(192, 112, 144, 0.1); --accent-secondary-glow: rgba(192, 112, 144, 0.15);
+  --glass-border-accent: rgba(138, 96, 184, 0.25); --glass-border-secondary: rgba(192, 112, 144, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(138, 96, 184, 0.1); --shadow-glow-secondary: 0 0 30px rgba(192, 112, 144, 0.1);
+}
+[data-theme="light"][data-template="photojournal"] {
+  --accent-primary: #3878a8; --accent-primary-soft: rgba(56, 120, 168, 0.12); --accent-primary-glow: rgba(56, 120, 168, 0.2);
+  --accent-secondary: #b87828; --accent-secondary-soft: rgba(184, 120, 40, 0.1); --accent-secondary-glow: rgba(184, 120, 40, 0.15);
+  --glass-border-accent: rgba(56, 120, 168, 0.25); --glass-border-secondary: rgba(184, 120, 40, 0.2);
+  --shadow-glow-primary: 0 0 30px rgba(56, 120, 168, 0.1); --shadow-glow-secondary: 0 0 30px rgba(184, 120, 40, 0.1);
+}
+
+/* ---- Painting Scene Loader ---- */
+@keyframes paintBlobDrift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(5%, -5%) scale(1.15); }
+}
+
+@keyframes paintSparkle {
+  0%, 100% { opacity: 0; transform: translateY(0) scale(0.5); }
+  20% { opacity: 0.8; transform: translateY(-8px) scale(1); }
+  50% { opacity: 0.4; transform: translateY(-20px) scale(0.8); }
+  80% { opacity: 0; transform: translateY(-32px) scale(0.3); }
+}
+
+@keyframes paintRingSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes paintOrbitDot {
+  from { transform: translateX(-50%) rotate(0deg); }
+  to { transform: translateX(-50%) rotate(360deg); }
+}
+
+@keyframes paintIconPulse {
+  0%, 100% { transform: scale(1); box-shadow: var(--shadow-glow-primary); }
+  50% { transform: scale(1.08); box-shadow: 0 0 40px var(--accent-primary-glow), 0 0 80px var(--accent-primary-glow); }
+}
+
+@keyframes paintBrushWiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(4deg); }
+  75% { transform: rotate(-4deg); }
+}
+
+@keyframes paintTextPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes paintDotBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+  40% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ---- Text Overlay (Comic/Manga) ---- */
+@keyframes overlayFadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ---- Creative Brief Overlay ---- */
+@keyframes briefSlideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.creative-brief-toggle {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.scene-image-wrap:hover .creative-brief-toggle,
+.creative-brief-toggle:focus {
+  opacity: 1;
+}
+
+/* ---- Typewriter Cursor ---- */
+@keyframes typewriterBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.typewriter-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent-primary);
+  margin-left: 2px;
+  animation: typewriterBlink 0.8s step-end infinite;
+  vertical-align: text-bottom;
 }

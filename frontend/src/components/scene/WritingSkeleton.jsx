@@ -33,13 +33,13 @@ export default function WritingSkeleton({ scale, label = 'Crafting scene', showD
           {SKELETON_LINES.map((line, i) => (
             <div key={i} style={{
               width: line.width, height: `${8 * scale}px`, borderRadius: `${4 * scale}px`,
-              background: 'rgba(255,255,255,0.04)',
+              background: 'var(--glass-bg-input)',
               position: 'relative', overflow: 'hidden',
               animation: `skeletonLineIn 0.4s ease-out ${line.delay}s both`,
             }}>
               <div style={{
                 position: 'absolute', inset: 0,
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 40%, var(--accent-primary-soft) 50%, rgba(255,255,255,0.08) 60%, transparent 100%)',
+                background: 'linear-gradient(90deg, transparent 0%, var(--glass-bg-strong) 40%, var(--accent-primary-soft) 50%, var(--glass-bg-strong) 60%, transparent 100%)',
                 animation: `shimmer 2.4s ease-in-out ${line.delay + 0.5}s infinite`,
               }} />
               <div style={{

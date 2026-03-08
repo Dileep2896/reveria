@@ -39,14 +39,16 @@ async def generate_book_meta(
     if story_data.get("uid") != uid:
         raise HTTPException(status_code=403, detail="Not your story")
 
-    # Load character sheet from persisted illustrator state for visual consistency
-    character_sheet = (story_data.get("illustrator_state") or {}).get("character_sheet", "")
+    # Load character sheet + visual DNA from persisted illustrator state for visual consistency
+    illust_state = story_data.get("illustrator_state") or {}
+    character_sheet = illust_state.get("character_sheet", "")
+    visual_dna = illust_state.get("visual_dna") or {}
 
     language = story_data.get("language", "English")
     full_text = "\n\n".join(body.scene_texts)
     title, cover_url = await asyncio.gather(
         gen_title(full_text, language=language),
-        gen_cover(full_text, body.art_style, body.story_id, character_sheet=character_sheet),
+        gen_cover(full_text, body.art_style, body.story_id, character_sheet=character_sheet, visual_dna=visual_dna),
     )
 
     return {"title": title, "cover_image_url": cover_url}
@@ -82,12 +84,14 @@ async def regenerate_meta(
 
     art_style = story_data.get("art_style", "cinematic")
     language = story_data.get("language", "English")
-    character_sheet = (story_data.get("illustrator_state") or {}).get("character_sheet", "")
+    illust_state = story_data.get("illustrator_state") or {}
+    character_sheet = illust_state.get("character_sheet", "")
+    visual_dna = illust_state.get("visual_dna") or {}
 
     full_text = "\n\n".join(scene_texts)
     title, cover_url = await asyncio.gather(
         gen_title(full_text, language=language),
-        gen_cover(full_text, art_style, story_id, character_sheet=character_sheet),
+        gen_cover(full_text, art_style, story_id, character_sheet=character_sheet, visual_dna=visual_dna),
     )
 
     # Fall back to first scene image
@@ -101,6 +105,7 @@ async def regenerate_meta(
     update: dict[str, Any] = {"title": title, "title_generated": True}
     if cover_url:
         update["cover_image_url"] = cover_url
+        update["cover_generated"] = True  # proper AI-generated cover
     await story_ref.update(update)
 
     return {"title": title, "cover_image_url": cover_url}

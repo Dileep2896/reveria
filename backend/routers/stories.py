@@ -40,6 +40,7 @@ async def get_public_story(story_id: str) -> dict[str, Any]:
             "image_url": s.get("image_url"),
             "audio_url": s.get("audio_url"),
             "word_timestamps": s.get("word_timestamps"),
+            "text_overlays": s.get("text_overlays"),
         })
 
     # Load generations
@@ -62,6 +63,7 @@ async def get_public_story(story_id: str) -> dict[str, Any]:
         "author_photo_url": data.get("author_photo_url"),
         "art_style": data.get("art_style", "cinematic"),
         "language": data.get("language", "English"),
+        "template": data.get("template", "storybook"),
         "scenes": scenes,
         "generations": generations,
         "status": data.get("status", "completed"),
@@ -107,8 +109,9 @@ async def export_story_pdf(
     title = data.get("title", "Untitled Story")
     author = data.get("author_name", "Anonymous")
     cover_url = data.get("cover_image_url")
+    template = data.get("template", "storybook")
 
-    pdf_bytes = await asyncio.to_thread(generate_story_pdf, title, author, cover_url, scenes)
+    pdf_bytes = await asyncio.to_thread(generate_story_pdf, title, author, cover_url, scenes, template=template)
 
     # Increment PDF export usage
     await increment_usage(uid, "pdf_export")
@@ -147,10 +150,13 @@ async def delete_story_endpoint(
     # Clean up GCS media in background (don't block the response)
     asyncio.create_task(delete_story_media(story_id))
 
-    # Decrement usage counters
-    await decrement_usage(uid, "create_story")
-    if story_data.get("is_public"):
-        await decrement_usage(uid, "publish")
+    # Decrement usage counters (best-effort — don't fail the delete if this errors)
+    try:
+        await decrement_usage(uid, "create_story")
+        if story_data.get("is_public"):
+            await decrement_usage(uid, "publish")
+    except Exception:
+        pass  # transient Firestore errors shouldn't block deletion
 
     return {"deleted": True, "story_id": story_id}
 

@@ -32,7 +32,9 @@ async def persist_story(
     batch_index: int,
     user_input: str,
     director_data: dict[str, Any] | None = None,
+    director_live_notes: list[dict[str, Any]] | None = None,
     language: str = "English",
+    template: str = "storybook",
     author_name: str | None = None,
     author_photo_url: str | None = None,
 ) -> None:
@@ -61,6 +63,7 @@ async def persist_story(
             "updated_at": datetime.now(timezone.utc),
             "art_style": art_style,
             "language": language,
+            "template": template,
             "total_scene_count": total_scene_count,
             "narrator_history": narrator_history,
             "illustrator_state": illustrator_state,
@@ -73,18 +76,22 @@ async def persist_story(
         scene_ref = story_ref.collection("scenes").document(
             str(scene["scene_number"])
         )
-        await scene_ref.set(
-            {
-                "scene_number": scene["scene_number"],
-                "text": scene.get("text", ""),
-                "scene_title": scene.get("scene_title"),
-                "image_url": scene.get("image_url"),
-                "audio_url": scene.get("audio_url"),
-                "word_timestamps": scene.get("word_timestamps"),
-                "prompt": scene.get("prompt", ""),
-                "batch_index": batch_index,
-            }
-        )
+        scene_doc: dict[str, Any] = {
+            "scene_number": scene["scene_number"],
+            "text": scene.get("text", ""),
+            "scene_title": scene.get("scene_title"),
+            "image_url": scene.get("image_url"),
+            "audio_url": scene.get("audio_url"),
+            "word_timestamps": scene.get("word_timestamps"),
+            "prompt": scene.get("prompt", ""),
+            "batch_index": batch_index,
+        }
+        # Panel images for visual narrative templates (comic/manga/webtoon)
+        if scene.get("panel_images"):
+            scene_doc["panel_images"] = scene["panel_images"]
+        if scene.get("text_overlays"):
+            scene_doc["text_overlays"] = scene["text_overlays"]
+        await scene_ref.set(scene_doc)
 
     # Write generation batch
     gen_ref = story_ref.collection("generations").document(str(batch_index))
@@ -92,6 +99,7 @@ async def persist_story(
         {
             "prompt": user_input,
             "director_data": director_data,
+            "director_live_notes": director_live_notes or [],
             "scene_numbers": [s["scene_number"] for s in scenes],
         }
     )
@@ -117,11 +125,21 @@ async def delete_story(story_id: str, uid: str) -> dict[str, Any] | None:
         logger.warning("UID mismatch on delete for story %s", story_id)
         return None
 
-    # Delete subcollections: scenes, generations, comments, ratings
+    # Delete subcollections in batches (max 450 per batch, Firestore limit 500)
+    _BATCH_SIZE = 450
     for sub in ("scenes", "generations", "comments", "ratings"):
         sub_ref = story_ref.collection(sub)
-        async for sub_doc in sub_ref.stream():
-            await sub_doc.reference.delete()
+        while True:
+            batch = db.batch()
+            count = 0
+            async for sub_doc in sub_ref.limit(_BATCH_SIZE).stream():
+                batch.delete(sub_doc.reference)
+                count += 1
+            if count == 0:
+                break
+            await batch.commit()
+            if count < _BATCH_SIZE:
+                break
 
     # Delete the story document itself
     await story_ref.delete()

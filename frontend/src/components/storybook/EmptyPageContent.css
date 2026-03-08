@@ -1,0 +1,92 @@
+/* ============================================
+   EmptyPageContent — Typewriter Reveal
+   ============================================ */
+
+.empty-page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- Typewriter text + cursor ---- */
+.empty-page-typewriter {
+  display: flex;
+  align-items: center;
+  min-height: 1.5em;
+}
+
+.empty-page-typed {
+  font-family: 'Cormorant Garamond', 'Georgia', 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+  text-shadow: 0 0 24px rgba(245, 158, 11, 0.10);
+}
+
+.empty-page-cursor {
+  display: inline-block;
+  width: 2px;
+  margin-left: 1px;
+  background: rgba(245, 158, 11, 0.7);
+  border-radius: 1px;
+  animation: cursorBlink 0.9s step-end infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+
+/* ---- Ornamental flourish ---- */
+.empty-page-flourish {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-page-flourish-line {
+  display: inline-block;
+  width: 32px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(245, 158, 11, 0.20),
+    transparent
+  );
+}
+
+.empty-page-flourish-dot {
+  font-size: 8px;
+  color: var(--accent-primary);
+  opacity: 0.3;
+  line-height: 1;
+}
+
+/* ---- Subtitle ---- */
+.empty-page-subtitle {
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 400;
+  color: var(--text-muted);
+  opacity: 0.5;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+/* ============================================
+   Light mode
+   ============================================ */
+[data-theme="light"] .empty-page-typed {
+  text-shadow: none;
+}
+
+[data-theme="light"] .empty-page-cursor {
+  background: rgba(139, 92, 246, 0.7);
+}

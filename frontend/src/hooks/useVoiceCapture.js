@@ -1,6 +1,11 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 
 const MIN_RECORDING_MS = 600; // Minimum hold duration to send audio
+
+// VAD (Voice Activity Detection) constants
+const SILENCE_THRESHOLD = 0.01; // RMS level below which = silence
+const SILENCE_DURATION_MS = 1200; // Auto-stop after 1.2s of silence
+const VAD_POLL_INTERVAL_MS = 100; // Check audio level every 100ms
 
 export default function useVoiceCapture({ onAudioCaptured }) {
   const [recording, setRecording] = useState(false);
@@ -10,7 +15,28 @@ export default function useVoiceCapture({ onAudioCaptured }) {
   const startTimeRef = useRef(0);
   const abortedRef = useRef(false);
 
+  // VAD refs
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const vadIntervalRef = useRef(null);
+  const speechDetectedRef = useRef(false);
+  const silenceStartRef = useRef(null);
+
+  const cleanupVAD = useCallback(() => {
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
+    }
+    if (analyserRef.current) {
+      analyserRef.current.disconnect();
+      analyserRef.current = null;
+    }
+    speechDetectedRef.current = false;
+    silenceStartRef.current = null;
+  }, []);
+
   const cleanup = useCallback(() => {
+    cleanupVAD();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -18,7 +44,7 @@ export default function useVoiceCapture({ onAudioCaptured }) {
     mediaRecorderRef.current = null;
     chunksRef.current = [];
     setRecording(false);
-  }, []);
+  }, [cleanupVAD]);
 
   const startRecording = useCallback(async () => {
     // Reset abort flag
@@ -85,6 +111,7 @@ export default function useVoiceCapture({ onAudioCaptured }) {
         reader.readAsDataURL(blob);
 
         // Cleanup tracks
+        cleanupVAD();
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
@@ -94,15 +121,68 @@ export default function useVoiceCapture({ onAudioCaptured }) {
       recorder.start(250); // Collect data every 250ms for reliable chunks
       startTimeRef.current = Date.now();
       setRecording(true);
+
+      // Set up VAD: Web Audio AnalyserNode for silence detection
+      try {
+        if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const audioCtx = audioContextRef.current;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+
+        speechDetectedRef.current = false;
+        silenceStartRef.current = null;
+
+        const dataArray = new Float32Array(analyser.fftSize);
+
+        vadIntervalRef.current = setInterval(() => {
+          if (!analyserRef.current) return;
+          analyserRef.current.getFloatTimeDomainData(dataArray);
+
+          // Compute RMS
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i] * dataArray[i];
+          }
+          const rms = Math.sqrt(sum / dataArray.length);
+
+          if (rms > SILENCE_THRESHOLD) {
+            // Speech detected
+            speechDetectedRef.current = true;
+            silenceStartRef.current = null;
+          } else if (speechDetectedRef.current) {
+            // Silence after speech
+            if (!silenceStartRef.current) {
+              silenceStartRef.current = Date.now();
+            } else if (Date.now() - silenceStartRef.current >= SILENCE_DURATION_MS) {
+              // 1.2s of silence after speech — auto-stop
+              if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                mediaRecorderRef.current.stop();
+                setRecording(false);
+              }
+            }
+          }
+        }, VAD_POLL_INTERVAL_MS);
+      } catch (vadErr) {
+        // VAD is best-effort — if AudioContext fails, manual stop still works
+        console.warn('VAD setup failed, manual stop still available:', vadErr);
+      }
     } catch (err) {
       console.error('Microphone access denied or error:', err);
       cleanup();
     }
-  }, [onAudioCaptured, cleanup]);
+  }, [onAudioCaptured, cleanup, cleanupVAD]);
 
   const stopRecording = useCallback(() => {
     // If startRecording is still awaiting getUserMedia, set abort flag
     abortedRef.current = true;
+
+    // Clear VAD immediately on manual stop
+    cleanupVAD();
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
@@ -111,7 +191,31 @@ export default function useVoiceCapture({ onAudioCaptured }) {
       // Recorder might not have started yet - clean up just in case
       cleanup();
     }
-  }, [cleanup]);
+  }, [cleanup, cleanupVAD]);
 
-  return { recording, startRecording, stopRecording };
+  // Abort recording WITHOUT sending audio (discard captured data)
+  const abortRecording = useCallback(() => {
+    abortedRef.current = true;
+    cleanupVAD();
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      // Detach handlers so onstop doesn't fire onAudioCaptured
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+    }
+    // Full cleanup: release mic tracks, clear chunks, set recording=false
+    cleanup();
+  }, [cleanup, cleanupVAD]);
+
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+    };
+  }, []);
+
+  return { recording, startRecording, stopRecording, abortRecording };
 }

@@ -6,7 +6,7 @@ import {
   doc,
   signInWithPopup,
   GoogleAuthProvider,
-  onAuthStateChanged,
+  onIdTokenChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updateProfile,
@@ -15,8 +15,6 @@ import {
 } from '../firebase';
 
 const AuthContext = createContext();
-
-const TOKEN_REFRESH_MS = 50 * 60 * 1000; // 50 minutes
 
 // Check if user needs email verification (email/password provider only)
 function needsVerification(firebaseUser) {
@@ -34,8 +32,9 @@ export function AuthProvider({ children }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [emailVerified, setEmailVerified] = useState(true);
 
+  // onIdTokenChanged fires on sign-in, sign-out, AND automatic token refresh (~55 min)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         setEmailVerified(!needsVerification(firebaseUser));
@@ -58,23 +57,6 @@ export function AuthProvider({ children }) {
     });
     return unsubscribe;
   }, []);
-
-  // Refresh token periodically; sign out if refresh fails
-  useEffect(() => {
-    if (!user) return;
-    const interval = setInterval(async () => {
-      try {
-        const token = await user.getIdToken(true);
-        setIdToken(token);
-      } catch {
-        setUser(null);
-        setIdToken(null);
-        setIsAdmin(false);
-        await auth.signOut();
-      }
-    }, TOKEN_REFRESH_MS);
-    return () => clearInterval(interval);
-  }, [user]);
 
   const signInWithGoogle = useCallback(async () => {
     const provider = new GoogleAuthProvider();
@@ -124,8 +106,14 @@ export function AuthProvider({ children }) {
     await auth.signOut();
   }, []);
 
+  // Returns a valid token (uses cache if fresh, auto-refreshes if expired)
+  const getValidToken = useCallback(async () => {
+    if (!auth.currentUser) return null;
+    return auth.currentUser.getIdToken();
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, idToken, loading, isAdmin, emailVerified, signInWithGoogle, signUpWithEmail, signInWithEmail, resetPassword, resendVerification, reloadUser, signOut }}>
+    <AuthContext.Provider value={{ user, idToken, loading, isAdmin, emailVerified, signInWithGoogle, signUpWithEmail, signInWithEmail, resetPassword, resendVerification, reloadUser, signOut, getValidToken }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { useSceneActions } from '../../contexts/SceneActionsContext';
+import { getTemplate } from '../../data/templates';
 import IconBtn from '../IconBtn';
 
-export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, isBusy, showError, preloaded, skip, wasRegenerated }) {
+export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded, isBusy, showError, preloaded, skip, wasRegenerated, singlePage, visualNarrative, template }) {
   const { regenImage, isReadOnly, canRegen } = useSceneActions();
+  const [showBrief, setShowBrief] = useState(false);
 
   // Collapsed error / no-image indicator
   if (showError || (preloaded && !scene.image_url)) {
@@ -42,73 +45,130 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
 
   return (
     <div
-      className="scene-image-wrap rounded-lg overflow-hidden"
+      className="scene-image-wrap overflow-hidden"
       style={{
-        flex: '0 0 35%',
+        flex: visualNarrative ? '1 1 0' : singlePage ? '0 0 48%' : '0 0 35%',
         flexShrink: 0,
         marginBottom: `${6 * scale}px`,
         background: 'var(--book-page-bg)',
         position: 'relative',
-        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08), 0 2px 8px rgba(0,0,0,0.3)',
+        borderRadius: `${4 * scale}px`,
+        border: '1px solid rgba(255,255,255,0.06)',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(0,0,0,0.15)',
       }}
     >
       <>
         {/* Shimmer placeholder while image loads / generates */}
         {!imageLoaded && (
           <div
-            className="absolute inset-0"
+            className="absolute inset-0 painting-loader"
             style={{
               background: 'var(--glass-bg)',
               zIndex: 1,
+              overflow: 'hidden',
             }}
           >
-            <div
-              className="absolute inset-0"
-              style={{
-                background: `
-                  radial-gradient(ellipse at 30% 50%, var(--accent-primary-soft) 0%, transparent 60%),
-                  radial-gradient(ellipse at 70% 50%, var(--accent-secondary-soft) 0%, transparent 60%)
-                `,
-              }}
-            />
-            <div
-              className="absolute inset-0"
-              style={{
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 40%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.06) 60%, transparent 100%)',
-                animation: 'shimmer 2s ease-in-out infinite',
-              }}
-            />
+            {/* Animated gradient blobs */}
+            <div className="absolute inset-0" style={{
+              background: `
+                radial-gradient(ellipse at 30% 40%, var(--accent-primary-soft) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 60%, var(--accent-secondary-soft) 0%, transparent 50%)
+              `,
+              animation: 'paintBlobDrift 6s ease-in-out infinite alternate',
+            }} />
+            <div className="absolute inset-0" style={{
+              background: `
+                radial-gradient(ellipse at 60% 30%, var(--accent-secondary-soft) 0%, transparent 45%),
+                radial-gradient(ellipse at 40% 70%, var(--accent-primary-soft) 0%, transparent 45%)
+              `,
+              animation: 'paintBlobDrift 6s ease-in-out 3s infinite alternate-reverse',
+              opacity: 0.6,
+            }} />
+
+            {/* Shimmer sweep */}
+            <div className="absolute inset-0" style={{
+              background: 'linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.04) 35%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 65%, transparent 100%)',
+              animation: 'shimmer 2.5s ease-in-out infinite',
+            }} />
+
+            {/* Floating sparkles */}
+            {[0, 1, 2, 3, 4].map(i => (
+              <div key={i} className="absolute" style={{
+                width: `${(2 + i % 2) * scale}px`,
+                height: `${(2 + i % 2) * scale}px`,
+                borderRadius: '50%',
+                background: i % 2 === 0 ? 'var(--accent-primary)' : 'var(--accent-secondary)',
+                left: `${15 + i * 17}%`,
+                top: `${20 + (i * 13) % 60}%`,
+                opacity: 0,
+                animation: `paintSparkle 3s ease-in-out ${i * 0.6}s infinite`,
+              }} />
+            ))}
+
+            {/* Center content */}
             <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-              <div
-                className="rounded-lg flex items-center justify-center"
-                style={{
-                  width: `${32 * scale}px`,
-                  height: `${32 * scale}px`,
+              {/* Orbiting rings */}
+              <div style={{ position: 'relative', width: `${56 * scale}px`, height: `${56 * scale}px`, marginBottom: `${8 * scale}px` }}>
+                <div style={{
+                  position: 'absolute', inset: 0, borderRadius: '50%',
+                  border: `1px solid var(--accent-primary)`, opacity: 0.2,
+                  animation: 'paintRingSpin 8s linear infinite',
+                }} />
+                <div style={{
+                  position: 'absolute', inset: `${4 * scale}px`, borderRadius: '50%',
+                  border: `1px dashed var(--accent-secondary)`, opacity: 0.15,
+                  animation: 'paintRingSpin 6s linear infinite reverse',
+                }} />
+                {/* Orbiting dot */}
+                <div style={{
+                  position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+                  width: `${4 * scale}px`, height: `${4 * scale}px`, borderRadius: '50%',
+                  background: 'var(--accent-primary)',
+                  boxShadow: '0 0 8px var(--accent-primary-glow)',
+                  animation: 'paintOrbitDot 4s linear infinite',
+                  transformOrigin: `${0}px ${28 * scale}px`,
+                }} />
+                {/* Center icon */}
+                <div style={{
+                  position: 'absolute', inset: `${10 * scale}px`,
+                  borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: 'var(--glass-bg-strong)',
                   border: '1px solid var(--glass-border)',
                   backdropFilter: 'var(--glass-blur)',
                   boxShadow: 'var(--shadow-glow-primary)',
-                  animation: 'pulse 2.5s ease-in-out infinite',
-                  marginBottom: `${6 * scale}px`,
-                }}
-              >
-                <svg
-                  width={14 * scale} height={14 * scale} viewBox="0 0 24 24" fill="none"
-                  stroke="var(--accent-primary)" strokeWidth="1.5"
-                  strokeLinecap="round" strokeLinejoin="round"
-                >
-                  <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                  <path d="M2 2l7.586 7.586" />
-                  <circle cx="11" cy="11" r="2" />
-                </svg>
+                  animation: 'paintIconPulse 3s ease-in-out infinite',
+                }}>
+                  <svg
+                    width={14 * scale} height={14 * scale} viewBox="0 0 24 24" fill="none"
+                    stroke="var(--accent-primary)" strokeWidth="1.5"
+                    strokeLinecap="round" strokeLinejoin="round"
+                    style={{ animation: 'paintBrushWiggle 2s ease-in-out infinite' }}
+                  >
+                    <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                    <path d="M2 2l7.586 7.586" />
+                    <circle cx="11" cy="11" r="2" />
+                  </svg>
+                </div>
               </div>
-              <span
-                className="font-medium tracking-wide"
-                style={{ fontSize: `${9 * scale}px`, color: 'var(--text-secondary)' }}
-              >
+
+              <span className="font-medium tracking-wide" style={{
+                fontSize: `${9 * scale}px`, color: 'var(--text-secondary)',
+                animation: 'paintTextPulse 2s ease-in-out infinite',
+              }}>
                 Painting scene
               </span>
+
+              {/* Animated dots */}
+              <div style={{ display: 'flex', gap: `${3 * scale}px`, marginTop: `${4 * scale}px` }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{
+                    width: `${3 * scale}px`, height: `${3 * scale}px`, borderRadius: '50%',
+                    background: 'var(--accent-primary)',
+                    animation: `paintDotBounce 1.4s ease-in-out ${i * 0.2}s infinite`,
+                  }} />
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -118,10 +178,9 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
           alt={`Scene ${displayIndex ?? scene.scene_number}`}
           style={{
             width: '100%',
-            height: '100%',
-            objectFit: 'cover',
+            height: visualNarrative ? '100%' : 'auto',
+            objectFit: 'contain',
             display: 'block',
-            transform: 'scale(1.04)',
             opacity: imageLoaded ? 1 : 0,
             animation: skip && !wasRegenerated.current
               ? 'none'
@@ -137,6 +196,132 @@ export default function SceneImageArea({ scene, scale, displayIndex, imageLoaded
         />
         )}
       </>
+
+      {/* Text overlays for visual narrative templates — decouple from imageLoaded to prevent flicker */}
+      {visualNarrative && scene.text_overlays && scene.image_url && (() => {
+        const os = getTemplate(template).overlayStyle || {};
+        return (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none' }}>
+          {scene.text_overlays.map((ov, i) => {
+            const isDialog = ov.type === 'dialog';
+            const bg = isDialog ? (os.dialogBg || 'rgba(255,255,255,0.94)') : (os.narrationBg || 'rgba(255,220,80,0.92)');
+            const border = isDialog ? (os.dialogBorder || '#1a1a1a') : (os.narrationBorder || 'rgba(180,140,0,0.5)');
+            const color = isDialog ? (os.dialogColor || '#1a1a1a') : (os.narrationColor || '#1a1a1a');
+            const weight = isDialog ? (os.dialogFontWeight || 700) : (os.fontWeight || 700);
+            return (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: `${ov.x}%`,
+                  top: `${ov.y}%`,
+                  width: `${ov.width}%`,
+                  minHeight: `${ov.height}%`,
+                  padding: `${4 * scale}px ${6 * scale}px`,
+                  fontSize: `${(isDialog ? 8.5 : 7.5) * scale}px`,
+                  lineHeight: 1.3,
+                  fontFamily: "'Outfit', sans-serif",
+                  fontWeight: weight,
+                  textTransform: (os.uppercase && !isDialog) ? 'uppercase' : 'none',
+                  letterSpacing: !isDialog ? '0.04em' : 'normal',
+                  color,
+                  background: bg,
+                  border: `${1.5 * scale}px solid ${border}`,
+                  borderRadius: isDialog ? `${12 * scale}px` : `${2 * scale}px`,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  animation: `overlayFadeIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) ${0.3 + i * 0.15}s both`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {ov.text}
+                {/* Speech bubble tail */}
+                {isDialog && ov.tail_x != null && ov.tail_y != null && (
+                  <svg
+                    style={{
+                      position: 'absolute',
+                      bottom: `${-10 * scale}px`,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: `${16 * scale}px`,
+                      height: `${12 * scale}px`,
+                      overflow: 'visible',
+                    }}
+                    viewBox="0 0 16 12"
+                  >
+                    <polygon
+                      points="3,0 13,0 8,12"
+                      fill={bg}
+                      stroke={border}
+                      strokeWidth="1.5"
+                    />
+                    <rect x="3" y="-0.5" width="10" height="2" fill={bg} />
+                  </svg>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        );
+      })()}
+
+      {/* Creative Brief overlay */}
+      {scene.image_brief && imageLoaded && (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowBrief(v => !v); }}
+            className="creative-brief-toggle"
+            style={{
+              position: 'absolute', top: 4*scale, left: 4*scale, zIndex: 12,
+              width: 22*scale, height: 22*scale, borderRadius: '50%',
+              background: showBrief ? 'var(--accent-secondary-soft)' : 'rgba(0,0,0,0.4)',
+              border: `1px solid ${showBrief ? 'var(--glass-border-secondary)' : 'rgba(255,255,255,0.15)'}`,
+              color: showBrief ? 'var(--accent-secondary)' : 'rgba(255,255,255,0.7)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backdropFilter: 'blur(8px)', padding: 0,
+            }}
+          >
+            <svg width={11*scale} height={11*scale} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          </button>
+
+          {showBrief && (
+            <div style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 11,
+              maxHeight: '50%', overflow: 'auto',
+              background: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(12px)',
+              borderTop: '1px solid var(--glass-border-secondary)',
+              padding: `${8*scale}px ${10*scale}px`,
+              animation: 'briefSlideUp 0.3s ease-out',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4*scale, marginBottom: 4*scale }}>
+                <svg width={9*scale} height={9*scale} viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                </svg>
+                <span style={{ fontSize: 8*scale, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent-secondary)' }}>
+                  Creative Brief
+                </span>
+                {scene.image_tier && (
+                  <span style={{ fontSize: 7*scale, fontWeight: 600, padding: '1px 5px', borderRadius: 999, background: 'var(--accent-primary-soft)', color: 'var(--accent-primary)', border: '1px solid var(--glass-border-accent)', marginLeft: 'auto' }}>
+                    Tier {scene.image_tier}
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: 9*scale, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)', margin: 0 }}>
+                {scene.image_brief}
+              </p>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Busy overlay - shimmer + icon */}
       {isBusy && (

@@ -1,6 +1,8 @@
 export default function CompleteBookDialog({ completing, onClose, onComplete }) {
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,
@@ -49,7 +51,7 @@ export default function CompleteBookDialog({ completing, onClose, onComplete }) 
         </div>
 
         <h3 style={{
-          fontFamily: "'Playfair Display', serif",
+          fontFamily: "'Cormorant Garamond', serif",
           fontSize: '1.4rem',
           fontWeight: 700,
           color: 'var(--text-primary)',

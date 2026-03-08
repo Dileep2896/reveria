@@ -1,0 +1,103 @@
+/**
+ * Per-template book cover designs.
+ * Each entry provides visual tokens + thematic content for the TemplateChooser.
+ *
+ * - gradient / spine / accent / iconBg / pattern / patternSize / frameStyle: visual styling
+ * - tagline: thematic subtitle for the cover
+ * - sceneSvg: key for a decorative scene illustration rendered behind the content
+ */
+export const CARD_DESIGNS = {
+  storybook: {
+    gradient: 'linear-gradient(170deg, #3d2860 0%, #1e1235 40%, #140e22 100%)',
+    spine:    'linear-gradient(180deg, #4a3070 0%, #2a1845 100%)',
+    accent:   '#b48cff',
+    iconBg:   'rgba(180,140,255,0.18)',
+    pattern:  'radial-gradient(circle at 30% 20%, rgba(180,140,255,0.06) 0%, transparent 50%), radial-gradient(circle at 70% 80%, rgba(255,168,108,0.04) 0%, transparent 50%)',
+    frameStyle: 'ornate',
+    tagline: 'Once upon a time...',
+    sceneSvg: 'storybook',
+  },
+  comic: {
+    gradient: 'linear-gradient(170deg, #3a1818 0%, #201010 40%, #150a0a 100%)',
+    spine:    'linear-gradient(180deg, #4a2020 0%, #2a1010 100%)',
+    accent:   '#ff6b6b',
+    iconBg:   'rgba(255,107,107,0.18)',
+    pattern:  'radial-gradient(circle, rgba(255,107,107,0.08) 1px, transparent 1px)',
+    patternSize: '8px 8px',
+    frameStyle: 'double',
+    tagline: 'POW! BAM! CRASH!',
+    sceneSvg: 'comic',
+  },
+  webtoon: {
+    gradient: 'linear-gradient(170deg, #1a2e45 0%, #0f1a2d 40%, #0a1320 100%)',
+    spine:    'linear-gradient(180deg, #1e3550 0%, #0f1e30 100%)',
+    accent:   '#67b8f9',
+    iconBg:   'rgba(103,184,249,0.18)',
+    pattern:  'repeating-linear-gradient(90deg, rgba(103,184,249,0.03) 0px, rgba(103,184,249,0.03) 1px, transparent 1px, transparent 12px)',
+    frameStyle: 'minimal',
+    tagline: 'Scroll into the story',
+    sceneSvg: 'webtoon',
+  },
+  hero: {
+    gradient: 'linear-gradient(170deg, #3a3218 0%, #221c0e 40%, #181408 100%)',
+    spine:    'linear-gradient(180deg, #4a4020 0%, #2a2410 100%)',
+    accent:   '#fbbf24',
+    iconBg:   'rgba(251,191,36,0.18)',
+    pattern:  'linear-gradient(45deg, rgba(251,191,36,0.04) 25%, transparent 25%, transparent 50%, rgba(251,191,36,0.04) 50%, rgba(251,191,36,0.04) 75%, transparent 75%)',
+    patternSize: '20px 20px',
+    frameStyle: 'ornate',
+    tagline: 'Your legend begins',
+    sceneSvg: 'hero',
+  },
+  manga: {
+    gradient: 'linear-gradient(170deg, #222230 0%, #14141e 40%, #0e0e16 100%)',
+    spine:    'linear-gradient(180deg, #2a2a3a 0%, #18181e 100%)',
+    accent:   '#e0e0e0',
+    iconBg:   'rgba(224,224,224,0.14)',
+    pattern:  'repeating-linear-gradient(45deg, rgba(224,224,224,0.02) 0px, rgba(224,224,224,0.02) 1px, transparent 1px, transparent 6px)',
+    frameStyle: 'minimal',
+    tagline: 'Read right to left',
+    sceneSvg: 'manga',
+  },
+  novel: {
+    gradient: 'linear-gradient(170deg, #1e3520 0%, #132214 40%, #0c180d 100%)',
+    spine:    'linear-gradient(180deg, #264028 0%, #162a18 100%)',
+    accent:   '#86efac',
+    iconBg:   'rgba(134,239,172,0.18)',
+    pattern:  'radial-gradient(circle at 50% 30%, rgba(134,239,172,0.05) 0%, transparent 60%)',
+    frameStyle: 'ornate',
+    tagline: 'Chapter One',
+    sceneSvg: 'novel',
+  },
+  diary: {
+    gradient: 'linear-gradient(170deg, #3a3020 0%, #221a10 40%, #18120a 100%)',
+    spine:    'linear-gradient(180deg, #4a3828 0%, #2a2015 100%)',
+    accent:   '#fca5a5',
+    iconBg:   'rgba(252,165,165,0.18)',
+    pattern:  'repeating-linear-gradient(0deg, rgba(252,165,165,0.03) 0px, rgba(252,165,165,0.03) 1px, transparent 1px, transparent 18px)',
+    frameStyle: 'double',
+    tagline: 'Dear Diary...',
+    sceneSvg: 'diary',
+  },
+  poetry: {
+    gradient: 'linear-gradient(170deg, #302040 0%, #1c1230 40%, #140e22 100%)',
+    spine:    'linear-gradient(180deg, #3a2850 0%, #221838 100%)',
+    accent:   '#c4b5fd',
+    iconBg:   'rgba(196,181,253,0.18)',
+    pattern:  'radial-gradient(ellipse at 50% 50%, rgba(196,181,253,0.06) 0%, transparent 70%)',
+    frameStyle: 'ornate',
+    tagline: 'Verses in the wind',
+    sceneSvg: 'poetry',
+  },
+  photojournal: {
+    gradient: 'linear-gradient(170deg, #1a2e30 0%, #0f1c1e 40%, #0a1415 100%)',
+    spine:    'linear-gradient(180deg, #1e3538 0%, #0f2022 100%)',
+    accent:   '#5eead4',
+    iconBg:   'rgba(94,234,212,0.18)',
+    pattern:  'linear-gradient(rgba(94,234,212,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(94,234,212,0.02) 1px, transparent 1px)',
+    patternSize: '16px 16px',
+    frameStyle: 'minimal',
+    tagline: 'Through the lens',
+    sceneSvg: 'photojournal',
+  },
+};

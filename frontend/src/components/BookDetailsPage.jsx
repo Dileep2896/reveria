@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { ROUTES } from '../routes';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { db, doc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, getDocs } from '../firebase';
+import { db, doc, getDoc, updateDoc, collection, getDocs } from '../firebase';
 import useBookDetails from '../hooks/useBookDetails';
+import useBookSocial from '../hooks/useBookSocial';
 import ReadingMode from './ReadingMode';
-import IconBtn from './IconBtn';
+import BookSocialSection from './book/BookSocialSection';
+import BookCommentSection from './book/BookCommentSection';
+import BookActionBar from './book/BookActionBar';
+import UserAvatar from './UserAvatar';
+import Tooltip from './Tooltip';
 import { API_URL } from '../utils/storyHelpers';
 import './BookDetailsPage.css';
 
@@ -15,18 +21,13 @@ const I = ({ d, size = 16 }) => (
     {typeof d === 'string' ? <path d={d} /> : d}
   </svg>
 );
-const IconRead = () => <I d={<><polygon points="5 3 19 12 5 21 5 3" /></>} />;
-const IconBrowse = () => <I d={<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></>} />;
-const IconEdit = () => <I d={<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></>} />;
 const IconShare = () => <I d={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></>} />;
-const IconPdf = () => <I d={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></>} />;
-const IconUnpublish = () => <I d={<><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></>} />;
 
 export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, onOpenPublicBook }) {
   const { storyId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { idToken } = useAuth();
+  const { idToken, getValidToken } = useAuth();
   const { addToast } = useToast();
   const prepublish = location.state?.prepublish || false;
 
@@ -50,16 +51,11 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
   const [loadedScenes, setLoadedScenes] = useState(null);
   const [loadingScenes, setLoadingScenes] = useState(false);
 
-  // Social state - ratings
-  const [ratingData, setRatingData] = useState({ avg: 0, count: 0, userRating: null, commentCount: 0 });
-  const [hoverRating, setHoverRating] = useState(0);
-  const [ratingSubmitting, setRatingSubmitting] = useState(false);
-
-  // Social state - comments
-  const [comments, setComments] = useState([]);
-  const [commentsLoading, setCommentsLoading] = useState(true);
-  const [commentText, setCommentText] = useState('');
-  const [postingComment, setPostingComment] = useState(false);
+  const {
+    ratingData, setRatingData, hoverRating, setHoverRating,
+    comments, commentsLoading, commentText, setCommentText, postingComment,
+    handleToggleLike, handleRate, handlePostComment, handleDeleteComment,
+  } = useBookSocial({ storyId, storyLoading, idToken, getValidToken, user, storyData, setStoryData, addToast });
 
   // Load story metadata (Firestore for auth'd users, public API for guests)
   useEffect(() => {
@@ -84,6 +80,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
             author_photo_url: data.author_photo_url,
             art_style: data.art_style || 'cinematic',
             language: data.language || 'English',
+            template: data.template || 'storybook',
             total_scene_count: data.total_scene_count || 0,
             is_public: true,
             status: 'completed',
@@ -121,6 +118,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
             author_photo_url: data.author_photo_url,
             art_style: data.art_style || 'cinematic',
             language: data.language || 'English',
+            template: data.template || 'storybook',
             total_scene_count: data.total_scene_count || 0,
             is_public: data.is_public || false,
             status: data.status || 'draft',
@@ -235,7 +233,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
 
   // Share
   const handleShare = useCallback(() => {
-    const url = `${window.location.origin}/book/${storyId}`;
+    const url = `${window.location.origin}${ROUTES.BOOK(storyId)}`;
     navigator.clipboard.writeText(url)
       .then(() => addToast('Link copied!', 'success'))
       .catch(() => addToast('Failed to copy link', 'error'));
@@ -245,8 +243,9 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
   const handlePdf = useCallback(async () => {
     addToast('Generating PDF...', 'info');
     try {
+      const token = getValidToken ? await getValidToken() : idToken;
       const res = await fetch(`${API_URL}/api/stories/${storyId}/pdf`, {
-        headers: { Authorization: `Bearer ${idToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
@@ -261,7 +260,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
       console.error('PDF export failed:', err);
       addToast('PDF export failed', 'error');
     }
-  }, [storyId, idToken, addToast]);
+  }, [storyId, idToken, getValidToken, addToast]);
 
   // Read This Story - load scenes and open Reading Mode
   const handleReadStory = useCallback(async () => {
@@ -349,162 +348,19 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
   // Navigate back
   const handleBack = useCallback(() => {
     if (!user) {
-      navigate('/');
+      navigate(ROUTES.HOME);
       return;
     }
     if (location.state?.from === 'library') {
-      navigate('/library');
+      navigate(ROUTES.LIBRARY);
     } else if (location.state?.from === 'explore') {
-      navigate('/explore');
+      navigate(ROUTES.EXPLORE);
     } else if (isOwner) {
-      navigate('/library');
+      navigate(ROUTES.LIBRARY);
     } else {
-      navigate('/explore');
+      navigate(ROUTES.EXPLORE);
     }
   }, [navigate, location.state, isOwner, user]);
-
-  // ── Social data: load ratings + comments ──
-  useEffect(() => {
-    if (!storyId || storyLoading) return;
-    let cancelled = false;
-
-    async function loadSocial() {
-      const headers = {};
-      if (idToken) headers.Authorization = `Bearer ${idToken}`;
-
-      try {
-        const res = await fetch(`${API_URL}/api/public/stories/${storyId}/social`, { headers });
-        if (cancelled || !res.ok) return;
-        const data = await res.json();
-        setRatingData({
-          avg: data.rating_avg || 0,
-          count: data.rating_count || 0,
-          userRating: data.user_rating || null,
-          commentCount: data.comment_count || 0,
-        });
-      } catch { /* ignore */ }
-    }
-
-    async function loadComments() {
-      setCommentsLoading(true);
-      try {
-        const res = await fetch(`${API_URL}/api/public/stories/${storyId}/comments`);
-        if (cancelled || !res.ok) return;
-        const data = await res.json();
-        setComments(data.comments || []);
-      } catch { /* ignore */ }
-      if (!cancelled) setCommentsLoading(false);
-    }
-
-    loadSocial();
-    loadComments();
-    return () => { cancelled = true; };
-  }, [storyId, storyLoading, idToken]);
-
-  // ── Like toggle (same pattern as ExplorePage) ──
-  const handleToggleLike = useCallback(async () => {
-    if (!user) return;
-    const uid = user.uid;
-    const likedBy = storyData?.liked_by || [];
-    const isLiked = likedBy.includes(uid);
-
-    // Optimistic update
-    setStoryData((prev) => {
-      if (!prev) return prev;
-      const newLikedBy = isLiked ? prev.liked_by.filter((id) => id !== uid) : [...prev.liked_by, uid];
-      return { ...prev, liked_by: newLikedBy };
-    });
-
-    try {
-      await updateDoc(doc(db, 'stories', storyId), {
-        liked_by: isLiked ? arrayRemove(uid) : arrayUnion(uid),
-      });
-    } catch {
-      // Rollback
-      setStoryData((prev) => {
-        if (!prev) return prev;
-        const reverted = isLiked ? [...prev.liked_by, uid] : prev.liked_by.filter((id) => id !== uid);
-        return { ...prev, liked_by: reverted };
-      });
-    }
-  }, [user, storyId, storyData]);
-
-  // ── Star rating ──
-  const handleRate = useCallback(async (rating) => {
-    if (!user || !idToken || ratingSubmitting) return;
-    setRatingSubmitting(true);
-
-    const oldData = { ...ratingData };
-    // Optimistic update
-    const wasNew = ratingData.userRating === null;
-    const newCount = wasNew ? ratingData.count + 1 : ratingData.count;
-    const newSum = wasNew
-      ? (ratingData.avg * ratingData.count) + rating
-      : (ratingData.avg * ratingData.count) - ratingData.userRating + rating;
-    setRatingData({
-      avg: newCount > 0 ? Math.round((newSum / newCount) * 10) / 10 : 0,
-      count: newCount,
-      userRating: rating,
-      commentCount: ratingData.commentCount,
-    });
-
-    try {
-      await fetch(`${API_URL}/api/stories/${storyId}/rate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ rating }),
-      });
-    } catch {
-      setRatingData(oldData);
-    } finally {
-      setRatingSubmitting(false);
-    }
-  }, [user, idToken, storyId, ratingData, ratingSubmitting]);
-
-  // ── Post comment ──
-  const handlePostComment = useCallback(async () => {
-    if (!user || !idToken || !commentText.trim() || postingComment) return;
-    setPostingComment(true);
-    const text = commentText.trim();
-    setCommentText('');
-
-    try {
-      const res = await fetch(`${API_URL}/api/stories/${storyId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
-      setComments((prev) => [data, ...prev]);
-      setRatingData((prev) => ({ ...prev, commentCount: prev.commentCount + 1 }));
-    } catch {
-      setCommentText(text); // Restore on failure
-      addToast('Failed to post comment', 'error');
-    } finally {
-      setPostingComment(false);
-    }
-  }, [user, idToken, storyId, commentText, postingComment, addToast]);
-
-  // ── Delete comment ──
-  const handleDeleteComment = useCallback(async (commentId) => {
-    if (!idToken) return;
-    const prev = [...comments];
-    setComments((c) => c.filter((x) => x.id !== commentId));
-    setRatingData((r) => ({ ...r, commentCount: Math.max(0, r.commentCount - 1) }));
-
-    try {
-      const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-      if (!res.ok) throw new Error('Failed');
-    } catch {
-      setComments(prev);
-      setRatingData((r) => ({ ...r, commentCount: r.commentCount + 1 }));
-      addToast('Failed to delete comment', 'error');
-    }
-  }, [idToken, storyId, comments, addToast]);
 
   // ── Loading / Error states ──
   if (storyLoading) {
@@ -583,7 +439,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
   if (!storyData) {
     return (
       <div className="book-details-container">
-        <button className="book-details-back" onClick={() => navigate('/explore')}>
+        <button className="book-details-back" onClick={() => navigate(ROUTES.EXPLORE)}>
           <BackArrow /> Back to Explore
         </button>
         <div style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-muted)' }}>
@@ -610,10 +466,10 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
         </button>
       ) : (
         <div className="book-details-guest-cta">
-          <button className="book-details-back" onClick={() => navigate('/')}>
+          <button className="book-details-back" onClick={() => navigate(ROUTES.HOME)}>
             <BackArrow /> Sign in to create
           </button>
-          <button className="book-details-back" onClick={() => navigate('/')}>
+          <button className="book-details-back" onClick={() => navigate(ROUTES.HOME)}>
             Explore more stories
           </button>
         </div>
@@ -639,20 +495,16 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
           <div className="book-details-title-row">
             <h1 className="book-details-title">{storyData.title}</h1>
             {isVisitorView && (
-              <button className="book-details-share-inline" onClick={handleShare} title="Share">
-                <IconShare />
-              </button>
+              <Tooltip label="Share">
+                <button className="book-details-share-inline" onClick={handleShare}>
+                  <IconShare />
+                </button>
+              </Tooltip>
             )}
           </div>
 
           <div className="book-details-author-row">
-            {storyData.author_photo_url ? (
-              <img className="book-details-avatar" src={storyData.author_photo_url} alt={storyData.author_name} referrerPolicy="no-referrer" />
-            ) : (
-              <div className="book-details-avatar book-details-avatar--fallback">
-                {(storyData.author_name || '?')[0].toUpperCase()}
-              </div>
-            )}
+            <UserAvatar photoURL={storyData.author_photo_url} name={storyData.author_name || '?'} size={28} />
             <span className="book-details-author-name">{storyData.author_name}</span>
           </div>
 
@@ -713,55 +565,15 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
 
               {/* Social stats row */}
               {isPublished && (
-                <div className="book-details-social">
-                  {/* Like */}
-                  <button
-                    className={`book-details-social-item book-details-like-btn${user && (storyData.liked_by || []).includes(user.uid) ? ' book-details-like-btn--active' : ''}`}
-                    onClick={handleToggleLike}
-                    disabled={!user}
-                    title={user ? 'Like this story' : 'Sign in to like'}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill={user && (storyData.liked_by || []).includes(user.uid) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                    </svg>
-                    <span>{(storyData.liked_by || []).length || storyData.like_count || 0}</span>
-                  </button>
-
-                  {/* Star rating */}
-                  <div className="book-details-social-item">
-                    <div className="book-details-stars" onMouseLeave={() => setHoverRating(0)}>
-                      {[1, 2, 3, 4, 5].map((star) => {
-                        const filled = hoverRating ? star <= hoverRating : star <= Math.round(ratingData.avg);
-                        const isUserRating = !hoverRating && ratingData.userRating && star <= ratingData.userRating;
-                        return (
-                          <span
-                            key={star}
-                            className={`book-details-star${filled ? ' book-details-star--filled' : ''}${hoverRating && star <= hoverRating ? ' book-details-star--hover' : ''}${isUserRating ? ' book-details-star--user' : ''}`}
-                            onClick={() => user && handleRate(star)}
-                            onMouseEnter={() => user && setHoverRating(star)}
-                            role={user ? 'button' : undefined}
-                            style={{ cursor: user ? 'pointer' : 'default' }}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                            </svg>
-                          </span>
-                        );
-                      })}
-                    </div>
-                    <span className="book-details-rating-text">
-                      {ratingData.count > 0 ? `${ratingData.avg} (${ratingData.count})` : 'No ratings'}
-                    </span>
-                  </div>
-
-                  {/* Comment count */}
-                  <span className="book-details-social-item book-details-social-comments">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                    <span>{ratingData.commentCount}</span>
-                  </span>
-                </div>
+                <BookSocialSection
+                  user={user}
+                  storyData={storyData}
+                  ratingData={ratingData}
+                  hoverRating={hoverRating}
+                  setHoverRating={setHoverRating}
+                  handleToggleLike={handleToggleLike}
+                  handleRate={handleRate}
+                />
               )}
 
               {/* Synopsis */}
@@ -857,163 +669,47 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
           )}
 
           {/* ── Actions ── */}
-          <div className="book-details-actions">
-            {/* Editing actions */}
-            {editing && (
-              <div className="book-details-actions-primary">
-                <button className="book-details-btn book-details-btn--primary" onClick={handleSaveEdits} disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Edits'}
-                </button>
-                <button className="book-details-btn book-details-btn--secondary" onClick={handleCancelEdit}>
-                  Cancel
-                </button>
-              </div>
-            )}
-
-            {/* Non-editing actions */}
-            {!editing && (
-              <>
-                {/* Pre-publish */}
-                {isPrepublish && details && !generating && (
-                  <>
-                    <div className="book-details-actions-primary">
-                      <button className="book-details-btn book-details-btn--primary" onClick={handlePublish} disabled={publishing}>
-                        {publishing ? 'Publishing...' : 'Publish to Explore'}
-                      </button>
-                    </div>
-                    <div className="book-details-actions-secondary">
-                      <IconBtn label="Edit" size={36} onClick={handleStartEdit}><IconEdit /></IconBtn>
-                    </div>
-                  </>
-                )}
-
-                {/* Author view: published */}
-                {isAuthorView && details && (
-                  <>
-                    <div className="book-details-actions-primary">
-                      <button className="book-details-btn book-details-btn--primary" onClick={handleReadStory} disabled={loadingScenes}>
-                        <IconRead /> {loadingScenes ? 'Loading...' : 'Read Story'}
-                      </button>
-                      <button className="book-details-btn book-details-btn--secondary" onClick={handleBrowseStory} disabled={browsingStory}>
-                        <IconBrowse /> {browsingStory ? 'Loading...' : 'Browse Story'}
-                      </button>
-                    </div>
-                    <div className="book-details-actions-secondary">
-                      <IconBtn label="Edit" size={36} onClick={handleStartEdit}><IconEdit /></IconBtn>
-                      <IconBtn label="Share" size={36} onClick={handleShare}><IconShare /></IconBtn>
-                      <IconBtn label="PDF" size={36} onClick={handlePdf}><IconPdf /></IconBtn>
-                      <IconBtn label="Unpublish" size={36} danger onClick={() => setShowUnpublishConfirm(true)}><IconUnpublish /></IconBtn>
-                    </div>
-                  </>
-                )}
-
-                {/* Owner, completed but not published */}
-                {isOwner && !isPublished && !isPrepublish && storyData.status === 'completed' && details && !generating && (
-                  <>
-                    <div className="book-details-actions-primary">
-                      <button className="book-details-btn book-details-btn--primary" onClick={handlePublish} disabled={publishing}>
-                        {publishing ? 'Publishing...' : 'Publish to Explore'}
-                      </button>
-                      <button className="book-details-btn book-details-btn--secondary" onClick={handleReadStory} disabled={loadingScenes}>
-                        <IconRead /> {loadingScenes ? 'Loading...' : 'Read Story'}
-                      </button>
-                      <button className="book-details-btn book-details-btn--secondary" onClick={handleBrowseStory} disabled={browsingStory}>
-                        <IconBrowse /> {browsingStory ? 'Loading...' : 'Browse Story'}
-                      </button>
-                    </div>
-                    <div className="book-details-actions-secondary">
-                      <IconBtn label="Edit" size={36} onClick={handleStartEdit}><IconEdit /></IconBtn>
-                    </div>
-                  </>
-                )}
-
-                {/* Visitor view */}
-                {isVisitorView && (
-                  <div className="book-details-actions-primary">
-                    <button className="book-details-btn book-details-btn--primary" onClick={handleReadStory} disabled={loadingScenes}>
-                      <IconRead /> {loadingScenes ? 'Loading...' : 'Read This Story'}
-                    </button>
-                    {user && (
-                      <button className="book-details-btn book-details-btn--secondary" onClick={handleBrowseStory} disabled={browsingStory}>
-                        <IconBrowse /> {browsingStory ? 'Loading...' : 'Browse Story'}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          <BookActionBar
+            editing={editing}
+            saving={saving}
+            handleSaveEdits={handleSaveEdits}
+            handleCancelEdit={handleCancelEdit}
+            isPrepublish={isPrepublish}
+            isAuthorView={isAuthorView}
+            isOwner={isOwner}
+            isPublished={isPublished}
+            isVisitorView={isVisitorView}
+            details={details}
+            generating={generating}
+            publishing={publishing}
+            handlePublish={handlePublish}
+            handleReadStory={handleReadStory}
+            loadingScenes={loadingScenes}
+            handleBrowseStory={handleBrowseStory}
+            browsingStory={browsingStory}
+            handleStartEdit={handleStartEdit}
+            handleShare={handleShare}
+            handlePdf={handlePdf}
+            setShowUnpublishConfirm={setShowUnpublishConfirm}
+            user={user}
+            storyData={storyData}
+          />
         </div>
       </div>
 
       {/* Comments section - only for published stories */}
       {isPublished && (
-        <div className="book-details-comments">
-          <h3 className="book-details-section-title">Comments</h3>
-
-          {/* Comment form (logged-in only) */}
-          {user && (
-            <div className="book-details-comment-form">
-              <textarea
-                className="book-details-comment-input"
-                placeholder="Share your thoughts..."
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                rows={3}
-                maxLength={2000}
-              />
-              <button
-                className="book-details-btn book-details-btn--primary book-details-comment-submit"
-                onClick={handlePostComment}
-                disabled={postingComment || !commentText.trim()}
-              >
-                {postingComment ? 'Posting...' : 'Post Comment'}
-              </button>
-            </div>
-          )}
-
-          {/* Comment list */}
-          {commentsLoading ? (
-            <div className="book-details-skeleton-lines" style={{ maxWidth: 500 }}>
-              <div className="book-details-skeleton-line book-details-skeleton-line--medium" />
-              <div className="book-details-skeleton-line book-details-skeleton-line--short" />
-              <div className="book-details-skeleton-line book-details-skeleton-line--medium" />
-            </div>
-          ) : comments.length === 0 ? (
-            <p className="book-details-comments-empty">No comments yet. Be the first to share your thoughts!</p>
-          ) : (
-            comments.map((c) => (
-              <div key={c.id} className="book-details-comment">
-                <div className="book-details-comment-header">
-                  {c.author_photo_url ? (
-                    <img className="book-details-avatar" src={c.author_photo_url} alt={c.author_name} referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="book-details-avatar book-details-avatar--fallback">
-                      {(c.author_name || '?')[0].toUpperCase()}
-                    </div>
-                  )}
-                  <span className="book-details-comment-author">{c.author_name || 'Anonymous'}</span>
-                  <span className="book-details-comment-time">
-                    {c.created_at ? new Date(c.created_at * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
-                  </span>
-                  {user && (c.uid === user.uid || (storyData?.uid && storyData.uid === user.uid)) && (
-                    <button
-                      className="book-details-comment-delete"
-                      onClick={() => handleDeleteComment(c.id)}
-                      title="Delete comment"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                <p className="book-details-comment-text">{c.text}</p>
-              </div>
-            ))
-          )}
-        </div>
+        <BookCommentSection
+          user={user}
+          storyData={storyData}
+          comments={comments}
+          commentsLoading={commentsLoading}
+          commentText={commentText}
+          setCommentText={setCommentText}
+          postingComment={postingComment}
+          handlePostComment={handlePostComment}
+          handleDeleteComment={handleDeleteComment}
+        />
       )}
 
       {/* Unpublish confirmation */}
@@ -1037,6 +733,7 @@ export default function BookDetailsPage({ user, setAppIsPublished, onOpenBook, o
           storyId={storyId}
           idToken={idToken}
           onExit={() => setReadingMode(false)}
+          template={storyData?.template || 'storybook'}
         />,
         document.body,
       )}

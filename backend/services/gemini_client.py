@@ -1,9 +1,12 @@
+import asyncio
 import base64
 import logging
 import os
 
 from google import genai
 from google.genai import types
+
+from utils.retry import is_transient, with_retries
 
 logger = logging.getLogger("storyforge.gemini")
 
@@ -60,35 +63,46 @@ async def generate_stream(
     contents.append(types.Content(role="user", parts=[types.Part(text=user_prompt)]))
 
     yielded_any = False
-    try:
-        stream = await client.aio.models.generate_content_stream(
-            model=model,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=0.9,
-                max_output_tokens=2048,
-            ),
-        )
-        async for chunk in stream:
-            # Check for safety block on any chunk
-            if chunk.candidates:
-                candidate = chunk.candidates[0]
-                fr = getattr(candidate, "finish_reason", None)
-                if fr and str(fr).upper() in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"):
-                    raise ContentBlockedError("Content blocked by safety filters.")
-            if chunk.text:
-                yielded_any = True
-                yield chunk.text
-    except ContentBlockedError:
-        raise
-    except Exception as e:
-        err_msg = str(e).lower()
-        if "safety" in err_msg or "blocked" in err_msg or "prohibited" in err_msg:
-            raise ContentBlockedError("Content blocked by safety filters.") from e
-        raise
+    last_transient: Exception | None = None
+
+    for _attempt in range(3):
+        try:
+            stream = await client.aio.models.generate_content_stream(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=0.9,
+                    max_output_tokens=2048,
+                ),
+            )
+            async for chunk in stream:
+                if chunk.candidates:
+                    candidate = chunk.candidates[0]
+                    fr = getattr(candidate, "finish_reason", None)
+                    if fr and str(fr).upper() in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"):
+                        raise ContentBlockedError("Content blocked by safety filters.")
+                if chunk.text:
+                    yielded_any = True
+                    yield chunk.text
+            break  # success — exit retry loop
+        except ContentBlockedError:
+            raise
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "safety" in err_msg or "blocked" in err_msg or "prohibited" in err_msg:
+                raise ContentBlockedError("Content blocked by safety filters.") from e
+            if is_transient(e) and _attempt < 2 and not yielded_any:
+                last_transient = e
+                delay = 1.0 * (2 ** _attempt)
+                logger.warning("generate_stream transient error (attempt %d/3), retrying in %.1fs: %s", _attempt + 1, delay, e)
+                await asyncio.sleep(delay)
+                continue
+            raise
 
     if not yielded_any:
+        if last_transient:
+            raise last_transient
         logger.warning("generate_stream produced no text - possible silent safety block")
         raise ContentBlockedError("Content blocked by safety filters.")
 
@@ -100,23 +114,27 @@ async def transcribe_audio(audio_base64: str, mime_type: str) -> str | None:
     """
     client = get_client()
     model = get_model()
+    audio_bytes = base64.b64decode(audio_base64)
 
     try:
-        audio_bytes = base64.b64decode(audio_base64)
-
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=types.Content(
-                role="user",
-                parts=[
-                    types.Part(inline_data=types.Blob(mime_type=mime_type, data=audio_bytes)),
-                    types.Part(text="Transcribe this audio exactly. Output only the transcription, nothing else."),
-                ],
+        response = await with_retries(
+            lambda: client.aio.models.generate_content(
+                model=model,
+                contents=types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(inline_data=types.Blob(mime_type=mime_type, data=audio_bytes)),
+                        types.Part(text="Transcribe this audio exactly. Output only the transcription, nothing else."),
+                    ],
+                ),
+                config=types.GenerateContentConfig(
+                    temperature=0.0,
+                    max_output_tokens=500,
+                ),
             ),
-            config=types.GenerateContentConfig(
-                temperature=0.0,
-                max_output_tokens=500,
-            ),
+            attempts=3,
+            base_delay=1.0,
+            label="transcribe_audio",
         )
 
         if response.text:

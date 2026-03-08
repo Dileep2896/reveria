@@ -1,3 +1,5 @@
+import Tooltip from '../Tooltip';
+
 export default function TensionBars({ tension, sceneNumbers, sceneTitles }) {
   if (!tension?.levels?.length) return null;
   const max = 10;
@@ -89,9 +91,8 @@ export default function TensionBars({ tension, sceneNumbers, sceneTitles }) {
           padding: '0 4px',
         }}>
           {tension.levels.map((_, i) => (
+            <Tooltip key={i} label={sceneTitles[i] || ''}>
             <span
-              key={i}
-              title={sceneTitles[i] || ''}
               style={{
                 width: barW,
                 maxWidth: '44px',
@@ -107,6 +108,7 @@ export default function TensionBars({ tension, sceneNumbers, sceneTitles }) {
             >
               {sceneTitles[i] || ''}
             </span>
+            </Tooltip>
           ))}
         </div>
       )}

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '../routes';
+import UserAvatar from './UserAvatar';
+import Tooltip from './Tooltip';
 import {
   db,
   collection,
@@ -109,25 +112,14 @@ function PublicBookCard({ book, onOpen, onToggleLike, userId }) {
       {/* Author + like row below book */}
       <div className="explore-book-footer">
         <div className="explore-book-author">
-          {book.author_photo_url ? (
-            <img
-              className="explore-book-avatar"
-              src={book.author_photo_url}
-              alt={book.author_name}
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <div className="explore-book-avatar explore-book-avatar--fallback">
-              {(book.author_name || '?')[0].toUpperCase()}
-            </div>
-          )}
+          <UserAvatar photoURL={book.author_photo_url} name={book.author_name || '?'} size={24} />
           <span className="explore-book-author-name">{book.author_name}</span>
         </div>
 
         {userId && (
+          <Tooltip label={liked ? 'Unlike' : 'Like'}>
           <button
             className={`explore-book-like${liked ? ' explore-book-like--active' : ''}`}
-            title={liked ? 'Unlike' : 'Like'}
             onClick={() => onToggleLike(book.id, !liked)}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -135,6 +127,7 @@ function PublicBookCard({ book, onOpen, onToggleLike, userId }) {
             </svg>
             {likeCount > 0 && <span className="explore-book-like-count">{likeCount}</span>}
           </button>
+          </Tooltip>
         )}
       </div>
     </div>
@@ -218,7 +211,7 @@ export default function ExplorePage({ user }) {
   }, [books, searchQuery, sortBy, showLiked, user]);
 
   const handleOpen = useCallback((book) => {
-    navigate(`/book/${book.id}`, { state: { from: 'explore' } });
+    navigate(ROUTES.BOOK(book.id), { state: { from: 'explore' } });
   }, [navigate]);
 
   const stickyHeader = (compact) => (
@@ -239,16 +232,17 @@ export default function ExplorePage({ user }) {
         </div>
         <div className="explore-header-spacer" />
         {user && (
+          <Tooltip label={showLiked ? 'Show all' : 'Show liked only'}>
           <button
             className={`explore-liked-toggle${showLiked ? ' explore-liked-toggle--active' : ''}`}
             onClick={() => setShowLiked((v) => !v)}
-            title={showLiked ? 'Show all' : 'Show liked only'}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill={showLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
             <span>Favorites</span>
           </button>
+          </Tooltip>
         )}
       </div>
       <div className="explore-filter-row">

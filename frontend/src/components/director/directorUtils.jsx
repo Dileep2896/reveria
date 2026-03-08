@@ -108,10 +108,12 @@ export function hasVisualFields(key, content) {
 }
 
 /* ── Pill helper ── */
+import Tooltip from '../Tooltip';
+
 export function Pill({ label, color, bg, title }) {
   return (
+    <Tooltip label={title}>
     <span
-      title={title}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -128,6 +130,7 @@ export function Pill({ label, color, bg, title }) {
     >
       {label}
     </span>
+    </Tooltip>
   );
 }
 

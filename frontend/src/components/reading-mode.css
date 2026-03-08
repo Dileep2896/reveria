@@ -90,6 +90,11 @@
   background: rgba(255,255,255,0.03); border-radius: 12px;
 }
 
+/* Visual narrative: image takes full body height */
+.rm-vn-wrap {
+  flex: 1 1 auto !important;
+}
+
 /* Ken Burns */
 .rm-kb-0 { animation: kb0 30s ease-in-out infinite alternate; }
 .rm-kb-1 { animation: kb1 28s ease-in-out infinite alternate; }
@@ -119,7 +124,7 @@
 .rm-text-area.rm-out { opacity: 0; transform: translateY(10px); }
 
 .rm-title {
-  font-family: 'Playfair Display', 'Georgia', serif;
+  font-family: 'Cormorant Garamond', 'Georgia', serif;
   font-size: clamp(1rem, 1.8vh + 0.4vw, 1.75rem); font-weight: 600;
   color: rgba(255,255,255,0.88);
   margin: 0 0 clamp(4px, 0.6vh, 12px); text-align: center;

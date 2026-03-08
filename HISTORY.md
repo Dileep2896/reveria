@@ -1,4 +1,4 @@
-# StoryForge Development History
+# Reveria Development History
 
 ## Week 1 - Foundation
 
@@ -17,7 +17,7 @@
 - Designed glassmorphism theme system with centralized CSS custom properties (`theme.css`)
 - Implemented dark/light mode with `ThemeContext` and localStorage persistence
 - Built frosted glass UI: header, story canvas, director panel, control bar, scene cards
-- Created animated StoryForge logo (book + forge sparks in orange/purple/cyan) as React component
+- Created animated Reveria logo (book + forge sparks in orange/purple/cyan) as React component
 - Added custom SVG favicon and updated page title
 - Integrated Gemini 2.0 Flash via Vertex AI for story text generation
 - Built Narrator agent with streaming support and conversation history
@@ -596,7 +596,7 @@
 
 **Session 52: Ambient Audio, Portrait Gallery & Light Mode Fixes**
 
-- **Ambient audio fix** *(feature later removed in Session 53)*: Changed `muted`/`mutedRef` defaults from `false` to `true` in `useAmbientAudio.js`
+- **Ambient audio fix** _(feature later removed in Session 53)_: Changed `muted`/`mutedRef` defaults from `false` to `true` in `useAmbientAudio.js`
   - Root cause: Browser autoplay policy blocks AudioContext created from `useEffect` (no user gesture)
   - Button now shows muted initially; first user click provides gesture to resume AudioContext
 - **Portrait gallery**: Changed from `flexWrap: wrap` grid to horizontal scrolling row (`overflowX: auto`, `flexShrink: 0` on items)
@@ -627,11 +627,143 @@
   - Backend `POST /api/stories/{story_id}/regenerate-meta` endpoint
   - Library shows "Generate Cover" button on books with missing covers
 
+**Session 54: Per-Scene Streaming, Live Director & Mid-Generation Steering**
+
+- **Per-scene image/audio streaming**: Restructured ADK pipeline — moved image and audio generation from separate `IllustratorADKAgent`/`TTSADKAgent` into `NarratorADKAgent._run_async_impl` loop. Each scene fires `asyncio.create_task` for image (rate-limited via semaphore), audio, and director live commentary as soon as its text is ready. Character extraction runs once on first scene. `PostNarrationAgent` now only contains `DirectorADKAgent` for full analysis.
+- **Live Director commentary**: Added `analyze_scene()` method to `Director` class — lightweight per-scene JSON analysis (thought, mood, tension_level, craft_note, emoji) using Gemini Flash (temp 0.3, 300 tokens). Frontend `DirectorPanel` shows animated live commentary cards during generation with emoji, mood badge, tension meter, and craft notes. Cards animate in with `directorLiveIn` keyframe.
+- **Mid-generation steering**: ControlBar input stays active during generation — when user types and sends, it sends `type: "steer"` instead of `type: "generate"`. Backend pushes steer text to `SharedPipelineState.steering_queue`, checked between scenes in narrator loop and injected into narrator history. Compass icon replaces spinner when text is present during generation. `steer_ack` WS message triggers toast.
+- **Playful safety redirect**: Updated narrator system prompt with in-character redirect instruction for inappropriate content ("That part of the library is forbidden! Let's explore this mysterious path instead..."). Softened `ws_callback` — `safety` refusals now let narrator's redirect play out; only `offtopic` refusals hard-abort.
+- **Architecture diagram**: Updated `BLOG.md` and `README.md` architecture diagrams to show new per-scene streaming loop with parallel task spawning, steering injection, and live commentary.
+- Files modified: `backend/agents/orchestrator.py`, `backend/agents/director.py`, `backend/agents/narrator.py`, `backend/main.py`, `frontend/src/hooks/wsHandlers.js`, `frontend/src/hooks/useWebSocket.js`, `frontend/src/components/ControlBar.jsx`, `frontend/src/components/DirectorPanel.jsx`, `frontend/src/components/director-panel.css`, `frontend/src/App.jsx`, `BLOG.md`, `README.md`
+- **Director-as-driver**: Director's per-scene `analyze_scene()` now returns a `suggestion` field — a proactive creative direction for the next scene. Stored on `SharedPipelineState` and injected into the Narrator's input at the start of the next batch. Director is now a creative collaborator, not just an observer.
+- **Delete endpoint resilience**: Wrapped `decrement_usage` in try/except so transient Firestore gRPC errors don't crash the delete endpoint.
+- **Director panel width**: Bumped from `clamp(220px, 22vw, 320px)` to `clamp(260px, 24vw, 380px)`.
+
 ---
 
-## Current State (Feb 23, 2026)
+### Day 7 (Feb 24, 2026)
+
+**Session 55: Director Chat, Settings Dialog & VAD Auto-Send**
+
+- **Director Chat via Gemini Live API**: Built full voice brainstorming feature using `gemini-live-2.5-flash-native-audio`:
+  - New `DirectorChatSession` class in `services/director_chat.py` manages persistent Live API sessions
+  - Supports both voice input (base64 audio) and text input
+  - `start()` sends story context + greeting prompt, returns WAV audio response
+  - `send_audio()` / `send_text()` for ongoing conversation
+  - `detect_intent()` uses Gemini Flash (temp 0) to classify if user wants to generate a scene
+  - `suggest_prompt()` generates a story prompt from conversation context
+  - PCM → WAV conversion (`_pcm_to_wav()`) for browser playback
+  - WS message types: `director_chat_start`, `director_chat_audio`, `director_chat_text`, `director_chat_suggest`, `director_chat_end`
+  - Frontend `DirectorChat.jsx` with voice orb, message list, text input, action buttons
+
+- **Auto-Send on Silence (VAD)**: Added Web Audio API Voice Activity Detection to `useVoiceCapture.js`:
+  - `AnalyserNode` + `getFloatTimeDomainData()` computes RMS levels on 100ms polling interval
+  - Detects speech (RMS > 0.01 threshold) → silence transition
+  - Auto-stops `MediaRecorder` after 1.2s of continuous silence following detected speech
+  - Enables natural conversation flow: speak → pause → auto-send → Director responds
+  - Manual tap-to-send still works as override
+  - Graceful degradation: if AudioContext fails, falls back to manual stop
+
+- **Settings Dialog**: New `SettingsDialog.jsx` component (replaces standalone theme toggle):
+  - **Appearance section**: Light/Dark toggle pills with sun/moon SVG icons
+  - **Director Voice section**: 2-column grid of 8 curated voice chips:
+    - Charon (Deep & dramatic), Kore (Warm & nurturing), Fenrir (Bold & commanding), Aoede (Lyrical & expressive), Puck (Playful & energetic), Orus (Calm & wise), Leda (Elegant & refined), Zephyr (Breezy & casual)
+  - Follows `CompleteBookDialog` pattern (fixed overlay, backdrop blur, `dialogPop` animation)
+  - Voice preference persisted to `localStorage('storyforge-director-voice')`
+  - `AppHeader.jsx`: Replaced theme toggle (sun/moon) with gear icon → opens Settings Dialog
+
+- **Language-Aware Director Chat**: Director speaks in the story's language:
+  - `_build_system_prompt(language)` appends "You MUST speak and respond ONLY in {language}" for non-English
+  - `start()` accepts `language` and `voice_name` parameters
+  - Frontend passes `{ language, voiceName: directorVoice }` to `startDirectorChat`
+  - Backend `main.py` extracts language + voice from `director_chat_start` WS message
+
+- **Powered by Gemini badge**: Subtle branding in Director Chat with Gemini gradient sparkle SVG (9px, 0.45 opacity, hover 0.7)
+
+- Files modified: `frontend/src/hooks/useVoiceCapture.js`, `frontend/src/components/DirectorChat.jsx`, `frontend/src/components/director-panel.css`, `frontend/src/components/AppHeader.jsx`, `frontend/src/App.jsx`, `frontend/src/hooks/useWebSocket.js`, `backend/services/director_chat.py`, `backend/main.py`
+- Files created: `frontend/src/components/SettingsDialog.jsx`
+
+**Session 56: Gemini Native Audio, Director Intelligence & UX Polish**
+
+- **Gemini Native Audio TTS** — Replaced Google Cloud TTS with Gemini Live API (`gemini-2.5-flash-native-audio`) for story narration:
+  - New `services/gemini_tts.py` — uses Live API sessions for expressive audiobook-style narration
+  - System prompt instructs natural expression, pacing variation, emotional depth matching scene mood
+  - Per-language voice selection: Kore (English/Spanish/Hindi/Portuguese), Leda (French), Orus (German), Aoede (Japanese/Chinese)
+  - Drop-in replacement: same `synthesize_speech(text, voice_name, language)` signature
+  - ReadingMode karaoke fallback: heuristic word tracking (weight by word length + punctuation) when timestamps unavailable
+  - Eliminates separate Cloud TTS dependency/billing
+
+- **Voice Preview in Settings** — Clicking a Director voice chip generates a live audio preview:
+  - Backend: `generate_voice_preview(voice_name)` creates short-lived Live session, each voice says a unique personality-matched intro line
+  - Endpoint: `GET /api/voice-preview/{voice_name}` with voice name validation
+  - Frontend: Loading spinner on chip while generating, animated audio bars while playing, abort on voice switch
+
+- **Director-Driven Intent Detection** — Director now controls when to generate (not premature user-word triggers):
+  - Updated Director system prompt: instructs to explore the idea first (ask about characters, setting, mood, conflict), only confirm when fleshed out
+  - Director's audio responses now transcribed for intent analysis (not just user words)
+  - `detect_intent(user_text, director_text)` analyzes BOTH sides of the conversation
+  - Stricter criteria: Director must NOT be asking questions + user must explicitly confirm + confidence threshold raised to 0.8
+  - Conversation log now stores Director transcripts (not just "[voice response]")
+
+- **Director Chat lifecycle fixes**:
+  - "No active Director chat session" error toast suppressed — race condition messages silently ignored on backend
+  - Toast notifications: "Director mode entered" (success) / "Director mode ended" (info)
+  - Auto-end Director Chat on navigation away from story canvas (Library, Explore, etc.)
+
+- **Scene count simplification** — Removed 1/2 scene toggle from ControlBar, hardcoded to 1 scene per generation across full stack
+
+- **Language selector moved to book cover** — Glassmorphism dropdown picker on "Begin Your Story" cover page (globe icon, upward-opening menu, click-outside close)
+
+- **Token expiry handling** — Auth failure recovery for both WebSocket and REST:
+  - WS: Close code 4003 detection, `authFailedRef` prevents infinite retry, token change triggers reconnect
+  - REST: `getValidToken()` utility in AuthContext, all fetch calls use fresh tokens
+  - 5 REST endpoints updated in useStoryActions and BookDetailsPage
+
+- **UI polish**:
+  - Director Panel: "Next Direction" merged into scene note card (inline with divider, not separate nested card)
+  - Cover page: Updated subtitle/hint text for all 8 languages
+  - 404 page: New `NotFoundPage.jsx` with book icon, themed buttons, wired to catch-all route
+  - Error boundary: Restyled with CSS variable theming, background orbs, glass card, accent buttons
+  - Textarea max height (120px overflow scroll), mic disabled during generation, SceneCard regen timeout (60s)
+
+- Files created: `backend/services/gemini_tts.py`, `frontend/src/components/NotFoundPage.jsx`
+- Files modified: `backend/main.py`, `backend/services/director_chat.py`, `backend/agents/orchestrator.py`, `backend/handlers/scene_actions.py`, `frontend/src/App.jsx`, `frontend/src/hooks/useWebSocket.js`, `frontend/src/hooks/wsHandlers.js`, `frontend/src/contexts/AuthContext.jsx`, `frontend/src/hooks/useStoryActions.js`, `frontend/src/components/BookDetailsPage.jsx`, `frontend/src/components/ControlBar.jsx`, `frontend/src/components/StoryCanvas.jsx`, `frontend/src/components/DirectorPanel.jsx`, `frontend/src/components/SettingsDialog.jsx`, `frontend/src/components/ErrorBoundary.jsx`, `frontend/src/components/storybook.css`, `frontend/src/data/languages.js`
+
+**Session 57: Director Notes Hydration Fix + Bug Audit Polish**
+
+- **Director notes not appearing when opening book from Library** — Root cause: `LibraryPage.jsx` `handleOpen` was building generation objects WITHOUT `directorLiveNotes` field (only had `directorData` and `sceneNumbers`). This meant per-scene Director live notes (emoji, mood, audio commentary) were empty when opening from Library. Also, the `load()` function in `useWebSocket.js` never called `setDirectorData()` to hydrate the standalone director data state from persisted generations.
+  - Added `directorLiveNotes: data.director_live_notes || []` to LibraryPage generation objects
+  - Added `directorData` hydration loop in both `load()` and initial hydration effect in `useWebSocket.js`
+- Files modified: `frontend/src/components/LibraryPage.jsx`, `frontend/src/hooks/useWebSocket.js`
+
+**Session 58: Director Chat Rewrite — Native Gemini Live API Features**
+
+- **Eliminated 3-5 extra API calls per interaction** by leveraging native Gemini Live API features:
+  - **Native function calling**: Declared `GENERATE_STORY_TOOL` (`types.FunctionDeclaration`) — model decides when brainstorming is done and calls the tool with a story prompt. Replaces `detect_intent()` (separate Gemini Flash call per interaction).
+  - **Native audio transcription**: Enabled `input_audio_transcription` and `output_audio_transcription` in `LiveConnectConfig`. User and Director speech transcriptions arrive in the receive stream alongside audio chunks. Replaces two separate `transcribe_audio()` calls per interaction.
+  - **Context window compression**: Added `ContextWindowCompressionConfig(sliding_window=SlidingWindow())` to handle long brainstorming sessions at the API level. Combined with local `_trim_log()` capping `conversation_log` at 20 non-system entries.
+- **New `_collect_response()` method**: Replaces `_collect_audio()` for Director Chat — collects audio chunks, native input/output transcriptions, AND tool calls from the receive loop. Returns structured dict `{audio_url, input_transcript, output_transcript, tool_calls}`.
+- **New `respond_to_tool_call()` method**: Sends `FunctionResponse` back to the Live session so the model can acknowledge the generation ("Generating your story now!"). Returns follow-up audio response.
+- **New `request_suggestion()` method**: Asks the existing Live session directly for a story prompt — replaces `suggest_prompt()` which made a separate Gemini Flash API call. Used by the manual "Suggest" button fallback.
+- **Updated `start()`**: Uses typed `LiveConnectConfig` (not raw dict) with `tools`, `input_audio_transcription`, `output_audio_transcription`, `context_window_compression`. Returns response dict instead of `str | None`.
+- **Updated `send_audio()` / `send_text()`**: Return full `_collect_response()` dict instead of `str | None`. Self-manage conversation logging from native transcriptions.
+- **Simplified `main.py` WS handlers**:
+  - `director_chat_audio`: Single `send_audio()` call → check `result["tool_calls"]`. No parallel transcription tasks, no intent detection.
+  - `director_chat_text`: Single `send_text()` call → check `result["tool_calls"]`. Same simplification.
+  - `director_chat_cancel_generate`: Just a log message (no flag to reset).
+  - `director_chat_suggest`: Uses `request_suggestion()` via Live session (no separate API call).
+- **Removed dead code**: `detect_intent()`, `suggest_prompt()`, `_build_suggest_prompt_system()`, `SUGGEST_PROMPT_SYSTEM` constant, `generation_triggered` flag.
+- **Edge case mitigation**: Tool calling reliability ~60-70% in audio mode — strong system prompt conditioning + manual "Suggest" button as always-available fallback.
+- **Updated documentation**: ARCHITECTURE.md Director Chat section rewritten, BLOG.md updated with Architecture Evolution section and refactor narrative, MEMORY.md updated.
+- Net code change: main.py handlers shrunk from ~155 to ~95 lines; director_chat.py gained structure but removed more dead code than added.
+- Files modified: `backend/services/director_chat.py`, `backend/main.py`, `ARCHITECTURE.md`, `BLOG.md`
+
+---
+
+## Current State (Feb 24, 2026)
 
 ### What's Working
+
 - Full text + image generation pipeline: prompt → Gemini 2.0 Flash → streamed scenes → Imagen 3 illustrations → interactive flipbook
 - Conversation continuity (story steering/continuation across multiple prompts)
 - **Hybrid image prompt architecture** - character descriptions reach Imagen verbatim (not summarized by Gemini)
@@ -646,9 +778,9 @@
 - Instant snap-back on touch swipe past content pages
 - Production-ready Docker setup
 - Voice input via MediaRecorder (`useVoiceCapture.js`) with Gemini transcription
-- Cloud TTS narration per scene with compact inline audio player
+- Gemini native audio narration per scene (via Live API) with compact inline audio player
 - Director Agent with structured JSON analysis - narrative arc, characters, tension, visual style
-- ADK orchestration pipeline (single pipeline, manual removed) - SequentialAgent → ParallelAgent (Illustrator + Director + TTS)
+- ADK orchestration pipeline (single pipeline, manual removed) - NarratorADKAgent with per-scene streaming loop (image + audio + live commentary tasks spawned per scene) → PostNarrationAgent (DirectorADKAgent)
 - Director Panel with glanceable visual summaries and collapsible detail text
 - Tension bar chart visualization with per-scene bars and trend indicators
 - Per-batch director data tracking - director analysis follows scene pagination
@@ -668,7 +800,7 @@
 - **Image loading shimmer**: "Painting scene" icon + shimmer while Imagen generates
 - Per-scene actions: regenerate image, regenerate scene (text+image+audio), delete scene
 - Scene titles generated by Narrator (`[SCENE: Title]` markers)
-- Configurable scene count (1 or 2 per generation)
+- Single-scene generation per batch
 - Global toast notification system (success/error/warning/info) with glassmorphism styling
 - Header button hover effects (glow lift, shimmer sweep, rotation, press feedback)
 - **Header button guards**: New Story, Save, Complete Book disabled during cover generation
@@ -710,6 +842,128 @@
 - **Theme-aware book shadows** - light mode uses softer shadows (CSS variables + react-pageflip opacity)
 - **Author attribution** captured from Firebase Auth token on story creation
 - **Regenerate meta** (title + cover) for failed book meta generation
+- **Per-scene streaming** — image + audio generation fires per-scene (not batch), reducing perceived latency
+- **Live Director commentary** — per-scene creative notes stream during generation with mood, tension, craft observations
+- **Mid-generation steering** — users can steer the story while it generates (injected between scenes via narrator history)
+- **Playful safety redirect** — narrator redirects inappropriate requests in-character instead of hard error toast
+- **Director-as-driver** — Director's per-scene `analyze_scene()` returns a `suggestion` field injected into next batch's Narrator input (proactive creative collaborator)
+- **Delete endpoint resilience** — `decrement_usage` wrapped in try/except to survive transient Firestore gRPC errors
+- **Director Chat** — Real-time voice brainstorming with the Director via Gemini Live API (`gemini-live-2.5-flash-native-audio`), with native function calling (`generate_story` tool), native audio transcription, context window compression, and zero extra API calls per interaction
+- **VAD auto-send** — Web Audio API `AnalyserNode` detects 1.2s of silence after speech, auto-stops recording for natural conversation flow
+- **Settings Dialog** — Centralized theme + Director voice settings (8 voices: Charon, Kore, Fenrir, Aoede, Puck, Orus, Leda, Zephyr), replaces standalone theme toggle
+- **Language-aware Director Chat** — Director speaks in the story's language; voice selection persisted to localStorage
+- **Powered by Gemini** — Subtle branding badge in Director Chat panel
+- **Voice preview in Settings** — click a Director voice chip to hear a sample
+- **Native tool-driven generation** — Model calls `generate_story` tool when brainstorming is done (replaces external intent detection); manual "Suggest" button as fallback
+- **Token expiry handling** — WS auth failure recovery + REST getValidToken()
+- **404 page** with themed Reveria design
+- **Error boundary** styled to match app theme
+
+- **Interaction-flow resilience** (deep audit, 9 fixes):
+  - Director tool call rejection during generation (prevents Live session corruption)
+  - Director session expiry detection with fatal/transient error distinction
+  - Non-blocking hero photo analysis with version counter and timeout
+  - Usage counter leak prevention on disconnect (CancelledError handling)
+  - Stale scene message guards after story switch
+  - Save double-click race prevention, sceneBusy cleanup on disconnect
+  - Director live notes cleared per pipeline run, audio playback auto-resume fallback
+- **Hero Mode UX** — server-driven state, spinning ring loading animation, Director wait mode during photo analysis, ControlBar disabled during analysis, art style auto-reset on deactivation
+- **Subject Reference Likeness** — Imagen 3 `edit_image` API now uses `[1]` bracket notation in scene composition to bind text to reference photo. `subject_description` extracted from `[USER-CAST]` character sheet lines (~100 chars). `negative_prompt` on `EditImageConfig` discourages likeness drift. `_find_scene_subject_photo()` returns `(photo_b64, char_name, subject_desc)` tuple. `_inject_subject_notation()` inserts `[1]` after character name (case-insensitive regex, prepend fallback for pronouns). `_get_subject_description()` truncates at comma boundary for concise identity anchor.
+- **Separated ControlBar vs Director generation** — `from_director` flag on WS generate message. `SharedPipelineState.director_enabled` gates all Director work: per-scene `_director_live()`, suggestion injection, post-batch `DirectorADKAgent.analyze()`, `generation_wrapup()`. ControlBar generates = narrator + images + audio only (no Director overhead). Director Chat generates = full pipeline with live commentary + proactive comments + wrap-up.
+
+**Session 58: Hero Mode Scene Composition & Page Flip Polish**
+
+- **Scene composition rewrite** — Rewrote `SCENE_COMPOSER_WITH_CHARACTERS_INSTRUCTION` to prioritize story action and environment over character portraits. Old prompt forced every image into "Medium shot portrait of..." framing; new prompt uses structured approach: SCENE FRAMING → ENVIRONMENT & ACTION → CHARACTERS IN SCENE → MOOD & LIGHTING. Characters woven naturally into scenes rather than every image being a close-up portrait.
+- **Story-moment-first philosophy** — New rules: "Show what the STORY describes — if the text mentions an object, screen, letter, place, vehicle, etc., that object should be prominently visible." Scene/environment/action must take at least half the prompt. Camera angles and compositions vary across scenes.
+- **Word limit increase** — Scene composition increased from 80 to 100 words for richer environmental detail
+- **Hero Mode visual storytelling** — Fixes the issue where Hero Mode generated every scene as a portrait of the user. Now user's Visual DNA still ensures likeness, but scenes show actual story moments (emails on screens, chase sequences, locations) with the user appearing naturally within
+- **First-generation page flip fix** — StoryCanvas now uses instant `turnToPage()` instead of animated `flip()` when generating from empty canvas (0 scenes). Tracks `scenesAtGenStart` ref to distinguish first generation from continuation. Subsequent scene additions during generation still use animated `flip()` for visual continuity.
+
+**Session 57: Production Routing & Avatar System**
+
+- **Centralized route constants** — Created `src/routes.js` with `ROUTES` object as single source of truth for all route paths, parameterized path functions (`STORY(id)`, `BOOK(id)`), and prefix constants (`STORY_PREFIX`, `BOOK_PREFIX`)
+- **Full ROUTES migration** — Replaced all hardcoded navigate paths, `<Route path>` definitions, `<Link to>` targets, and `pathname.startsWith()` checks across 10 files (App.jsx, useAppEffects.js, useBookManager.js, AppHeader.jsx, BookDetailsPage.jsx, NotFoundPage.jsx, LibraryPage.jsx, ExplorePage.jsx, AuthScreen.jsx, ProfileMenu.jsx)
+- **SPA navigation fix** — Replaced `<a href="/terms">` with `<Link to={ROUTES.TERMS}>` in AuthScreen to prevent full page reloads
+- **Trailing slash normalization** — `pathname.replace(/\/+$/, '') || '/'` in App.jsx and useAppEffects.js prevents subtle pathname comparison bugs
+- **Marble avatar system** — Created `UserAvatar.jsx` using `boring-avatars` marble variant for deterministic gradient avatars; palette matches app accent theme (`#f59e0b`, `#a78bfa`, `#6366f1`, `#ec4899`, `#14b8a6`); zero network requests (client-side SVG)
+- **Avatar integration** — Replaced plain-initials fallbacks in ProfileMenu (header + dropdown), ExplorePage, BookDetailsPage, BookCommentSection, AdminUserTable, and UserDetailModal with `UserAvatar` component
+- **Removed unused code** — Cleaned up `getInitials` imports from admin components, removed initials computation from ProfileMenu
+
+**Session 56: Full Codebase Audit (29 fixes)**
+
+- **Backend fixes**: Director chat session cleanup on reset, handle_delete_scene -1 sentinel, MIME whitelist + size guard on GCS uploads, comments endpoint is_public check, async handle_reset with director_chat closure
+- **Frontend fixes**: Audio element lifecycle cleanup (DirectorChat, useCompactAudio), director_chat_ended loading reset, null audioUrl guard, dynamic PAGE_SLOTS, pageFlip null guard, stale eslint-disable removal
+- **Testing**: Updated test expectations for new 404 behavior on comments endpoint
+
+**Session 59: Hero Mode UX Fixes**
+
+- **Art style reset on hero deactivation** — When closing hero mode, art style stayed on trend style (e.g. Pixar). Now auto-resets to 'cinematic' if current style is a trend style when hero mode deactivates.
+- **Hero mode race condition** — Backend `hero_status: enabled` from stale photo analysis arrived after user already dismissed hero mode. Fixed with backend version counter (`hero_version`) to discard stale results + every backend exit path now sends `hero_status` (enabled or disabled).
+- **Server-driven hero state** — Changed `heroActive` from `heroMode?.active || !!heroPhoto` to purely `!!heroMode?.active` (server-driven). X button only appears after backend confirms hero mode active.
+- **Hero photo loading animation** — Replaced static loading state with animated conic gradient spinning ring around photo thumbnail.
+- **Hero photo analysis timeout** — Added 30-second `asyncio.wait_for()` timeout on Gemini Vision API call in `analyze_hero_photo()`.
+- **Director wait mode during hero analysis** — Director Chat now pauses recording and shows "Analyzing hero photo..." with user icon during hero photo upload. ControlBar dims (50% opacity, pointerEvents: none) until analysis completes.
+
+**Session 59: Deep Interaction-Flow Audit (9 fixes)**
+
+Comprehensive audit of all major user flows (generation, Director Chat, save/library, hero/scene actions) uncovered 9 bugs ranging from critical to low severity:
+
+- **[Critical] Director tool call corruption** — When generation was already running and Director issued `generate_story` tool call, it was silently dropped without sending `FunctionResponse`, corrupting the Gemini Live session. Fixed: always reject with `respond_to_tool_call(tc, success=False)` when `is_generating`.
+- **[High] Hero photo blocks WS loop** — `handle_hero_photo` was `await`ed directly in the WS message loop, blocking all messages for up to 30s. Fixed: wrapped in `asyncio.create_task()`.
+- **[High] is_generating not cleared on reset** — WS `reset` handler didn't clear `is_generating` flag, leaving the connection permanently stuck. Fixed: clear `is_generating`, `generation_task`, `pipeline_tasks`, and `hero_description` on reset.
+- **[High] Director session expiry = silent dead chat** — When Gemini Live session dies mid-conversation, `send_audio`/`send_text` would throw and the frontend never knew. Fixed: exception handlers set `self._session = None` and return `session_dead: True`; WS handlers detect this and send fatal `director_chat_error`.
+- **[Medium] director_chat_error kills chat on transient error** — Any `director_chat_error` WS message tore down the entire chat UI. Fixed: only tear down on `data.fatal` errors, not transient ones.
+- **[Medium] Usage leak on disconnect** — `asyncio.CancelledError` inherits from `BaseException`, not `Exception`, so the `except Exception` block in `handle_generate` didn't catch it — usage counters were never decremented. Fixed: added `except asyncio.CancelledError` block to rollback usage.
+- **[Medium] Stale scene data after story switch** — After `reset()`, `storyIdRef.current` is null, but scene-scoped WS messages (text, image, audio, scene_deleted) applied data without checking. Fixed: null guard on `storyIdRef.current` for all scene messages.
+- **[Low] Double-click Save race** — React `useState` setters are async, so rapid clicks could trigger concurrent saves. Fixed: synchronous `saveLockRef` guard in `useSaveStory.js`.
+- **[Low] sceneBusy not cleared on disconnect** — Scene busy indicators (regen spinners) stuck after WS reconnect. Fixed: `setSceneBusy(new Set())` in `ws.onclose`.
+- **[Low] Director live notes duplication** — Notes accumulated across batches because `shared_state.director_live_notes` was never cleared per pipeline run. Fixed: `shared_state.director_live_notes = []` at start of `_run_adk_pipeline()`.
+- **[Low] Audio playback auto-resume** — If browser autoplay policy blocked Director audio (onplay never fires), recording never auto-resumed. Fixed: 2-second fallback timer resumes recording if audio doesn't start playing.
+
+- Files modified (11): `backend/handlers/director_chat_handlers.py`, `backend/handlers/generation_flow.py`, `backend/main.py`, `backend/services/director_chat.py`, `backend/services/hero_service.py`, `frontend/src/components/ControlBar.jsx`, `frontend/src/components/DirectorChat.jsx`, `frontend/src/components/DirectorPanel.jsx`, `frontend/src/hooks/useSaveStory.js`, `frontend/src/hooks/useWebSocket.js`, `frontend/src/hooks/wsHandlers.js`
+
+**Session 60+: Visual Narrative Pipeline & Character Consistency**
+
+- **Visual narrative scene composition** — Added `VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION` for comic/manga/webtoon templates. Classifies scenes as character-present vs. setting-only, applies different composition rules (60%+ character framing for character scenes). Multiple iterations to get characters to actually appear in comic images.
+- **Art style text-trigger cleanup** — Removed phrases like "comic book panel art", "halftone dot texture", "graphic novel style" from comic art styles — these triggered Imagen to render speech bubbles and text into images. Replaced with non-text-triggering alternatives.
+- **Prompt structure optimization** — Moved negative constraints (`[NO text, NO speech bubbles...]`) from beginning to END of prompt. Imagen weights prompt start most heavily for subject matter; putting "no text" first consumed attention budget.
+- **Character fallback for visual narratives** — When character identification returns empty for short comic scenes, injects full character sheet if scene contains dialog or character name references.
+- **Face-crop portrait extraction (prototyped, disabled)** — Built Gemini Vision face detection + Pillow cropping to extract character portraits from scene images. Renamed from face detection to character region detection (upper body). Detection accuracy on comic/manga art insufficient — disabled as future work.
+- **TTS verbatim enforcement** — Changed system prompts from "audiobook narrator" to "text-to-speech engine" with `[SCRIPT]` markers. Gemini Live's generative nature caused paraphrasing; reframing as TTS engine constrains it to verbatim reproduction.
+- **Sequential image→audio for visual narratives** — For comic/manga/webtoon, audio generation now chains AFTER image (not parallel). TTS reads only the condensed overlay text (~20 words) shown on screen, not the full scene prose (~50 words).
+- **Portrait system removed** — Portraits removed from backend pipeline and frontend. Marked as future work with face-crop approach.
+- **Text overlay stability** — Fixed React key strategy from index-based (`slot-${i}`) to scene-number-based (`scene-${scene.scene_number}`) to prevent remounts on page flip. Decoupled overlay visibility from imageLoaded state.
+- **Split DNA for character consistency** — Split character descriptions into physical traits (permanent) vs. style traits (outfit, changeable). When scene text describes clothing changes, style traits are stripped to avoid image prompt conflicts.
+- **Documentation updates** — Updated BLOG.md, README.md, ARCHITECTURE.md, PROMPT_ENGINEERING.md with visual narrative pipeline, split DNA, future work items, and removed outdated portrait references.
+
+- Files modified: `backend/agents/illustrator_prompts.py`, `backend/agents/illustrator.py`, `backend/agents/narrator_agent.py`, `backend/templates/registry.py`, `backend/services/gemini_tts.py`, `backend/services/multi_voice_tts.py`, `backend/handlers/generation_flow.py`, `backend/handlers/ws_resume.py`, `frontend/src/components/director/DirectorCardList.jsx`, `frontend/src/components/StoryCanvas.jsx`, `frontend/src/components/scene/SceneImageArea.jsx`
+
+**Session 61: Cinematic Book Opening Animation**
+
+- **Cinematic first-prompt transition** — Replaced the jarring hard cut (idle cover vanishes → book pops in on page 1) with a cinematic sequence: idle cover glows violet → book appears on its cover page with shimmer overlay → satisfying page-flip reveals the first scene.
+- **Page 0 start for new stories** — `StoryCanvas.initialPageRef` now starts at page 0 (cover) for new stories (no `/story/:id` in URL). Resumed stories still start at page 1 or URL `?page=N`.
+- **Enhanced entrance animation** — `bookEntrance` keyframe upgraded: 700ms duration (was 400ms), deeper initial offset (20px/0.96 vs 16px/0.98), 3-stage with brightness bloom at 60% and slight overshoot.
+- **Cover shimmer + icon pulse** — `CoverPage` accepts `generating` prop. When true: diagonal violet gradient sweep (`coverShimmer` 2s infinite) + amplified icon glow (`coverIconPulse` 1.8s). Shimmer div absolutely positioned over cover.
+- **Idle cover preparing pulse** — `tc-idle-preparing` class applied on prompt send (before `generating=true`), triggering `idleCoverPulse` on the standalone BookCover (~500-1000ms of glow before book mounts).
+- **Animated cover→content flip** — `firstGenFlipDone` ref tracks the one-time cover→page-1 flip. Uses `flip(1)` (animated) with 800ms delay so entrance animation finishes first. Scene 2+ uses standard flip logic.
+- **Cover-bounce suppression** — `useStoryNavigation` accepts `generating` flag, gates the `page === 0 && scenes.length > 0` bounce so the generation flip isn't fought.
+- **All `turnToPage()` removed from generation path** — First generation now uses animated `flip()` throughout (no instant jumps).
+
+- Files modified: `frontend/src/components/StoryCanvas.jsx`, `frontend/src/components/storybook/CoverPage.jsx`, `frontend/src/components/storybook.css`, `frontend/src/hooks/useStoryNavigation.js`, `ARCHITECTURE.md`
 
 ### What Needs to Be Built
+
 - **Demo Video** - 4-minute walkthrough for submission
+- **Character Portraits** - Face-crop from scene images (Gemini Vision + Pillow) — infrastructure built, needs accuracy improvement on comic/manga art
+- **Character Consistency** - Visual Anchor API (`CONTROL_TYPE_FACE_MESH`) for cross-scene consistency
+- **Multi-Voice Narration** - Character-specific voices for dialogue scenes
+
+---
+
+## Future Work
+
+- **Character Portrait System** — Face-crop extraction from scene images (Gemini Vision bounding box detection + Pillow cropping). Infrastructure partially built. Blocker: detection accuracy on illustrated/comic art.
+- **Visual Anchor API** — Imagen's `ControlReferenceImage` with `CONTROL_TYPE_FACE_MESH` for cross-scene character consistency using first scene's render as reference.
+- **Multi-Voice Narration** — Different voices for narrator vs dialogue characters based on personality traits from Director's character analysis.
+- **Floating Director Orb** — Mobile FAB for Director Chat voice interaction + bottom-sheet drawer.
+- **Cinematic Video Scenes (Veo 2)** — Short video clips for high-tension climax scenes (tension_level >= 8).

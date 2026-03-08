@@ -1,7 +1,6 @@
 import base64
 import logging
 import os
-import re
 
 from google.cloud import texttospeech_v1beta1 as tts
 

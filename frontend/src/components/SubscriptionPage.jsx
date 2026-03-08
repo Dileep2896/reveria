@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import useUsage from '../hooks/useUsage';
+import Tooltip from './Tooltip';
 import { API_URL } from '../utils/storyHelpers';
 import './SubscriptionPage.css';
 
@@ -152,7 +153,7 @@ export default function SubscriptionPage({ idToken, addToast }) {
           </svg>
         </div>
         <h1>Subscription & Usage</h1>
-        <p>Track your daily usage and manage your StoryForge plan</p>
+        <p>Track your daily usage and manage your Reveria plan</p>
       </div>
 
       <div className="sub-content">
@@ -165,12 +166,14 @@ export default function SubscriptionPage({ idToken, addToast }) {
               </svg>
               Daily Usage
             </span>
-            <span className="sub-reset-pill" title="Time until daily limits reset (midnight UTC)">
+            <Tooltip label="Time until daily limits reset (midnight UTC)">
+            <span className="sub-reset-pill">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
               </svg>
               Resets in {resetIn}
             </span>
+            </Tooltip>
           </div>
 
           {loading ? (

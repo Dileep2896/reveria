@@ -18,12 +18,19 @@ export default function useCompactAudio(src) {
       setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0);
     };
     const onEnded = () => { setPlaying(false); setProgress(0); };
+    const onError = () => {
+      console.warn('Audio load error:', audio.error?.message, 'src:', audio.src?.slice(0, 80));
+      setPlaying(false);
+      setProgress(0);
+    };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
     };
   }, [src]);
 
@@ -35,7 +42,12 @@ export default function useCompactAudio(src) {
       }
     };
     window.addEventListener('storyforge:audio:play', onOtherPlay);
-    return () => window.removeEventListener('storyforge:audio:play', onOtherPlay);
+    return () => {
+      window.removeEventListener('storyforge:audio:play', onOtherPlay);
+      // Pause audio on unmount to prevent orphaned playback
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      audioRef.current?.pause();
+    };
   }, []);
 
   const togglePlay = () => {
@@ -46,7 +58,10 @@ export default function useCompactAudio(src) {
       setPlaying(false);
     } else {
       window.dispatchEvent(new CustomEvent('storyforge:audio:play', { detail: instanceId.current }));
-      audio.play().catch(() => {});
+      audio.play().catch((err) => {
+        console.warn('Audio playback failed:', err?.message, 'src:', audio.src?.slice(0, 80));
+        setPlaying(false);
+      });
       setPlaying(true);
     }
   };

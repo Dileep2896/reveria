@@ -22,12 +22,10 @@ async def test_social_stats_not_found(client, mock_firestore):
 
 
 @pytest.mark.asyncio
-async def test_list_comments_empty(client, mock_firestore):
-    """GET /api/public/stories/<id>/comments returns empty list gracefully."""
+async def test_list_comments_nonexistent_story(client, mock_firestore):
+    """GET /api/public/stories/<id>/comments returns 404 for nonexistent story."""
     resp = await client.get("/api/public/stories/xxx/comments")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["comments"] == []
+    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

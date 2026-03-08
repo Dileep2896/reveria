@@ -7,20 +7,13 @@ from google.genai import types
 from agents.narrator import Narrator
 from agents.illustrator import Illustrator
 from agents.director import Director
+from handlers.utils import safe_send as _safe_send
 from services.firestore_client import load_story
 
 from agents.orchestrator import create_story_orchestrator
 from google.adk.sessions import InMemorySessionService  # type: ignore[import-untyped]
 
 logger = logging.getLogger("storyforge")
-
-
-async def _safe_send(websocket: WebSocket, data: dict[str, Any]) -> bool:
-    try:
-        await websocket.send_json(data)
-        return True
-    except Exception:
-        return False
 
 
 async def handle_resume(
@@ -53,16 +46,6 @@ async def handle_resume(
             active_story_id = req_story_id
             generations_list: list[Any] = story_data.get("generations", [])
             batch_index = len(generations_list)
-            # Send persisted portraits to frontend
-            persisted_portraits = story_data.get("portraits", [])
-            if persisted_portraits:
-                for p in persisted_portraits:
-                    await _safe_send(websocket, {
-                        "type": "portrait",
-                        "name": p.get("name", ""),
-                        "image_url": p.get("image_url"),
-                    })
-                await _safe_send(websocket, {"type": "portraits_done"})
             logger.info("Resumed story %s (scene count: %d)", req_story_id, total_scene_count)
     return active_story_id, total_scene_count, batch_index
 
@@ -98,11 +81,12 @@ async def handle_auto_recover(
     return active_story_id, total_scene_count, batch_index
 
 
-def handle_reset(
+async def handle_reset(
     narrator: Narrator,
     illustrator: Illustrator,
     director: Director,
     pipeline_tasks: list,
+    director_chat: Any = None,
 ) -> tuple[Any, Any, Illustrator, Director]:
     """Handle reset message. Returns (orchestrator, shared_state, new_illustrator, new_director)."""
     narrator.reset()
@@ -111,5 +95,11 @@ def handle_reset(
     for task in pipeline_tasks:
         if not task.done():
             task.cancel()
+    # Close active Director Chat session to avoid orphaned Live API connections
+    if director_chat:
+        try:
+            await director_chat.close()
+        except Exception:
+            pass
     orchestrator, shared_state = create_story_orchestrator(narrator, new_illustrator, new_director)
     return orchestrator, shared_state, new_illustrator, new_director
