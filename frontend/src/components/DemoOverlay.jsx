@@ -9,7 +9,11 @@ import './demo-overlay.css';
 export default function DemoOverlay({ generating, chatActive, chatLoading }) {
   const [open, setOpen] = useState(false);
   const [manualSlide, setManualSlide] = useState(null);
+  const manualSlideRef = useRef(null);
   const backtickHeld = useRef(false);
+
+  // Keep ref in sync for use inside event handlers
+  manualSlideRef.current = manualSlide;
 
   // Default to pipeline, auto-switch when Director chat opens
   const autoSlide = chatActive ? 'director' : 'pipeline';
@@ -27,12 +31,19 @@ export default function DemoOverlay({ generating, chatActive, chatLoading }) {
         // Actual toggle happens on keyup if no number was pressed
       }
 
-      // ` + 1/2/3/4 to switch slides (works whether open or not)
-      if (backtickHeld.current && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4')) {
+      // ` + 1/2/3/4/5 to switch slides (works whether open or not)
+      if (backtickHeld.current && '12345'.includes(e.key)) {
         e.preventDefault();
-        const slides = { '1': 'pipeline', '2': 'director', '3': 'cloud', '4': 'cicd' };
-        setManualSlide(slides[e.key]);
-        if (!open) setOpen(true); // open if closed
+        const slides = { '1': 'pipeline', '2': 'director', '3': 'cloud', '4': 'cicd', '5': 'evolution' };
+        const target = slides[e.key];
+        if (open && manualSlideRef.current === target) {
+          // Same slide pressed again — close
+          setOpen(false);
+          setManualSlide(null);
+        } else {
+          setManualSlide(target);
+          if (!open) setOpen(true);
+        }
         backtickHeld.current = 'combo'; // mark that a combo was used
       }
 
@@ -73,6 +84,7 @@ export default function DemoOverlay({ generating, chatActive, chatLoading }) {
           {activeSlide === 'director' && <DirectorSlide chatActive={chatActive} chatLoading={chatLoading} />}
           {activeSlide === 'cloud' && <CloudSlide />}
           {activeSlide === 'cicd' && <CICDSlide />}
+          {activeSlide === 'evolution' && <EvolutionSlide />}
         </div>
       </div>
     </div>,
@@ -496,6 +508,118 @@ function CICDSlide() {
         <Pill label="Playwright e2e" />
         <Pill label="pytest" />
         <Pill label="Service Account IAM" />
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   SLIDE 5: Iterative Evolution
+   ═══════════════════════════════════════════ */
+
+const EVOLUTION_TRACKS = [
+  {
+    title: 'Image Consistency',
+    accent: 'orange',
+    steps: [
+      { label: 'Naive prompts', desc: 'Characters looked different every scene' },
+      { label: 'Hybrid prompts', desc: 'Gemini writes scene only, characters prepended verbatim' },
+      { label: 'Character DNA', desc: 'Hex colors, face shapes, signature items, anti-drift anchors' },
+      { label: 'Anchor Portraits', desc: 'Imagen portrait per character, Gemini Vision extracts Visual DNA' },
+      { label: 'Text-free defense', desc: 'Triple-layer stack prevents AI text baked into comic/manga art' },
+    ],
+  },
+  {
+    title: 'Audio Narration',
+    accent: 'green',
+    steps: [
+      { label: 'Google Cloud TTS', desc: 'Robotic Wavenet voices, separate billing' },
+      { label: 'Gemini Native Audio', desc: 'Audiobook-quality, emotion-aware narration' },
+      { label: 'Per-scene streaming', desc: 'Audio fires as each scene completes, not batch' },
+      { label: 'Verbatim enforcement', desc: '[SCRIPT] markers prevent model from paraphrasing' },
+    ],
+  },
+  {
+    title: 'Director Intelligence',
+    accent: 'violet',
+    steps: [
+      { label: 'Post-batch analysis', desc: 'Reactive observer, analyzed after generation' },
+      { label: 'Per-scene live notes', desc: 'Mood, tension, craft notes stream during generation' },
+      { label: 'Director-as-Driver', desc: 'Suggestion field injected into Narrator next prompt' },
+      { label: 'Gemini Live API', desc: 'Bidirectional voice, native tool calling, zero extra API calls' },
+      { label: 'VAD auto-send', desc: 'Web Audio silence detection for natural conversation flow' },
+    ],
+  },
+  {
+    title: 'Pipeline Architecture',
+    accent: 'blue',
+    steps: [
+      { label: 'Batch sequential', desc: 'All text, then all images, then all audio' },
+      { label: 'Per-scene streaming', desc: 'Image + audio + director spawn per-scene as text completes' },
+      { label: 'Mid-gen steering', desc: 'Users steer story direction during active generation' },
+      { label: 'Circuit breakers', desc: 'Per-user quota isolation with jittered retry backoff' },
+    ],
+  },
+];
+
+const ACCENT_COLORS = {
+  orange: '#ffa86c',
+  green: '#34d399',
+  violet: '#b48cff',
+  blue: '#60a5fa',
+};
+
+function EvolutionSlide() {
+  return (
+    <>
+      <h3 className="demo-slide-title">Iterative Evolution</h3>
+      <p className="demo-slide-sub">
+        How we <strong>brainstormed and improved</strong> each system through 60+ development sessions
+      </p>
+
+      <div className="demo-evo-grid">
+        {EVOLUTION_TRACKS.map((track) => {
+          const color = ACCENT_COLORS[track.accent];
+          return (
+            <div key={track.title} className="demo-evo-track">
+              <div className="demo-evo-track-header" style={{ color }}>
+                <span className="demo-evo-track-dot" style={{ background: color }} />
+                {track.title}
+              </div>
+              <div className="demo-evo-steps">
+                {track.steps.map((step, i) => (
+                  <div key={i} className="demo-evo-step">
+                    {i > 0 && (
+                      <div className="demo-evo-connector">
+                        <svg width="2" height="10" viewBox="0 0 2 10">
+                          <line x1="1" y1="0" x2="1" y2="10" stroke={color} strokeWidth="1.5"
+                            strokeDasharray="2 2" style={DASH_ANIM_V} opacity="0.4" />
+                        </svg>
+                      </div>
+                    )}
+                    <div className="demo-evo-step-card" style={{ borderColor: `${color}20` }}>
+                      <div className="demo-evo-step-num" style={{ background: `${color}18`, color }}>{i + 1}</div>
+                      <div className="demo-evo-step-content">
+                        <span className="demo-evo-step-label">{step.label}</span>
+                        <span className="demo-evo-step-desc">{step.desc}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="demo-tech-pills">
+        <Pill label="60+ Sessions" hl />
+        <Pill label="Character DNA" />
+        <Pill label="Visual DNA" hl />
+        <Pill label="Anchor Portraits" />
+        <Pill label="Per-scene streaming" hl />
+        <Pill label="Native Tool Calling" />
+        <Pill label="Gemini Vision" />
       </div>
     </>
   );
