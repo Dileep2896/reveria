@@ -26,9 +26,8 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Portraits and Visual DNA** — Anchor portraits generated before scene images using Imagen. Gemini Vision analyzes each portrait to extract visual DNA (100-150 word natural-language description), which is used for consistent character rendering across all scenes
 - **Hybrid Character Consistency** — Three-stage image pipeline: character sheet extraction, scene composition (Gemini), verbatim character descriptions prepended to prompt. Split DNA separates physical traits from style traits, with outfit descriptions automatically stripped when scene text describes clothing changes
 - **Director Chat** — Voice-based brainstorming with the Director using Gemini Live API (`gemini-live-2.5-flash-native-audio`). Features native tool calling (model decides when to generate), native transcription, auto-send on silence detection (Web Audio API VAD), text input fallback, and 8 configurable voices. After generation, a single combined wrap-up message replaces overlapping audio
-- **Director Mode** — A sidebar panel revealing the agent's creative reasoning: narrative structure, tension arcs, character development, and visual decisions. The Director actively shapes the story with per-scene suggestions injected into the Narrator's context
+- **Director Panel** — A focused sidebar with 4 sections: **Scene Insight Pair** (spread-aware left/right cards with mood, tension bars, and expandable craft notes), **Story Health** (5-dimension quality bars for Pacing, Characters, World, Dialogue, Coherence), **Story Details** (Next Direction, Characters, Visual Style, Themes, Emotional Arc), and **Live Notes** (collapsible director commentary with audio playback). Accumulated scenes persist across batches so analysis always covers the full story
 - **Live Director Commentary** — Real-time per-scene creative notes (mood, tension, craft observations) stream to the Director Panel during generation
-- **Tension Arc Visualization** — Live graph showing narrative tension across scenes
 - **Mid-Generation Steering** — Type direction changes while the story generates. Steering is injected between scenes via the narrator's conversation history
 - **Separated Generation Modes** — ControlBar generates stories with narrator + images + audio only (fast, no Director overhead). Director Chat triggers full Director pipeline with live commentary, proactive scene reactions, and creative suggestions
 - **Playful Safety Redirect** — Instead of hard error toasts for inappropriate content, the narrator redirects in-character ("That part of the library is forbidden! Let's explore this path instead...")
@@ -468,7 +467,7 @@ The Director provides **meta-commentary** on the creative process — the "why" 
 }
 ```
 
-The frontend renders this as **glanceable visual summaries** (stage pills, trend arrows, mood tags, tension bar charts) with expandable detail text.
+The frontend renders this in the Director Panel as 4 focused sections: **SceneInsightPair** (spread-aware left/right cards matching the book's open pages, with emoji, mood, tension bar, and expandable craft notes — uses `spreadLeftPage()` for spread mapping with multi-source fallbacks from liveNotes to directorData), **StoryHealthCard** (collapsible card with 5 dimension bars and average score), **StoryDetails** (compact cards for Next Direction, Characters, Visual Style, Themes, Emotional Arc), and **Live Notes** (collapsible commentary with audio playback).
 
 #### 4. TTS Agent
 
@@ -731,8 +730,9 @@ storyforge/
 │   │   │   │   └── WritingSkeleton.jsx# Shared typing animation skeleton
 │   │   │   ├── director/              # DirectorPanel sub-components
 │   │   │   │   ├── DirectorEmptyState.jsx
-│   │   │   │   ├── DirectorAnalyzing.jsx
-│   │   │   │   └── DirectorCardList.jsx
+│   │   │   │   ├── SceneInsightPair.jsx  # Spread-aware scene insight cards (left/right)
+│   │   │   │   ├── StoryHealthCard.jsx   # Story quality dimension bars
+│   │   │   │   └── StoryDetails.jsx      # Characters, themes, visual style, next direction
 │   │   │   ├── storybook/            # StoryCanvas sub-components
 │   │   │   │   ├── CoverPage.jsx      # Themed covers per template
 │   │   │   │   ├── EmptyPageContent.jsx
@@ -930,7 +930,7 @@ VITE_WS_URL=ws://localhost:8000/ws
 - **Backend smoke tests** — 8 pytest tests with mocked Firebase/Firestore
 - **Frontend smoke tests** — 3 Playwright browser tests
 - **Per-scene streaming** — image + audio generation fires per-scene (not batch), reducing perceived latency
-- **Live Director commentary** — per-scene creative notes stream during generation with mood, tension, craft observations, and proactive suggestions
+- **Director Panel redesign** — 4 focused sections (Scene Insight Pair, Story Health, Story Details, Live Notes) replacing the previous 9-card layout. Accumulated scenes persist across batches for complete analysis
 - **Mid-generation steering** — users can steer the story while it generates (injected between scenes)
 - **Playful safety redirect** — narrator redirects inappropriate requests in-character instead of hard error
 

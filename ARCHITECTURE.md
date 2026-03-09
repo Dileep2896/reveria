@@ -240,8 +240,9 @@ The image pipeline separates character definition from scene composition:
 - Returns JSON: `{ scene_number, thought, mood, tension_level, craft_note, emoji, suggestion }`
 - `suggestion`: bold creative direction for what should happen next (cross-batch influence)
 - Uses `gemini-2.0-flash`, temp 0.3, 300 max tokens, `response_mime_type="application/json"`
-- Sent as `director_live` WS message; frontend shows animated cards in DirectorPanel
+- Sent as `director_live` WS message; frontend renders in SceneInsightPair cards in DirectorPanel
 - Full director analysis still runs post-batch via `DirectorADKAgent` (also gated on `director_enabled`)
+- **Accumulated scenes**: `WsConnectionState.accumulated_scenes` persists scenes across batches. `SharedPipelineState.prior_scenes` passes them into each pipeline run, so post-batch Director analysis always covers ALL scenes (not just current batch). Frontend `directorData` simplified — no merge logic needed, latest data is always complete.
 - **Cross-batch influence**: `suggestion` stored on `SharedPipelineState.director_suggestion`. Injected into narrator input at start of next batch only when `director_enabled` is True.
 - **Director Chat routing**: When `director_chat_session` is active, `_director_live()` skips standalone `live_commentary()` and routes voice through `proactive_comment()` instead. Structured data (`director_live` WS message) still sent either way.
 
@@ -355,6 +356,17 @@ Director Chat active → generate_story tool fires → generation starts
 - Constants: `SILENCE_THRESHOLD = 0.01`, `SILENCE_DURATION_MS = 1200`, `VAD_POLL_INTERVAL_MS = 100`
 - Detects speech → silence transition; auto-stops `MediaRecorder` after 1.2s of continuous silence post-speech
 - Graceful degradation: try/catch around AudioContext — manual stop still works if VAD fails
+
+### Director Panel UI (Redesigned)
+
+The Director Panel uses 4 focused sections (replacing the previous 9-card layout):
+
+1. **SceneInsightPair** (`director/SceneInsightPair.jsx`) — Two side-by-side cards matching the book's open spread (left/right pages). Each card shows emoji, scene number, title, mood, tension bar, and expandable craft notes. Uses `spreadLeftPage()` for spread mapping. Multi-source data: liveNotes → directorData fallbacks.
+2. **StoryHealthCard** (`director/StoryHealthCard.jsx`) — Single collapsible card with 5 dimension bars (Pacing, Characters, World, Dialogue, Coherence) plus average score and summary.
+3. **StoryDetails** (`director/StoryDetails.jsx`) — Compact cards for Next Direction (from latest live note suggestion), Characters (name/role pills), Visual Style (mood + tags), Themes, Emotional Arc.
+4. **Live Notes** — Collapsible section with all director commentary notes and audio playback.
+
+Removed components: `DirectorCardList`, `DirectorAnalyzing`, `StoryTimeline` (Story Arc). `StoryTimeline.jsx` still exists in the directory but is not imported or rendered.
 
 ### Book Layout & Scene Count
 - **Always spread mode**: `singlePage` hardcoded to `false` in `App.jsx`. Book Layout toggle removed from SettingsDialog. No `bookLayout` state or localStorage.

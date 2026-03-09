@@ -951,6 +951,15 @@ Comprehensive audit of all major user flows (generation, Director Chat, save/lib
 
 - Files modified: `frontend/src/components/StoryCanvas.jsx`, `frontend/src/components/storybook/CoverPage.jsx`, `frontend/src/components/storybook.css`, `frontend/src/hooks/useStoryNavigation.js`, `ARCHITECTURE.md`
 
+**Session 62: Director Panel Redesign**
+
+- **Director Panel redesign** — Replaced the 9 analysis cards with 4 focused sections: SceneInsightPair (spread-aware left/right cards matching the book's open pages with mood, tension bars, and expandable craft notes), StoryHealthCard (5-dimension quality bars for Pacing, Characters, World, Dialogue, Coherence with average score), StoryDetails (Next Direction, Characters, Visual Style, Themes, Emotional Arc), and Live Notes (collapsible commentary with audio playback).
+- **New components** — `SceneInsightPair.jsx` (spread-aware scene insight cards using `spreadLeftPage()` for spread mapping, multi-source data from liveNotes → directorData fallbacks), `StoryHealthCard.jsx` (collapsible story quality dimensions), `StoryDetails.jsx` (compact cards for characters, themes, visual style, next direction).
+- **Removed components** — `DirectorCardList`, `DirectorAnalyzing`, `StoryTimeline` (Story Arc) removed from UI. `StoryTimeline.jsx` file still exists but is not imported or rendered.
+- **Accumulated scenes fix (backend)** — `WsConnectionState.accumulated_scenes` now persists scenes across batches. `SharedPipelineState.prior_scenes` passes them into each pipeline run, so Director post-batch analysis covers ALL scenes (not just current batch). Frontend `directorData` simplified — no merge logic needed, latest data is always complete.
+
+- Files modified: `frontend/src/components/DirectorPanel.jsx`, `frontend/src/components/director/SceneInsightPair.jsx` (new), `frontend/src/components/director/StoryHealthCard.jsx` (new), `frontend/src/components/director/StoryDetails.jsx` (new), `backend/services/generation_flow.py`, `backend/handlers/ws_handler.py`, `README.md`, `ARCHITECTURE.md`
+
 ### What Needs to Be Built
 
 - **Demo Video** - 4-minute walkthrough for submission
