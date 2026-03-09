@@ -53,8 +53,9 @@ class DirectorADKAgent(BaseAgent):
             return
 
         try:
+            total_scenes = len(s.prior_scenes) + len(s.scenes)
             result = await self.director.analyze(
-                s.full_story, s.user_input, s.art_style, len(s.scenes)
+                s.full_story, s.user_input, s.art_style, total_scenes
             )
             if result:
                 s.director_result = result

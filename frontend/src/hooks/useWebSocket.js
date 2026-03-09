@@ -105,12 +105,12 @@ export default function useWebSocket(idToken, initialState, addToast) {
       if (initialState.generations?.length) {
         const allNotes = initialState.generations.flatMap(g => g.directorLiveNotes || []);
         if (allNotes.length) setDirectorLiveNotes(allNotes);
-        for (let i = initialState.generations.length - 1; i >= 0; i--) {
-          if (initialState.generations[i].directorData) {
-            setDirectorData(initialState.generations[i].directorData);
-            break;
-          }
+        // Use the latest generation's directorData (it already covers all scenes)
+        let mergedData = null;
+        for (const g of initialState.generations) {
+          if (g.directorData) mergedData = g.directorData;
         }
+        if (mergedData) setDirectorData(mergedData);
       }
     }
   }, [initialState]);
@@ -367,10 +367,13 @@ export default function useWebSocket(idToken, initialState, addToast) {
     // Hydrate Director live notes and batch-level director data from persisted generations
     const allNotes = (state.generations || []).flatMap(g => g.directorLiveNotes || []);
     setDirectorLiveNotes(allNotes);
+    // Use the latest generation's directorData (it already covers all scenes)
     const gens = state.generations || [];
-    for (let i = gens.length - 1; i >= 0; i--) {
-      if (gens[i].directorData) { setDirectorData(gens[i].directorData); break; }
+    let mergedDirData = null;
+    for (const g of gens) {
+      if (g.directorData) mergedDirData = g.directorData;
     }
+    if (mergedDirData) setDirectorData(mergedDirData);
     if (!skipResume && wsRef.current?.readyState === WebSocket.OPEN && state.storyId) {
       wsRef.current.send(JSON.stringify({ type: 'resume', story_id: state.storyId }));
     }

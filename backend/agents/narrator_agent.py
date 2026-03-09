@@ -169,9 +169,10 @@ class NarratorADKAgent(BaseAgent):
                 scenes.append(scene_dict)
                 await _on_scene_ready(scene_dict)
 
-        # Write back for downstream agents
+        # Write back for downstream agents — include prior scenes for Director
         s.scenes = scenes
-        s.full_story = "\n\n".join(sc["text"] for sc in scenes)
+        all_scene_texts = [sc["text"] for sc in s.prior_scenes] + [sc["text"] for sc in scenes]
+        s.full_story = "\n\n".join(all_scene_texts)
 
         # Wait for all pending tasks (images + portraits, audio, director)
         if pending_tasks:
@@ -369,7 +370,10 @@ class NarratorADKAgent(BaseAgent):
         # Preserve previous suggestion so a failure here doesn't lose it
         prev_suggestion = s.director_suggestion
         try:
-            context = "\n\n".join(sc["text"] for sc in all_scenes)
+            # Include prior scenes for full story context
+            prior_texts = [sc["text"] for sc in s.prior_scenes]
+            current_texts = [sc["text"] for sc in all_scenes]
+            context = "\n\n".join(prior_texts + current_texts)
             note = await self.director.analyze_scene(
                 scene_text=scene["text"],
                 scene_number=scene["scene_number"],

@@ -319,14 +319,8 @@ export default function App() {
     );
   }
 
-  // Derive per-scene director data
-  const activeDirectorData = (() => {
-    if (generating) return directorData;
-    if (currentSceneNumber && generations.length) {
-      const batch = generations.find(g => g.sceneNumbers.includes(currentSceneNumber));
-      if (batch?.directorData) return batch.directorData;
-    }
-    if (directorData) return directorData;
+  // Director data — always use the merged state (backend now analyzes ALL scenes per batch)
+  const activeDirectorData = directorData || (() => {
     for (let i = generations.length - 1; i >= 0; i--) {
       if (generations[i].directorData) return generations[i].directorData;
     }

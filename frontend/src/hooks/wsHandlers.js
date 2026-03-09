@@ -59,7 +59,7 @@ export function createWsHandlers({
         setGenerating(data.content === 'generating');
         if (data.content === 'generating') {
           setError(null);
-          if (setDirectorLiveNotes) setDirectorLiveNotes([]);
+          // Don't clear directorLiveNotes — accumulate across generations
         }
         // Track hero photo analysis in progress
         if (data.content === 'analyzing_photo' && setHeroMode) {
@@ -168,6 +168,7 @@ export function createWsHandlers({
         return true;
 
       case 'director': {
+        // Backend now analyzes ALL scenes per batch — latest data is complete
         setDirectorData(data.content);
         const idx = currentBatchIndexRef.current;
         const batch = generationsRef.current[idx];
