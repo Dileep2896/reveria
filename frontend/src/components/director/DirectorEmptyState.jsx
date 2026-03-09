@@ -32,9 +32,12 @@ export default function DirectorEmptyState({ language }) {
           boxShadow: 'var(--shadow-glow-secondary)',
           animation: 'directorIdlePulse 3s ease-in-out infinite',
         }}>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-            <circle cx="12" cy="12" r="3" />
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+            <rect x="2" y="8" width="20" height="14" rx="2" stroke="var(--accent-secondary)" strokeWidth="1.5" />
+            <path d="M2 8L4 3h16l2 5" stroke="var(--accent-secondary)" strokeWidth="1.5" />
+            <line x1="7" y1="3" x2="8.5" y2="8" stroke="var(--accent-secondary)" strokeWidth="1.2" opacity="0.6" />
+            <line x1="12" y1="3" x2="13.5" y2="8" stroke="var(--accent-secondary)" strokeWidth="1.2" opacity="0.6" />
+            <line x1="17" y1="3" x2="18.5" y2="8" stroke="var(--accent-secondary)" strokeWidth="1.2" opacity="0.6" />
           </svg>
         </div>
         {/* Orbiting dots */}

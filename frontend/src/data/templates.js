@@ -188,9 +188,9 @@ export const TEMPLATES = [
     placeholder: 'What story will you document?',
     genres: [
       { label: 'Travel', prompt: 'A photo journal documenting a solo journey through remote villages and forgotten roads...' },
-      { label: 'Street Life', prompt: 'The everyday stories of a city neighborhood — its people, rhythms, and hidden corners...' },
+      { label: 'Street Life', prompt: 'The everyday stories of a city neighborhood: its people, rhythms, and hidden corners...' },
       { label: 'Wildlife', prompt: 'Following a pack of wolves through their territory across changing seasons...' },
-      { label: 'Urban', prompt: 'The transformation of a city block — demolition, construction, and the people caught in between...' },
+      { label: 'Urban', prompt: 'The transformation of a city block: demolition, construction, and the people caught in between...' },
       { label: 'Portrait', prompt: 'Intimate portraits of strangers, each with a story they\'ve never told anyone...' },
     ],
   },

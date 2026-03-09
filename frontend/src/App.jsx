@@ -26,6 +26,7 @@ import LibraryPage from './components/LibraryPage';
 import ExplorePage from './components/ExplorePage';
 import ReadingMode from './components/ReadingMode';
 import SplashScreen from './components/SplashScreen';
+import DemoOverlay from './components/DemoOverlay';
 import AuthScreen, { VerifyEmailScreen } from './components/AuthScreen';
 import SubscriptionPage from './components/SubscriptionPage';
 import AdminDashboard from './components/AdminDashboard';
@@ -45,7 +46,7 @@ export default function App() {
   const isNewRoute = location.pathname.replace(/\/+$/, '') === '/new';
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId, { skip: isNewRoute });
   const { addToast } = useToast();
-  const { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, suggestDirectorPrompt, endDirectorChat } = useWebSocket(idToken, initialState, addToast);
+  const { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, usage, heroMode, send, sendSteer: _sendSteer, sendAudio, sendHeroPhoto, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, suggestDirectorPrompt, endDirectorChat } = useWebSocket(idToken, initialState, addToast);
   // Stable canvas key: freeze during generation so backend assigning story_id
   // doesn't cause a full StoryCanvas remount mid-generation.
   // Once a storyId is assigned, never revert to 'new' — prevents remount
@@ -92,7 +93,7 @@ export default function App() {
   const isLibrary = pathname === ROUTES.LIBRARY;
   const isExplore = pathname === ROUTES.EXPLORE;
   const isBookPage = pathname.startsWith(ROUTES.BOOK_PREFIX);
-  const isNewStory = pathname === ROUTES.NEW;
+  const _isNewStory = pathname === ROUTES.NEW;
   const isStoryRoute = pathname === ROUTES.HOME || pathname === ROUTES.NEW || pathname.startsWith(ROUTES.STORY_PREFIX);
   const [viewingReadOnly, setViewingReadOnly] = useState(false);
 
@@ -165,14 +166,6 @@ export default function App() {
 
   // Director auto-generation with 5-second countdown
   useDirectorAutoGenerate(directorAutoGenerate, send, setDirectorAutoGenerate, generating, artStyle, template);
-
-  // Derive per-scene image tier info for DirectorPanel
-  const imageTiers = useMemo(() =>
-    scenes
-      .filter(s => s.image_url && s.image_url !== 'error')
-      .map(s => ({ scene: s.scene_number, tier: s.image_tier || 1 })),
-    [scenes]
-  );
 
   const spreadPromptsMemo = useMemo(() => {
     if (!currentSceneNumber || !scenes.length) return { left: userPrompt, right: null };
@@ -327,20 +320,6 @@ export default function App() {
     return null;
   })();
 
-  const activeBatchSceneNumbers = (() => {
-    if (generating || !currentSceneNumber || !generations.length) return null;
-    const batch = generations.find(g => g.sceneNumbers.includes(currentSceneNumber));
-    return batch?.sceneNumbers || null;
-  })();
-
-  const activeBatchSceneTitles = (() => {
-    if (!activeBatchSceneNumbers || !scenes.length) return null;
-    return activeBatchSceneNumbers.map(num => {
-      const sc = scenes.find(s => s.scene_number === num);
-      return sc?.scene_title || null;
-    });
-  })();
-
   const spreadPrompts = spreadPromptsMemo;
   const displayPrompt = spreadPrompts.left;
 
@@ -444,7 +423,7 @@ export default function App() {
                       <ControlBar onSend={(text, opts) => send(text, opts)} onSendAudio={(b64, mime) => sendAudio(b64, mime)} connected={connected} generating={generating} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} usage={usage} onHeroPhoto={sendHeroPhoto} heroMode={heroMode} template={template} />
                     )}
                   </div>
-                  {directorOpen && !viewingReadOnly && (templateChosen || scenes.length > 0) && <DirectorPanel singlePage={singlePage} heroMode={heroMode} template={template} data={activeDirectorData} generating={generating} sceneNumbers={activeBatchSceneNumbers} sceneTitles={activeBatchSceneTitles} imageTiers={imageTiers} portraits={portraits} portraitsLoading={portraitsLoading} language={language} liveNotes={directorLiveNotes} chatActive={directorChatActive} chatMessages={directorChatMessages} chatLoading={directorChatLoading} chatPrompt={directorChatPrompt} autoGenerate={directorAutoGenerate} onCancelAutoGenerate={cancelDirectorAutoGenerate} onStartChat={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; startDirectorChat(ctx, { language, voiceName: directorVoice, template }); }} onEndChat={endDirectorChat} onChatAudio={sendDirectorChatAudio} onChatSuggest={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; suggestDirectorPrompt(ctx); }} onUsePrompt={(prompt) => { setControlBarInput(prompt); }} />}
+                  {directorOpen && !viewingReadOnly && (templateChosen || scenes.length > 0) && <DirectorPanel singlePage={singlePage} heroMode={heroMode} template={template} data={activeDirectorData} generating={generating} scenes={scenes} currentSceneNumber={currentSceneNumber} language={language} liveNotes={directorLiveNotes} chatActive={directorChatActive} chatMessages={directorChatMessages} chatLoading={directorChatLoading} chatPrompt={directorChatPrompt} autoGenerate={directorAutoGenerate} onCancelAutoGenerate={cancelDirectorAutoGenerate} onStartChat={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; startDirectorChat(ctx, { language, voiceName: directorVoice, template }); }} onEndChat={endDirectorChat} onChatAudio={sendDirectorChatAudio} onChatSuggest={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; suggestDirectorPrompt(ctx); }} onUsePrompt={(prompt) => { setControlBarInput(prompt); }} />}
                 </div>
               </SceneActionsContext.Provider>
             }
@@ -466,6 +445,8 @@ export default function App() {
       )}
 
       {splashExiting && <SplashScreen message={lastSplashMsgRef.current} exiting />}
+
+      <DemoOverlay generating={generating} chatActive={directorChatActive} chatLoading={directorChatLoading} />
     </div>
   );
 }

@@ -2,6 +2,8 @@
 
 *How we built a multimodal storytelling platform that generates illustrated, narrated storybooks in real-time using Google's Gemini, Imagen, and Agent Development Kit.*
 
+> **Disclosure:** This blog post was created for the purposes of entering the [Gemini Live Agent Challenge](https://devpost.com/) hackathon. #GeminiLiveAgentChallenge
+
 ---
 
 ## The Idea
@@ -878,10 +880,36 @@ Character-specific voices so dialogue scenes sound like distinct people, not one
 
 ---
 
+## Automated Cloud Deployment
+
+Reveria's infrastructure is fully automated via scripts and CI/CD:
+
+- **`deploy.sh`** — One-command deployment script for Cloud Run (backend) and Firebase Hosting (frontend). Supports `./deploy.sh setup` for first-time GCP project provisioning (API enablement, GCS bucket creation, IAM roles).
+- **`.github/workflows/ci.yml`** — GitHub Actions pipeline with 4 jobs: backend tests (pytest), frontend tests (eslint + Vite build + Playwright), backend deploy (Cloud Run via `gcloud run deploy --source`), and frontend deploy (Firebase Hosting).
+- **`backend/Dockerfile`** — Production container with non-root user, pip dependencies, and Uvicorn on port 8080.
+- **`frontend/Dockerfile`** — Multi-stage Node.js build with Vite and serve.
+
+```bash
+# First-time setup: enable APIs, create bucket, configure IAM
+./deploy.sh setup
+
+# Deploy everything
+./deploy.sh all
+
+# Deploy individually
+./deploy.sh backend    # Cloud Run
+./deploy.sh frontend   # Firebase Hosting
+./deploy.sh test       # Run test suite
+```
+
+Push to `main` triggers the full CI/CD pipeline automatically.
+
+---
+
 ## Try It
 
 Reveria is open source: [github.com/Dileep2896/storyforge](https://github.com/Dileep2896/storyforge)
 
-Built for the Gemini Live Agent Challenge - Creative Storyteller Track.
+This project was built for the [Gemini Live Agent Challenge](https://devpost.com/) hackathon (Creative Storyteller Track). #GeminiLiveAgentChallenge
 
 *Describe a story. Watch it come alive.*

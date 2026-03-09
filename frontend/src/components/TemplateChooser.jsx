@@ -564,7 +564,7 @@ export default function TemplateChooser({ onSelect, language, onLanguageChange, 
       ) : (
         <>
           <div className="tc-grid">
-            {available.map((t, i) => (
+            {available.map((t) => (
               <BookCover
                 key={t.key}
                 templateKey={t.key}
