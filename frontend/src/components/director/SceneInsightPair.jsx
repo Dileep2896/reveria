@@ -37,7 +37,7 @@ function getSceneInsight(sceneNum, liveNotes, directorData, scene) {
 function SceneInsightCard({ insight, sceneNum, side, expanded, onToggle }) {
   if (!insight) return (
     <div className="scene-insight-card scene-insight-empty">
-      <span className="scene-insight-num">—</span>
+      <span className="scene-insight-num">·</span>
     </div>
   );
 

@@ -66,7 +66,7 @@ export default function StoryTimeline({ liveNotes, currentSceneNumber, data, sce
                   <div
                     className={`story-arc-dot${isActive ? ' active' : ''}`}
                     style={{ background: color, boxShadow: isActive ? `0 0 8px ${color}` : 'none' }}
-                    title={`S${num} — tension ${t}/10`}
+                    title={`S${num} · tension ${t}/10`}
                   />
                   <span className={`story-arc-label${isActive ? ' active' : ''}`}>S{num}</span>
                 </div>

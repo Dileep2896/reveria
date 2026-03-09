@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSceneActions } from '../../contexts/SceneActionsContext';
 import useCompactAudio from '../../hooks/useCompactAudio';

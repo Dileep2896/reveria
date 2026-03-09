@@ -22,7 +22,6 @@ export default function AppHeader({
   user, signOut,
   isAdmin,
   userTier,
-  template, heroMode,
 }) {
   // On /book/ pages, hide all story-specific action buttons
   const isNonStoryPage = isLibrary || isExplore || isBookPage;

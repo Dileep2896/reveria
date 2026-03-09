@@ -26,6 +26,7 @@ import LibraryPage from './components/LibraryPage';
 import ExplorePage from './components/ExplorePage';
 import ReadingMode from './components/ReadingMode';
 import SplashScreen from './components/SplashScreen';
+import DemoOverlay from './components/DemoOverlay';
 import AuthScreen, { VerifyEmailScreen } from './components/AuthScreen';
 import SubscriptionPage from './components/SubscriptionPage';
 import AdminDashboard from './components/AdminDashboard';
@@ -45,7 +46,7 @@ export default function App() {
   const isNewRoute = location.pathname.replace(/\/+$/, '') === '/new';
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId, { skip: isNewRoute });
   const { addToast } = useToast();
-  const { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, suggestDirectorPrompt, endDirectorChat } = useWebSocket(idToken, initialState, addToast);
+  const { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, usage, heroMode, send, sendSteer: _sendSteer, sendAudio, sendHeroPhoto, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, suggestDirectorPrompt, endDirectorChat } = useWebSocket(idToken, initialState, addToast);
   // Stable canvas key: freeze during generation so backend assigning story_id
   // doesn't cause a full StoryCanvas remount mid-generation.
   // Once a storyId is assigned, never revert to 'new' — prevents remount
@@ -92,7 +93,7 @@ export default function App() {
   const isLibrary = pathname === ROUTES.LIBRARY;
   const isExplore = pathname === ROUTES.EXPLORE;
   const isBookPage = pathname.startsWith(ROUTES.BOOK_PREFIX);
-  const isNewStory = pathname === ROUTES.NEW;
+  const _isNewStory = pathname === ROUTES.NEW;
   const isStoryRoute = pathname === ROUTES.HOME || pathname === ROUTES.NEW || pathname.startsWith(ROUTES.STORY_PREFIX);
   const [viewingReadOnly, setViewingReadOnly] = useState(false);
 
@@ -444,6 +445,8 @@ export default function App() {
       )}
 
       {splashExiting && <SplashScreen message={lastSplashMsgRef.current} exiting />}
+
+      <DemoOverlay generating={generating} chatActive={directorChatActive} chatLoading={directorChatLoading} />
     </div>
   );
 }

@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a14"/>
+      <stop offset="50%" stop-color="#0e0e1c"/>
+      <stop offset="100%" stop-color="#0a0a14"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="50%" cy="45%" r="40%">
+      <stop offset="0%" stop-color="#b48cff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#b48cff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="30%" cy="60%" r="30%">
+      <stop offset="0%" stop-color="#ffa86c" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#ffa86c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow1)"/>
+  <rect width="1200" height="630" fill="url(#glow2)"/>
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.03" stroke="#b48cff" stroke-width="0.5">
+    <line x1="0" y1="0" x2="0" y2="630"/><line x1="60" y1="0" x2="60" y2="630"/>
+    <line x1="120" y1="0" x2="120" y2="630"/><line x1="180" y1="0" x2="180" y2="630"/>
+    <line x1="240" y1="0" x2="240" y2="630"/><line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="360" y1="0" x2="360" y2="630"/><line x1="420" y1="0" x2="420" y2="630"/>
+    <line x1="480" y1="0" x2="480" y2="630"/><line x1="540" y1="0" x2="540" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/><line x1="660" y1="0" x2="660" y2="630"/>
+    <line x1="720" y1="0" x2="720" y2="630"/><line x1="780" y1="0" x2="780" y2="630"/>
+    <line x1="840" y1="0" x2="840" y2="630"/><line x1="900" y1="0" x2="900" y2="630"/>
+    <line x1="960" y1="0" x2="960" y2="630"/><line x1="1020" y1="0" x2="1020" y2="630"/>
+    <line x1="1080" y1="0" x2="1080" y2="630"/><line x1="1140" y1="0" x2="1140" y2="630"/>
+    <line x1="0" y1="60" x2="1200" y2="60"/><line x1="0" y1="120" x2="1200" y2="120"/>
+    <line x1="0" y1="180" x2="1200" y2="180"/><line x1="0" y1="240" x2="1200" y2="240"/>
+    <line x1="0" y1="300" x2="1200" y2="300"/><line x1="0" y1="360" x2="1200" y2="360"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/><line x1="0" y1="480" x2="1200" y2="480"/>
+    <line x1="0" y1="540" x2="1200" y2="540"/>
+  </g>
+
+  <!-- Logo: dream orb -->
+  <g transform="translate(600, 220)">
+    <!-- Outer ring -->
+    <circle cx="0" cy="0" r="52" fill="none" stroke="#b48cff" stroke-width="1.5" opacity="0.3"/>
+    <!-- Inner orb glow -->
+    <circle cx="0" cy="0" r="32" fill="#b48cff" opacity="0.08"/>
+    <circle cx="0" cy="0" r="32" fill="none" stroke="#b48cff" stroke-width="2" opacity="0.6"/>
+    <!-- Book curve -->
+    <path d="M-18 8 Q0 -8 18 8" fill="none" stroke="#ffa86c" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+    <!-- Pages -->
+    <line x1="-10" y1="2" x2="10" y2="2" stroke="#e2e8f0" stroke-width="1" opacity="0.4"/>
+    <line x1="-7" y1="-2" x2="7" y2="-2" stroke="#e2e8f0" stroke-width="1" opacity="0.3"/>
+    <!-- Sparks -->
+    <circle cx="-40" cy="-30" r="2" fill="#b48cff" opacity="0.6"/>
+    <circle cx="42" cy="-25" r="1.5" fill="#ffa86c" opacity="0.5"/>
+    <circle cx="-35" cy="25" r="1.5" fill="#ffa86c" opacity="0.4"/>
+    <circle cx="38" cy="30" r="2" fill="#b48cff" opacity="0.5"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="600" y="320" text-anchor="middle" font-family="Georgia, 'Cormorant Garamond', serif" font-size="56" font-weight="600" fill="#e2e8f0" letter-spacing="4">
+    Reveria
+  </text>
+
+  <!-- Tagline -->
+  <text x="600" y="360" text-anchor="middle" font-family="system-ui, 'Outfit', sans-serif" font-size="18" fill="#8892a4" letter-spacing="1.5">
+    Stories from your imagination
+  </text>
+
+  <!-- Feature pills -->
+  <g transform="translate(600, 420)">
+    <!-- Gemini -->
+    <rect x="-290" y="-14" width="120" height="28" rx="14" fill="#b48cff" fill-opacity="0.12" stroke="#b48cff" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="-230" y="5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="500" fill="#b48cff">Gemini 2.5 Flash</text>
+
+    <!-- Imagen -->
+    <rect x="-150" y="-14" width="90" height="28" rx="14" fill="#ffa86c" fill-opacity="0.12" stroke="#ffa86c" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="-105" y="5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="500" fill="#ffa86c">Imagen 3</text>
+
+    <!-- Google ADK -->
+    <rect x="-40" y="-14" width="100" height="28" rx="14" fill="#b48cff" fill-opacity="0.12" stroke="#b48cff" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="10" y="5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="500" fill="#b48cff">Google ADK</text>
+
+    <!-- Live API -->
+    <rect x="80" y="-14" width="110" height="28" rx="14" fill="#34d399" fill-opacity="0.12" stroke="#34d399" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="135" y="5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="500" fill="#34d399">Live Voice API</text>
+
+    <!-- Cloud Run -->
+    <rect x="210" y="-14" width="100" height="28" rx="14" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+    <text x="260" y="5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="500" fill="#8892a4">Cloud Run</text>
+  </g>
+
+  <!-- Hackathon badge -->
+  <text x="600" y="490" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" fill="#8892a4" opacity="0.6" letter-spacing="2">
+    GEMINI LIVE AGENT CHALLENGE
+  </text>
+
+  <!-- Bottom border accent -->
+  <rect x="400" y="620" width="400" height="2" rx="1" fill="#b48cff" opacity="0.2"/>
+</svg>
