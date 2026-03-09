@@ -27,6 +27,7 @@ class WsConnectionState:
     director_chat: DirectorChatSession | None = None
 
     total_scene_count: int = 0
+    accumulated_scenes: list[dict[str, Any]] = field(default_factory=list)
     pipeline_tasks: list[asyncio.Task[None]] = field(default_factory=list)
     active_story_id: str | None = None
     batch_index: int = 0

@@ -17,6 +17,7 @@ class SharedPipelineState:
         self.scene_count: int = 1
         self.total_scene_count: int = 0
         self.scenes: list[dict[str, Any]] = []
+        self.prior_scenes: list[dict[str, Any]] = []  # scenes from previous batches
         self.full_story: str = ""
         self.ws_callback: WsCallback | None = None
         self.story_id: str = ""

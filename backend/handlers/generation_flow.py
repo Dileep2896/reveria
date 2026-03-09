@@ -62,6 +62,7 @@ async def _run_adk_pipeline(
     shared_state.scene_count = scene_count
     shared_state.total_scene_count = total_scene_count
     shared_state.scenes = []
+    shared_state.prior_scenes = kwargs.get("prior_scenes", [])
     shared_state.full_story = ""
     shared_state.director_live_notes = []
     shared_state.story_id = story_id
@@ -333,9 +334,13 @@ async def handle_generate(
                 trend_style=state.trend_style,
                 director_chat=state.director_chat,
                 director_enabled=from_director,
+                prior_scenes=list(state.accumulated_scenes),
             )
 
             current_batch_scenes = [s for s in current_batch_scenes if not s.get("_image_failed")]
+
+            # Accumulate scenes across batches for Director analysis
+            state.accumulated_scenes.extend(current_batch_scenes)
 
             # Persist with retry — transient Firestore errors are common
             persist_ok = False

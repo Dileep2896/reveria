@@ -154,11 +154,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             # Handle resume
             if msg_type == "resume":
-                sid, sc, bi = await handle_resume(websocket, message, uid, st.narrator, st.illustrator)
+                sid, sc, bi, acc_scenes = await handle_resume(websocket, message, uid, st.narrator, st.illustrator)
                 if sid:
                     st.active_story_id = sid
                     st.total_scene_count = sc
                     st.batch_index = bi
+                    st.accumulated_scenes = acc_scenes
                     # Restore hero mode from illustrator state (set by restore_state)
                     if st.illustrator.hero_description:
                         st.hero_description = st.illustrator.hero_description
@@ -185,6 +186,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 st.director_chat = None
                 st.session_service = InMemorySessionService()
                 st.total_scene_count = 0
+                st.accumulated_scenes = []
                 st.batch_index = 0
                 st.director_result = None
                 st.pipeline_tasks = []
@@ -209,11 +211,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             # ── Per-scene actions ──
             if msg_type in ("regen_image", "regen_scene", "delete_scene") and not st.active_story_id:
-                sid, sc, bi = await handle_auto_recover(message, uid, st.narrator, st.illustrator)
+                sid, sc, bi, acc_scenes = await handle_auto_recover(message, uid, st.narrator, st.illustrator)
                 if sid:
                     st.active_story_id = sid
                     st.total_scene_count = sc
                     st.batch_index = bi
+                    st.accumulated_scenes = acc_scenes
 
             if msg_type == "generate_portraits":
                 logger.info("generate_portraits request for story %s", st.active_story_id)
