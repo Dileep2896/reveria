@@ -1,177 +1,150 @@
 export default function DirectorHelpModal({ onClose }) {
   const sections = [
     {
-      title: 'Narrative Arc',
-      icon: 'M3 12h18',
+      title: 'Now Viewing',
+      color: 'var(--accent-secondary)',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" />
+          <path d="M8 21h8M12 17v4" />
+        </svg>
+      ),
+      wide: true,
       content: (
         <>
-          <p>Tracks where your story sits on a classic 5-stage arc:</p>
+          <p>Shows the Director's insight for the scene(s) you're currently reading.</p>
           <ul>
-            <li><strong>Exposition</strong> - Setting the scene, introducing characters</li>
-            <li><strong>Rising Action</strong> - Conflict develops, stakes increase</li>
-            <li><strong>Climax</strong> - Peak tension, the turning point</li>
-            <li><strong>Falling Action</strong> - Consequences unfold</li>
-            <li><strong>Resolution</strong> - Story wraps up</li>
+            <li><strong>Emoji + Scene number</strong> — visual mood marker for each scene</li>
+            <li><strong>Title</strong> — the scene's name (e.g. "Moonlit Discovery")</li>
+            <li><strong>Tension bar</strong> — per-scene tension on a <strong>1–10 scale</strong>. Higher = more intense.</li>
+            <li><strong>Craft note</strong> — the Director's brief observation about what makes this scene work</li>
           </ul>
-          <p>The <strong>mini arc curve</strong> shows your position visually. The <strong>pacing pill</strong> indicates tempo:</p>
-          <div className="dh-inline-pills">
-            <span className="dh-pill" style={{ color: '#22c55e', borderColor: '#22c55e33' }}>slow</span>
-            <span className="dh-pill-desc">deliberate, atmospheric</span>
-            <span className="dh-pill" style={{ color: '#f59e0b', borderColor: '#f59e0b33' }}>moderate</span>
-            <span className="dh-pill-desc">balanced progression</span>
-            <span className="dh-pill" style={{ color: '#ef4444', borderColor: '#ef444433' }}>fast</span>
-            <span className="dh-pill-desc">rapid, action-driven</span>
-          </div>
-        </>
-      ),
-    },
-    {
-      title: 'Characters',
-      icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2',
-      content: (
-        <>
-          <p>Character pills show each character extracted from your story. Each pill displays:</p>
-          <ul>
-            <li><strong>Name</strong> - the character's name</li>
-            <li><strong>Role</strong> - their story function (protagonist, antagonist, mentor, etc.)</li>
-          </ul>
-          <p>Hover a pill to see the character's key trait.</p>
-        </>
-      ),
-    },
-    {
-      title: 'Tension',
-      icon: 'M22 12h-4l-3 9L9 3l-3 9H2',
-      content: (
-        <>
-          <p>Bar chart showing tension per scene on a <strong>1–10 scale</strong>. Higher bars and warmer colors = more intensity. <strong>S1, S2…</strong> = Scene 1, Scene 2.</p>
-          <p>The <strong>trend arrow</strong> summarizes how tension changes:</p>
-          <div className="dh-inline-pills">
-            <span className="dh-pill" style={{ color: '#ef4444', borderColor: '#ef444433' }}>↗ rising</span>
-            <span className="dh-pill-desc">escalating</span>
-            <span className="dh-pill" style={{ color: '#22c55e', borderColor: '#22c55e33' }}>↘ falling</span>
-            <span className="dh-pill-desc">decreasing</span>
-            <span className="dh-pill" style={{ color: '#f59e0b', borderColor: '#f59e0b33' }}>→ steady</span>
-            <span className="dh-pill-desc">consistent</span>
-            <span className="dh-pill" style={{ color: '#a855f7', borderColor: '#a855f733' }}>↕ volatile</span>
-            <span className="dh-pill-desc">dramatic swings</span>
-          </div>
-        </>
-      ),
-    },
-    {
-      title: 'Visual Style',
-      icon: 'M12 2L2 7l10 5 10-5-10-5z',
-      content: (
-        <>
-          <p>Reflects the art direction of your story's illustrations.</p>
-          <ul>
-            <li><strong>Mood</strong> - emotional atmosphere (peaceful, mysterious, tense…)</li>
-            <li><strong>Style tags</strong> - artistic descriptors guiding visual generation</li>
-          </ul>
-        </>
-      ),
-    },
-    {
-      title: 'Emotional Arc',
-      icon: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z',
-      content: (
-        <>
-          <p>Tracks the emotional valence of each scene on a <strong>-1 to +1 scale</strong> (negative to positive).</p>
-          <ul>
-            <li><strong>Sparkline</strong> - SVG chart showing emotional highs and lows across scenes</li>
-            <li><strong>Dominant emotion</strong> - the primary feeling (joy, sadness, fear, anger, etc.)</li>
-            <li><strong>Arc shape</strong> - classic emotional trajectory (Rags to Riches, Man in a Hole, Icarus, etc.)</li>
-          </ul>
-          <p>Green area = positive emotion, red area = negative emotion.</p>
-        </>
-      ),
-    },
-    {
-      title: "Director's Notes",
-      icon: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 5h6',
-      content: (
-        <>
-          <p>Per-scene craft observations from the AI director. Each note is tagged by type:</p>
-          <div className="dh-inline-pills">
-            <span className="dh-pill" style={{ color: '#f59e0b', borderColor: '#f59e0b33' }}>pacing</span>
-            <span className="dh-pill" style={{ color: '#a855f7', borderColor: '#a855f733' }}>character</span>
-            <span className="dh-pill" style={{ color: '#3b82f6', borderColor: '#3b82f633' }}>world</span>
-            <span className="dh-pill" style={{ color: '#22c55e', borderColor: '#22c55e33' }}>dialogue</span>
-            <span className="dh-pill" style={{ color: '#ef4444', borderColor: '#ef444433' }}>tension</span>
-            <span className="dh-pill" style={{ color: '#ec4899', borderColor: '#ec489933' }}>sensory</span>
-          </div>
-          <p>Shows up to 3 notes with a "+N more" indicator for longer stories.</p>
+          <p>In two-page mode, you see both the left and right scene side-by-side. Tap to expand long notes.</p>
         </>
       ),
     },
     {
       title: 'Story Health',
-      icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+      color: 'var(--accent-secondary)',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+      ),
+      wide: true,
       content: (
         <>
-          <p>Five dimensions scored <strong>0-10</strong> with a weighted average:</p>
+          <p>Five dimensions scored <strong>0–10</strong> with a weighted average:</p>
+          <div className="dh-dim-grid">
+            {[
+              { name: 'Pacing', desc: 'Rhythm and tempo of events', color: '#a855f7' },
+              { name: 'Characters', desc: 'Development and complexity', color: '#3b82f6' },
+              { name: 'World', desc: 'Setting richness and detail', color: '#3b82f6' },
+              { name: 'Dialogue', desc: 'Naturalness and purpose', color: 'var(--text-muted)' },
+              { name: 'Coherence', desc: 'Plot consistency and logic', color: '#ef4444' },
+            ].map(d => (
+              <div key={d.name} className="dh-dim-row">
+                <span className="dh-dim-dot" style={{ background: d.color }} />
+                <strong>{d.name}</strong>
+                <span>{d.desc}</span>
+              </div>
+            ))}
+          </div>
+          <p>The header shows the overall average. Color: <span style={{ color: '#22c55e', fontWeight: 600 }}>green</span> (&ge;8), <span style={{ color: '#f59e0b', fontWeight: 600 }}>amber</span> (&ge;5), <span style={{ color: '#ef4444', fontWeight: 600 }}>red</span> (&lt;5). Click to expand/collapse the bars.</p>
+        </>
+      ),
+    },
+    {
+      title: 'Characters',
+      color: '#60a5fa',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      ),
+      content: (
+        <>
+          <p>Every character extracted from your story. Each chip shows:</p>
+          <div className="dh-chip-example">
+            <span className="dh-chip-avatar">E</span>
+            <span><strong>Name</strong> — the character's name</span>
+          </div>
+          <div className="dh-chip-example" style={{ marginTop: 4 }}>
+            <span className="dh-chip-role-dot" />
+            <span><strong>Role</strong> — story function (protagonist, keeper, mentor…)</span>
+          </div>
+          <p style={{ marginTop: 8 }}>Hover a chip to see additional character details.</p>
+        </>
+      ),
+    },
+    {
+      title: 'Visual Style',
+      color: 'var(--accent-secondary)',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+        </svg>
+      ),
+      content: (
+        <>
+          <p>Reflects the art direction of your story's illustrations.</p>
           <ul>
-            <li><strong>Pacing</strong> - rhythm and tempo of events</li>
-            <li><strong>Character Depth</strong> - development and complexity</li>
-            <li><strong>World Building</strong> - setting richness and detail</li>
-            <li><strong>Dialogue</strong> - naturalness and purpose</li>
-            <li><strong>Coherence</strong> - plot consistency and logic</li>
+            <li><strong>Mood badge</strong> — overall emotional atmosphere (peaceful, mysterious, tense…)</li>
+            <li><strong>Style tags</strong> — artistic descriptors like "Cinematic", "Atmospheric", "Coastal"</li>
           </ul>
-          <p>Average color: green (&ge;8), amber (&ge;5), red (&lt;5).</p>
+          <p>Tags animate in when data arrives. Hover to highlight.</p>
         </>
       ),
     },
     {
       title: 'Themes',
-      icon: 'M4 9h16M4 15h16M10 3L8 21M16 3l-2 18',
+      color: 'var(--amber, #ffa86c)',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+      ),
       content: (
         <>
-          <p>Identifies 2-3 central themes with <strong>confidence bars</strong> (0-100%).</p>
-          <p>Each theme includes a brief evidence reference from the story text. Higher confidence means stronger thematic presence.</p>
+          <p>Identifies 2–3 central themes from your story, shown as a vertical list with glowing accent dots.</p>
+          <p>Common themes: Hope, Discovery, Loss, Redemption, Identity, Freedom, etc.</p>
         </>
       ),
     },
     {
-      title: 'Story Beats',
-      icon: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+      title: 'Emotional Arc',
+      color: '#f472b6',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+        </svg>
+      ),
       content: (
         <>
-          <p>Maps your story against the <strong>Save the Cat</strong> 10-beat structure:</p>
+          <p>Tracks the overall emotional trajectory of your story.</p>
           <ul>
-            <li><strong style={{ color: '#22c55e' }}>Green dots</strong> - beats already hit</li>
-            <li><strong style={{ color: 'var(--accent-secondary)' }}>Large accent dot</strong> - current beat</li>
-            <li><strong style={{ color: '#f59e0b' }}>Dashed amber</strong> - next expected beat</li>
-            <li><strong>Hollow dots</strong> - future beats</li>
+            <li><strong>Dominant emotion</strong> — primary feeling (Hope, Fear, Curiosity, Wonder…)</li>
+            <li><strong>Arc shape</strong> — classic trajectory name (Rags to Riches, Man in a Hole, Icarus…)</li>
           </ul>
-          <p>Beats: Hook, Setup, Catalyst, Debate, Break 2, Midpoint, Crisis, All is Lost, Break 3, Finale.</p>
+          <p>A brief summary describes the emotional journey from start to end.</p>
         </>
       ),
     },
     {
-      title: 'Illustrations',
-      icon: null,
+      title: 'Live Commentary',
+      color: 'var(--accent-primary)',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      ),
+      wide: true,
       content: (
         <>
-          <p>Quality tier achieved per scene. The AI tries the best quality first and falls back if blocked:</p>
-          <div className="dh-tier-list">
-            <div className="dh-tier-row">
-              <span className="dh-tier-dot" style={{ background: '#22c55e', boxShadow: '0 0 6px #22c55e80' }} />
-              <strong>Tier 1</strong>
-              <span>Full scene with characters</span>
-            </div>
-            <div className="dh-tier-row">
-              <span className="dh-tier-dot" style={{ background: '#f59e0b', boxShadow: '0 0 6px #f59e0b80' }} />
-              <strong>Tier 2</strong>
-              <span>Setting only, no characters (safety filter)</span>
-            </div>
-            <div className="dh-tier-row">
-              <span className="dh-tier-dot" style={{ background: '#ef4444', boxShadow: '0 0 6px #ef444480' }} />
-              <strong>Tier 3</strong>
-              <span>Atmospheric landscape (last resort)</span>
-            </div>
-          </div>
-          <p><strong>S1, S2…</strong> = Scene 1, Scene 2, etc.</p>
+          <p>When generating via <strong>Director Chat</strong>, the Director provides real-time per-scene commentary including mood, craft notes, and a "Next Direction" suggestion for creative steering.</p>
+          <p>The collapsible <strong>Live Commentary</strong> section at the bottom shows all notes with an optional audio playback button. A pulsing dot indicates active generation.</p>
+          <p style={{ fontSize: 11, opacity: 0.7, marginBottom: 0, fontStyle: 'italic' }}>Note: Live commentary only appears for Director-triggered generations, not ControlBar generations.</p>
         </>
       ),
     },
@@ -255,7 +228,7 @@ export default function DirectorHelpModal({ onClose }) {
               color: 'var(--text-muted)',
               margin: '2px 0 0',
             }}>
-              Understanding the story analysis cards
+              Understanding the Director analysis panel
             </p>
           </div>
           <button
@@ -304,20 +277,32 @@ export default function DirectorHelpModal({ onClose }) {
               border-radius: 14px;
               background: var(--glass-bg);
               border: 1px solid var(--glass-border);
+              transition: border-color 0.2s ease;
+            }
+            .dh-card:hover {
+              border-color: color-mix(in srgb, var(--accent-secondary) 20%, var(--glass-border));
             }
             .dh-card-full { grid-column: 1 / -1; }
             .dh-card-header {
               display: flex;
               align-items: center;
-              gap: 8px;
-              margin-bottom: 10px;
-              padding-bottom: 8px;
+              gap: 10px;
+              margin-bottom: 12px;
+              padding-bottom: 10px;
               border-bottom: 1px solid var(--glass-border);
+            }
+            .dh-card-icon {
+              width: 26px;
+              height: 26px;
+              border-radius: 8px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              flex-shrink: 0;
             }
             .dh-card-title {
               font-size: 10px;
               font-weight: 700;
-              color: var(--accent-secondary);
               text-transform: uppercase;
               letter-spacing: 0.08em;
             }
@@ -327,78 +312,81 @@ export default function DirectorHelpModal({ onClose }) {
             .dh-body ul { margin: 4px 0 8px 0; padding-left: 16px; }
             .dh-body li { margin-bottom: 4px; }
             .dh-body strong { color: var(--text-primary); }
-            .dh-inline-pills {
-              display: flex;
-              flex-wrap: wrap;
-              align-items: center;
-              gap: 4px 6px;
-              margin: 6px 0 4px;
-            }
-            .dh-pill {
-              display: inline-flex;
-              font-size: 10px;
-              font-weight: 600;
-              padding: 2px 8px;
-              border-radius: 9999px;
-              border: 1px solid;
-              background: transparent;
-            }
-            .dh-pill-desc {
-              font-size: 11px;
-              color: var(--text-muted);
-              margin-right: 4px;
-            }
-            .dh-tier-list {
+            .dh-dim-grid {
               display: flex;
               flex-direction: column;
               gap: 6px;
-              margin: 8px 0;
+              margin: 8px 0 10px;
             }
-            .dh-tier-row {
+            .dh-dim-row {
               display: flex;
               align-items: center;
               gap: 8px;
               font-size: 11px;
               color: var(--text-secondary);
             }
-            .dh-tier-dot {
+            .dh-dim-row strong {
+              width: 72px;
+              flex-shrink: 0;
+            }
+            .dh-dim-dot {
               width: 8px;
               height: 8px;
               border-radius: 50%;
               flex-shrink: 0;
             }
-            .dh-tier-row strong {
-              color: var(--text-primary);
+            .dh-chip-example {
+              display: flex;
+              align-items: center;
+              gap: 8px;
               font-size: 11px;
-              white-space: nowrap;
+              color: var(--text-secondary);
+            }
+            .dh-chip-avatar {
+              width: 20px;
+              height: 20px;
+              border-radius: 50%;
+              background: linear-gradient(135deg, #60a5fa, #818cf8);
+              color: #fff;
+              font-size: 10px;
+              font-weight: 700;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              flex-shrink: 0;
+            }
+            .dh-chip-role-dot {
+              width: 8px;
+              height: 8px;
+              border-radius: 50%;
+              background: var(--glass-border);
+              flex-shrink: 0;
+              margin-left: 6px;
             }
           `}</style>
 
           <div className="dh-grid">
-            {sections.map(({ title, icon, content }) => {
-              const isWide = title === 'Narrative Arc' || title === 'Emotional Arc' || title === 'Story Beats' || title === 'Illustrations';
-              return (
-                <div key={title} className={`dh-card${isWide ? ' dh-card-full' : ''}`}>
-                  <div className="dh-card-header">
-                    {title === 'Illustrations' ? (
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
-                      </svg>
-                    ) : (
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d={icon} />
-                      </svg>
-                    )}
-                    <span className="dh-card-title">{title}</span>
+            {sections.map(({ title, icon, color, wide, content }) => (
+              <div key={title} className={`dh-card${wide ? ' dh-card-full' : ''}`}>
+                <div className="dh-card-header">
+                  <div
+                    className="dh-card-icon"
+                    style={{
+                      background: `color-mix(in srgb, ${color} 12%, transparent)`,
+                      color: color,
+                    }}
+                  >
+                    {icon}
                   </div>
-                  <div className="dh-body">
-                    {content}
-                  </div>
+                  <span className="dh-card-title" style={{ color }}>
+                    {title}
+                  </span>
                 </div>
-              );
-            })}
+                <div className="dh-body">
+                  {content}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

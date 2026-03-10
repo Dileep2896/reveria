@@ -4,6 +4,7 @@ import Tooltip from './Tooltip';
 import './director-panel.css';
 import DirectorHelpModal from './director/DirectorHelpModal';
 import DirectorEmptyState from './director/DirectorEmptyState';
+import DirectorAnalyzing from './director/DirectorAnalyzing';
 import DirectorChat from './DirectorChat';
 import LiveAgentCTA from './director/LiveAgentCTA';
 import LiveNoteItem from './director/LiveNoteItem';
@@ -94,9 +95,12 @@ export default function DirectorPanel({
       {/* Scrollable body */}
       <div className="director-body" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         {!hasScenes && !hasLiveNotes ? (
-          <DirectorEmptyState language={language} />
+          generating ? <DirectorAnalyzing /> : <DirectorEmptyState language={language} />
         ) : (
           <>
+            {/* Analyzing skeleton while generating and no director data yet */}
+            {generating && !data && <DirectorAnalyzing />}
+
             {/* Scene Insight — two side-by-side cards for current spread */}
             <SceneInsightPair
               currentSceneNumber={currentSceneNumber}

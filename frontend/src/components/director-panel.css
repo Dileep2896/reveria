@@ -1195,39 +1195,86 @@
   padding: 0 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 8px;
   animation: directorLiveIn 0.3s ease-out both;
   animation-delay: 0.15s;
 }
 .story-details-card {
-  padding: 8px 10px;
-  border-radius: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.story-details-card:hover {
+  border-color: color-mix(in srgb, var(--accent-secondary) 20%, var(--glass-border));
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 }
 .story-details-suggestion {
   background: color-mix(in srgb, var(--accent-primary) 6%, var(--glass-bg));
   border-color: color-mix(in srgb, var(--accent-primary) 25%, transparent);
 }
+.story-details-suggestion:hover {
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, transparent);
+}
 .story-details-card-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 .story-details-card-title {
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
+  color: var(--accent-secondary);
+  flex: 1;
+}
+
+/* ── Icon containers with distinct colors ── */
+.story-details-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.story-details-icon--suggestion {
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--accent-primary);
+}
+.story-details-icon--characters {
+  background: color-mix(in srgb, #60a5fa 12%, transparent);
+  color: #60a5fa;
+}
+.story-details-card--characters .story-details-card-title { color: #60a5fa; }
+
+.story-details-icon--style {
+  background: color-mix(in srgb, var(--accent-secondary) 12%, transparent);
   color: var(--accent-secondary);
 }
+
+.story-details-icon--themes {
+  background: color-mix(in srgb, var(--amber, #ffa86c) 12%, transparent);
+  color: var(--amber, #ffa86c);
+}
+.story-details-card--themes .story-details-card-title { color: var(--amber, #ffa86c); }
+
+.story-details-icon--emotion {
+  background: color-mix(in srgb, #f472b6 12%, transparent);
+  color: #f472b6;
+}
+.story-details-card--emotion .story-details-card-title { color: #f472b6; }
+
 .story-details-summary {
   font-size: 9px;
-  line-height: 1.4;
+  line-height: 1.5;
   color: var(--text-secondary);
-  margin: 0 0 4px;
+  margin: 0 0 6px;
 }
 .story-details-text {
   font-size: 10px;
@@ -1236,11 +1283,155 @@
   margin: 0;
   font-weight: 500;
 }
+
+/* ── Character chips with avatar ── */
 .story-details-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
 }
+.story-details-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #60a5fa 6%, var(--glass-bg-strong));
+  border: 1px solid color-mix(in srgb, #60a5fa 15%, var(--glass-border));
+  font-size: 9px;
+  transition: border-color 0.15s ease;
+}
+.story-details-chip:hover {
+  border-color: color-mix(in srgb, #60a5fa 35%, transparent);
+}
+.story-details-chip-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #60a5fa, #818cf8);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.story-details-chip-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.story-details-chip-role {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 8px;
+  opacity: 0.8;
+}
+.story-details-chip-role::before {
+  content: "\00B7 ";
+}
+
+/* ── Visual Style tags ── */
+.story-details-mood-badge {
+  font-size: 8px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-secondary-soft);
+  color: var(--accent-secondary);
+  border: 1px solid var(--glass-border-secondary);
+  text-transform: capitalize;
+  margin-left: auto;
+}
+.story-details-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.story-details-tag {
+  font-size: 8px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-secondary) 6%, var(--glass-bg-strong));
+  color: var(--text-secondary);
+  border: 1px solid color-mix(in srgb, var(--accent-secondary) 12%, var(--glass-border));
+  text-transform: capitalize;
+  animation: tagPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.story-details-tag:hover {
+  background: color-mix(in srgb, var(--accent-secondary) 12%, var(--glass-bg-strong));
+  color: var(--accent-secondary);
+}
+@keyframes tagPop {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Themes as list with dots ── */
+.story-details-theme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.story-details-theme-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+  animation: tagPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  padding: 4px 0;
+}
+.story-details-theme-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--amber, #ffa86c), #ffd4a8);
+  flex-shrink: 0;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--amber, #ffa86c) 30%, transparent);
+}
+
+/* ── Emotional Arc badges ── */
+.story-details-emotion-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.story-details-emotion-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, color-mix(in srgb, #f472b6 10%, var(--glass-bg-strong)), color-mix(in srgb, #f472b6 5%, var(--glass-bg-strong)));
+  color: #f472b6;
+  border: 1px solid color-mix(in srgb, #f472b6 20%, transparent);
+  text-transform: capitalize;
+}
+.story-details-arc-badge {
+  font-size: 8px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--glass-bg-strong);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+  text-transform: capitalize;
+}
+.story-details-emotion-summary {
+  font-style: italic;
+  color: var(--text-muted);
+  border-top: 1px solid var(--glass-border);
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+/* Backward compat — old pill class */
 .story-details-pill {
   font-size: 8px;
   font-weight: 600;
