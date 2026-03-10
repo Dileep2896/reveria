@@ -29,12 +29,9 @@ export default function DirectorChat({
   const mountedRef = useRef(true);
 
   // Streaming audio for low-latency Director responses
-  const streamingStartRecRef = useRef(null);
   const { playing: streamPlaying, feedChunk, stop: stopStreaming, reset: resetStreaming, getAmplitude: getStreamAmplitude } = useStreamingAudio({
     onPlaybackStart: () => {
       if (mountedRef.current) setSpeaking(true);
-      // Hot mic during streaming playback for barge-in
-      streamingStartRecRef.current?.();
     },
     onPlaybackEnd: () => {
       if (mountedRef.current) setSpeaking(false);
@@ -104,15 +101,7 @@ export default function DirectorChat({
     onVoiceStart: handleVoiceStart,
   });
 
-  // Wire startRecording ref for streaming audio hot-mic
-  useEffect(() => {
-    streamingStartRecRef.current = (!generating && !castAnalyzing) ? startRecording : null;
-  }, [generating, castAnalyzing, startRecording]);
-
   // Auto-play Director audio for legacy path (greeting / tool call responses)
-  // Barge-in: start recording immediately so mic is hot during Director speech.
-  // Echo cancellation filters speaker audio; if user actually speaks, VAD fires
-  // onVoiceStart which cuts Director audio.
   useEffect(() => {
     const latest = messages[messages.length - 1];
     if (
@@ -130,23 +119,15 @@ export default function DirectorChat({
       }
       const audio = new Audio(latest.audioUrl);
       audio.volume = 0.7;
-      let playStarted = false;
       audio.onplay = () => {
-        playStarted = true;
         if (mountedRef.current) setSpeaking(true);
-        // Start recording immediately for barge-in (mic hot during Director speech)
-        if (mountedRef.current && !generating && !castAnalyzing) startRecording();
       };
       audio.onended = () => { if (mountedRef.current) setSpeaking(false); };
       audio.onerror = () => { if (mountedRef.current) setSpeaking(false); };
       audio.play().catch(() => { if (mountedRef.current) setSpeaking(false); });
-      // Fallback: if audio doesn't fire onplay within 2s (autoplay blocked), auto-resume recording
-      setTimeout(() => {
-        if (!playStarted && mountedRef.current && !generating && !castAnalyzing) startRecording();
-      }, 2000);
       audioRef.current = audio;
     }
-  }, [messages, generating, castAnalyzing, startRecording]);
+  }, [messages]);
 
   // Auto-resume recording after Director finishes speaking (fallback if mic wasn't already hot)
   useEffect(() => {
