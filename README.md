@@ -12,6 +12,17 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 ---
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Template Chooser](Screenshot/01-template-chooser.jpg) | ![Story Generation](Screenshot/02-story-generation.jpg) |
+| **Template Chooser** — Pick from 12 story templates via a 3D coverflow carousel | **Story Generation** — Live text, image, and audio streaming with Director analysis panel |
+| ![Book Details](Screenshot/03-book-details.jpg) | ![Director Chat](Screenshot/04-director-chat.jpg) |
+| **Book Details** — Published story page with characters, genres, ratings, and social features | **Director Chat** — Voice brainstorming with the AI Director powered by Gemini Live API |
+
+---
+
 ## Features
 
 - **Story Templates** — 12 curated templates (Storybook, Comic Book, Webtoon, Manga, Hero Quest, Noir Detective, Travel Journal, Minimalist, Impressionist, Film Noir, Documentary, Retro Film) with unique cover designs, art styles, and formatting. Template selection via a 3D coverflow carousel before story creation
