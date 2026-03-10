@@ -1,0 +1,43 @@
+flowchart TB
+    subgraph User["User"]
+        Browser["Browser Client<br/>(React SPA)"]
+    end
+
+    subgraph Firebase["Firebase Project - storyforge-hackathon-1beac"]
+        direction TB
+        FBAuth["Firebase Authentication<br/>Google Sign-In Provider"]
+        FBHosting["Firebase Hosting<br/>Static SPA (frontend build)"]
+        FBFirestore[("Cloud Firestore<br/>──────────────────<br/>stories/{storyId}<br/>  ├─ scenes/{sceneNum}<br/>  ├─ generations/{genId}<br/>  ├─ ratings/{uid}<br/>  ├─ comments/{autoId}<br/>  ├─ liked_by[ ]<br/>  └─ is_favorite, status,<br/>     title, cover_image_url")]
+    end
+
+    subgraph GCP["GCP Project - storyforge-hackathon"]
+        direction TB
+        CloudRun["Cloud Run<br/>Backend Container<br/>(FastAPI + Uvicorn)"]
+
+        subgraph AI["AI & ML Services"]
+            direction LR
+            VertexGemini["Vertex AI<br/>Gemini 2.0 Flash<br/>(text generation)"]
+            VertexImagen["Vertex AI<br/>Imagen 3<br/>(image generation)"]
+            GTTS["Gemini Native Audio<br/>(Live API, scene narration)"]
+        end
+
+        GCSBucket[("Cloud Storage<br/>storyforge-hackathon-media<br/>──────────────────<br/>scene images (WebP)<br/>cover images (WebP)<br/>portrait images (WebP)")]
+    end
+
+    Browser -->|"HTTPS"| FBHosting
+    Browser -->|"WSS://"| CloudRun
+    Browser -->|"Auth SDK"| FBAuth
+    Browser -->|"Firestore SDK<br/>(library, explore,<br/>favorites, likes,<br/>ratings, comments)"| FBFirestore
+
+    FBAuth -->|"verify ID token"| CloudRun
+    CloudRun -->|"Gemini API"| VertexGemini
+    CloudRun -->|"Imagen API"| VertexImagen
+    CloudRun -->|"Live API (audio)"| GTTS
+    CloudRun -->|"persist stories<br/>+ scenes"| FBFirestore
+    CloudRun -->|"upload images"| GCSBucket
+    GCSBucket -->|"public URLs"| Browser
+
+    style User fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Firebase fill:#1a1a2e,stroke:#ffa86c,color:#e2e8f0
+    style GCP fill:#1a1a2e,stroke:#3b82f6,color:#e2e8f0
+    style AI fill:#0f172a,stroke:#818cf8,color:#c7d2fe

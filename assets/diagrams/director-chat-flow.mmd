@@ -1,0 +1,30 @@
+flowchart LR
+    subgraph Client["Browser"]
+        direction TB
+        Orb["Voice Orb"] --> VAD["Web Audio VAD<br/>AnalyserNode"]
+        VAD -->|"1.2s silence"| Stop["Auto-stop<br/>MediaRecorder"]
+        Stop --> B64["Base64 audio"]
+    end
+
+    subgraph WS["WebSocket"]
+        direction TB
+        M1["director_chat_start<br/>{context, lang, voice}"]
+        M2["director_chat_audio<br/>{base64, mime}"]
+        M3["director_chat_text"]
+        M4["director_chat_suggest"]
+    end
+
+    subgraph Backend["DirectorChatSession"]
+        direction TB
+        Live["Gemini Live Session<br/>tools + transcription<br/>+ context compression"]
+        Tool["generate_story tool call<br/>model decides when ready"]
+    end
+
+    B64 --> M2 --> Live
+    Live -->|"audio + transcripts<br/>+ tool calls"| Client
+    Live -->|"tool call"| Tool
+    Tool -->|"FunctionResponse"| Live
+
+    style Client fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
+    style WS fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
+    style Backend fill:#1a1a2e,stroke:#3b82f6,color:#e2e8f0

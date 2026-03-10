@@ -1,0 +1,26 @@
+flowchart LR
+    subgraph Trigger["Trigger"]
+        PR["Pull Request"]
+        Push["Push to main"]
+    end
+
+    subgraph Tests["Test Jobs (parallel)"]
+        direction TB
+        BT["Backend Tests<br/>──────────────<br/>Python 3.12<br/>pytest (8 tests)<br/>Mock Firebase/Firestore"]
+        FT["Frontend Tests<br/>──────────────<br/>Node 20<br/>ESLint<br/>Vite build<br/>Playwright (3 tests)"]
+    end
+
+    subgraph Deploy["Deploy Jobs (parallel, main only)"]
+        direction TB
+        DB["Deploy Backend<br/>──────────────<br/>gcloud run deploy<br/>--source backend<br/>Cloud Run"]
+        DF["Deploy Frontend<br/>──────────────<br/>npm run build<br/>Firebase Hosting<br/>(production env)"]
+    end
+
+    PR --> Tests
+    Push --> Tests
+    Tests -->|"all pass"| Deploy
+    Push -.->|"gate"| Deploy
+
+    style Trigger fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Tests fill:#1a1a2e,stroke:#b48cff,color:#e2e8f0
+    style Deploy fill:#1a1a2e,stroke:#10b981,color:#e2e8f0
