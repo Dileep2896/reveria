@@ -19,6 +19,7 @@ export default function DirectorPanel({
   chatActive, chatMessages = [], chatLoading, chatPrompt,
   autoGenerate, onCancelAutoGenerate, castAnalyzing = false,
   onStartChat, onEndChat, onChatAudio, onChatSuggest, onUsePrompt,
+  setAudioChunkHandler, setAudioDoneHandler,
 }) {
   const hasLiveNotes = liveNotes.length > 0;
   const hasScenes = scenes.length > 0;
@@ -89,6 +90,8 @@ export default function DirectorPanel({
           onCancelAutoGenerate={onCancelAutoGenerate}
           generating={generating}
           castAnalyzing={castAnalyzing || !!heroMode?.analyzing}
+          setAudioChunkHandler={setAudioChunkHandler}
+          setAudioDoneHandler={setAudioDoneHandler}
         />
       )}
 

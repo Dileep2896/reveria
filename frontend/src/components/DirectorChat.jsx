@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import useVoiceCapture from '../hooks/useVoiceCapture';
+import useStreamingAudio from '../hooks/useStreamingAudio';
+import VoiceOrb from './VoiceOrb';
 import Tooltip from './Tooltip';
 
 export default function DirectorChat({
@@ -15,6 +17,8 @@ export default function DirectorChat({
   onCancelAutoGenerate,
   generating,
   castAnalyzing = false,
+  setAudioChunkHandler,
+  setAudioDoneHandler,
 }) {
   const [speaking, setSpeaking] = useState(false);
   const [countdown, setCountdown] = useState(5);
@@ -23,6 +27,44 @@ export default function DirectorChat({
   const playedIds = useRef(new Set());
   const prevSpeakingRef = useRef(false);
   const mountedRef = useRef(true);
+
+  // Streaming audio for low-latency Director responses
+  const streamingStartRecRef = useRef(null);
+  const { playing: streamPlaying, feedChunk, stop: stopStreaming, reset: resetStreaming, getAmplitude: getStreamAmplitude } = useStreamingAudio({
+    onPlaybackStart: () => {
+      if (mountedRef.current) setSpeaking(true);
+      // Hot mic during streaming playback for barge-in
+      streamingStartRecRef.current?.();
+    },
+    onPlaybackEnd: () => {
+      if (mountedRef.current) setSpeaking(false);
+    },
+  });
+
+  // Register streaming handlers with WS layer
+  const streamingActiveRef = useRef(false);
+  useEffect(() => {
+    if (setAudioChunkHandler) {
+      setAudioChunkHandler((b64data) => {
+        if (!streamingActiveRef.current) {
+          // First chunk of new response — reset scheduling
+          resetStreaming();
+          streamingActiveRef.current = true;
+        }
+        feedChunk(b64data);
+      });
+    }
+    if (setAudioDoneHandler) {
+      setAudioDoneHandler((_data) => {
+        streamingActiveRef.current = false;
+        // Audio playback continues until all scheduled buffers finish
+      });
+    }
+    return () => {
+      if (setAudioChunkHandler) setAudioChunkHandler(null);
+      if (setAudioDoneHandler) setAudioDoneHandler(null);
+    };
+  }, [setAudioChunkHandler, setAudioDoneHandler, feedChunk, resetStreaming]);
 
   // Countdown timer for auto-generate
   useEffect(() => {
@@ -42,11 +84,35 @@ export default function DirectorChat({
     [onSendAudio],
   );
 
-  const { recording, startRecording, stopRecording, abortRecording } = useVoiceCapture({
+  // Barge-in: when user starts speaking, cut Director audio immediately
+  const handleVoiceStart = useCallback(() => {
+    // Stop streaming audio (PCM chunks)
+    stopStreaming();
+    // Stop legacy Audio element (greeting/tool call responses)
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onplay = null;
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current = null;
+    }
+    if (mountedRef.current) setSpeaking(false);
+  }, [stopStreaming]);
+
+  const { recording, startRecording, stopRecording, abortRecording, getAmplitude: getMicAmplitude } = useVoiceCapture({
     onAudioCaptured: handleAudioCaptured,
+    onVoiceStart: handleVoiceStart,
   });
 
-  // Auto-play Director audio and track speaking state
+  // Wire startRecording ref for streaming audio hot-mic
+  useEffect(() => {
+    streamingStartRecRef.current = (!generating && !castAnalyzing) ? startRecording : null;
+  }, [generating, castAnalyzing, startRecording]);
+
+  // Auto-play Director audio for legacy path (greeting / tool call responses)
+  // Barge-in: start recording immediately so mic is hot during Director speech.
+  // Echo cancellation filters speaker audio; if user actually speaks, VAD fires
+  // onVoiceStart which cuts Director audio.
   useEffect(() => {
     const latest = messages[messages.length - 1];
     if (
@@ -65,7 +131,12 @@ export default function DirectorChat({
       const audio = new Audio(latest.audioUrl);
       audio.volume = 0.7;
       let playStarted = false;
-      audio.onplay = () => { playStarted = true; if (mountedRef.current) setSpeaking(true); };
+      audio.onplay = () => {
+        playStarted = true;
+        if (mountedRef.current) setSpeaking(true);
+        // Start recording immediately for barge-in (mic hot during Director speech)
+        if (mountedRef.current && !generating && !castAnalyzing) startRecording();
+      };
       audio.onended = () => { if (mountedRef.current) setSpeaking(false); };
       audio.onerror = () => { if (mountedRef.current) setSpeaking(false); };
       audio.play().catch(() => { if (mountedRef.current) setSpeaking(false); });
@@ -77,7 +148,7 @@ export default function DirectorChat({
     }
   }, [messages, generating, castAnalyzing, startRecording]);
 
-  // Auto-resume recording after Director finishes speaking
+  // Auto-resume recording after Director finishes speaking (fallback if mic wasn't already hot)
   useEffect(() => {
     if (speaking) {
       prevSpeakingRef.current = true;
@@ -85,18 +156,19 @@ export default function DirectorChat({
       prevSpeakingRef.current = false;
       // Don't auto-resume during generation or cast photo upload flow
       if (generating || castAnalyzing) return;
-      // Director just finished → auto-start listening after a brief pause
+      // Director just finished — if not already recording, start after brief pause
       const timer = setTimeout(() => {
-        if (mountedRef.current) startRecording();
+        if (mountedRef.current && !recording) startRecording();
       }, 600);
       return () => clearTimeout(timer);
     }
-  }, [speaking, startRecording, generating, castAnalyzing]);
+  }, [speaking, recording, startRecording, generating, castAnalyzing]);
 
-  // Abort recording (discard audio) when cast photo upload or Director speaking starts
+  // Abort recording (discard audio) when cast photo upload starts
+  // Note: Director speaking no longer aborts — barge-in cuts Director audio instead
   useEffect(() => {
-    if ((castAnalyzing || speaking) && recording) abortRecording();
-  }, [castAnalyzing, speaking, recording, abortRecording]);
+    if (castAnalyzing && recording) abortRecording();
+  }, [castAnalyzing, recording, abortRecording]);
 
   // Auto-resume when generation ends
   const prevGenerating = useRef(false);
@@ -131,6 +203,7 @@ export default function DirectorChat({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      stopStreaming();
       if (audioRef.current) {
         audioRef.current.onplay = null;
         audioRef.current.onended = null;
@@ -139,14 +212,24 @@ export default function DirectorChat({
         audioRef.current = null;
       }
     };
-  }, []);
+  }, [stopStreaming]);
 
+  // Unified amplitude getter — picks the right audio source
+  const getOrbAmplitude = useCallback(() => {
+    if (recording) return getMicAmplitude();
+    if (streamPlaying) return getStreamAmplitude();
+    // Legacy Audio element speaking — synthetic gentle pulse
+    if (speaking) return 0.15 + Math.sin(Date.now() * 0.008) * 0.1;
+    return 0;
+  }, [recording, streamPlaying, speaking, getMicAmplitude, getStreamAmplitude]);
+
+  // Show 'speaking' when Director audio is playing even if mic is hot (barge-in ready)
   const orbState = castAnalyzing
     ? 'waiting'
-    : recording
-      ? 'recording'
-      : speaking
-        ? 'speaking'
+    : speaking
+      ? 'speaking'
+      : recording
+        ? 'recording'
         : chatLoading
           ? 'loading'
           : generating
@@ -154,94 +237,54 @@ export default function DirectorChat({
             : 'idle';
 
   // Toggle: tap to start recording, tap again to send
+  // Barge-in: tapping during 'speaking' starts recording (voice will cut Director audio via VAD)
   const handleOrbClick = () => {
     if (orbState === 'waiting') return; // blocked during cast upload
     if (recording) {
       stopRecording(); // sends audio automatically via onAudioCaptured
-    } else if (orbState === 'idle') {
+    } else if (orbState === 'idle' || orbState === 'speaking') {
       startRecording();
     }
-    // Ignore clicks during speaking/loading
+    // Ignore clicks during loading
   };
 
   return (
     <div className="director-voice-section">
-      {/* Voice Orb */}
+      {/* Voice Orb — canvas blob reacting to audio */}
       <button
-        className={`director-voice-orb ${orbState}`}
+        className={`director-voice-orb-btn ${orbState}`}
         onClick={handleOrbClick}
-        aria-label={orbState === 'waiting' ? 'Analyzing hero photo' : recording ? 'Stop recording' : chatLoading ? 'Director is thinking' : speaking ? 'Director is speaking' : generating ? 'Director is watching' : 'Start recording'}
+        aria-label={orbState === 'waiting' ? 'Analyzing hero photo' : recording ? 'Stop recording' : chatLoading ? 'Director is thinking' : speaking ? 'Tap to interrupt Director' : generating ? 'Director is watching' : 'Start recording'}
         type="button"
       >
-        {/* Animated rings */}
-        <div className="voice-ring voice-ring-1" />
-        <div className="voice-ring voice-ring-2" />
-        <div className="voice-ring voice-ring-3" />
-
-        {/* Glow background */}
-        <div className="voice-glow" />
-
-        {/* Inner orb */}
-        <div className="voice-orb-inner">
+        <VoiceOrb mode={orbState} getAmplitude={getOrbAmplitude} size={72} />
+        {/* Overlay icon */}
+        <div className="voice-orb-icon">
           {orbState === 'waiting' ? (
-            <div className="voice-watching">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            </div>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
           ) : orbState === 'watching' ? (
-            <div className="voice-watching">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </div>
-          ) : orbState === 'speaking' ? (
-            <div className="voice-wave">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <span
-                  key={i}
-                  className="voice-wave-bar"
-                  style={{ animationDelay: `${i * 0.12}s` }}
-                />
-              ))}
-            </div>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
           ) : orbState === 'loading' ? (
             <div className="voice-loading">
               {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="voice-loading-dot"
-                  style={{ animationDelay: `${i * 0.2}s` }}
-                />
+                <span key={i} className="voice-loading-dot" style={{ animationDelay: `${i * 0.2}s` }} />
               ))}
             </div>
           ) : recording ? (
-            /* Recording — show stop/send icon */
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              stroke="none"
-            >
-              <rect x="4" y="4" width="16" height="16" rx="3" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" opacity="0.8">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
             </svg>
           ) : (
-            /* Idle — show mic icon */
-            <svg
-              width="26"
-              height="26"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.7">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
               <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               <line x1="12" y1="19" x2="12" y2="23" />
@@ -373,6 +416,7 @@ export default function DirectorChat({
         <button
           onClick={() => {
             if (recording) stopRecording();
+            stopStreaming();
             if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
             onEndChat?.();
           }}

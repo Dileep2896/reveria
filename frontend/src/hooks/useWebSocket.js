@@ -42,6 +42,9 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const storyDeletedRef = useRef(null);
   const controlBarInputRef = useRef(null);
   const languageDetectedRef = useRef(null);
+  const navigateRef = useRef(null);
+  const audioChunkRef = useRef(null);
+  const audioDoneRef = useRef(null);
 
   const idTokenRef = useRef(idToken);
   const prevTokenRef = useRef(idToken);
@@ -77,6 +80,9 @@ export default function useWebSocket(idToken, initialState, addToast) {
       setDirectorAutoGenerate,
       setHeroMode,
       onLanguageDetected: (lang) => languageDetectedRef.current?.(lang),
+      onNavigate: (dest) => navigateRef.current?.(dest),
+      onAudioChunk: (data) => audioChunkRef.current?.(data),
+      onAudioDone: (data) => audioDoneRef.current?.(data),
     });
   }
 
@@ -382,6 +388,9 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const setStoryDeletedHandler = useCallback((handler) => { storyDeletedRef.current = handler; }, []);
   const setControlBarInputHandler = useCallback((handler) => { controlBarInputRef.current = handler; }, []);
   const setLanguageDetectedHandler = useCallback((handler) => { languageDetectedRef.current = handler; }, []);
+  const setNavigateHandler = useCallback((handler) => { navigateRef.current = handler; }, []);
+  const setAudioChunkHandler = useCallback((handler) => { audioChunkRef.current = handler; }, []);
+  const setAudioDoneHandler = useCallback((handler) => { audioDoneRef.current = handler; }, []);
 
-  return { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendHeroName, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat };
+  return { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendHeroName, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, setNavigateHandler, setAudioChunkHandler, setAudioDoneHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat };
 }

@@ -261,6 +261,12 @@
   gap: 3px;
 }
 
+.demo-flow-parallel-mini {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
 /* Features two-column layout */
 .demo-live-features {
   display: grid;

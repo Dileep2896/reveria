@@ -347,27 +347,106 @@
   min-height: 60vh;
 }
 
-.explore-empty-icon {
-  color: var(--text-muted);
-  opacity: 0.4;
-  margin-bottom: 1.5rem;
+.explore-empty-visual {
+  position: relative;
+  width: 120px;
+  height: 90px;
+  margin-bottom: 1.8rem;
 }
+
+.explore-empty-book {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+}
+
+.explore-empty-book-1 {
+  width: 56px;
+  height: 68px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-6deg);
+  color: var(--accent-primary);
+  animation: emptyFloat 3s ease-in-out infinite;
+  box-shadow: 0 4px 20px rgba(180, 140, 255, 0.12);
+}
+
+.explore-empty-book-2 {
+  width: 48px;
+  height: 60px;
+  left: 10px;
+  top: 8px;
+  transform: rotate(8deg);
+  color: var(--accent-secondary);
+  animation: emptyFloat 3s ease-in-out 0.5s infinite;
+  box-shadow: 0 4px 20px rgba(255, 168, 108, 0.1);
+}
+
+.explore-empty-book-3 {
+  width: 40px;
+  height: 50px;
+  right: 8px;
+  top: 14px;
+  transform: rotate(-3deg);
+  color: var(--accent-primary);
+  animation: emptyFloat 3s ease-in-out 1s infinite;
+  opacity: 0.7;
+}
+
+@keyframes emptyFloat {
+  0%, 100% { transform: translate(0, 0) rotate(var(--r, -6deg)); }
+  50% { transform: translate(0, -6px) rotate(var(--r, -6deg)); }
+}
+
+.explore-empty-book-1 { --r: -6deg; }
+.explore-empty-book-2 { --r: 8deg; }
+.explore-empty-book-3 { --r: -3deg; }
 
 .explore-empty h3 {
   font-family: 'Cormorant Garamond', serif;
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 0.6rem;
 }
 
 .explore-empty p {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Outfit', sans-serif;
   font-size: 0.85rem;
   color: var(--text-muted);
-  max-width: 320px;
-  line-height: 1.6;
-  margin: 0;
+  max-width: 340px;
+  line-height: 1.7;
+  margin: 0 0 1.5rem;
+}
+
+.explore-empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border-accent);
+  background: var(--accent-primary-soft);
+  color: var(--accent-primary);
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-glow-primary);
+}
+
+.explore-empty-cta:hover {
+  background: var(--accent-primary);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(180, 140, 255, 0.3);
 }
 
 /* ===========================================================

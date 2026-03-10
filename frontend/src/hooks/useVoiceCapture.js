@@ -4,10 +4,10 @@ const MIN_RECORDING_MS = 600; // Minimum hold duration to send audio
 
 // VAD (Voice Activity Detection) constants
 const SILENCE_THRESHOLD = 0.01; // RMS level below which = silence
-const SILENCE_DURATION_MS = 1200; // Auto-stop after 1.2s of silence
+const SILENCE_DURATION_MS = 800; // Auto-stop after 0.8s of silence
 const VAD_POLL_INTERVAL_MS = 100; // Check audio level every 100ms
 
-export default function useVoiceCapture({ onAudioCaptured }) {
+export default function useVoiceCapture({ onAudioCaptured, onVoiceStart }) {
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
@@ -21,6 +21,7 @@ export default function useVoiceCapture({ onAudioCaptured }) {
   const vadIntervalRef = useRef(null);
   const speechDetectedRef = useRef(false);
   const silenceStartRef = useRef(null);
+  const freqDataRef = useRef(null);
 
   const cleanupVAD = useCallback(() => {
     if (vadIntervalRef.current) {
@@ -133,6 +134,7 @@ export default function useVoiceCapture({ onAudioCaptured }) {
         analyser.fftSize = 2048;
         source.connect(analyser);
         analyserRef.current = analyser;
+        freqDataRef.current = new Uint8Array(analyser.frequencyBinCount);
 
         speechDetectedRef.current = false;
         silenceStartRef.current = null;
@@ -151,7 +153,10 @@ export default function useVoiceCapture({ onAudioCaptured }) {
           const rms = Math.sqrt(sum / dataArray.length);
 
           if (rms > SILENCE_THRESHOLD) {
-            // Speech detected
+            // Speech detected — notify on first detection (barge-in signal)
+            if (!speechDetectedRef.current && onVoiceStart) {
+              onVoiceStart();
+            }
             speechDetectedRef.current = true;
             silenceStartRef.current = null;
           } else if (speechDetectedRef.current) {
@@ -175,7 +180,7 @@ export default function useVoiceCapture({ onAudioCaptured }) {
       console.error('Microphone access denied or error:', err);
       cleanup();
     }
-  }, [onAudioCaptured, cleanup, cleanupVAD]);
+  }, [onAudioCaptured, onVoiceStart, cleanup, cleanupVAD]);
 
   const stopRecording = useCallback(() => {
     // If startRecording is still awaiting getUserMedia, set abort flag
@@ -217,5 +222,15 @@ export default function useVoiceCapture({ onAudioCaptured }) {
     };
   }, []);
 
-  return { recording, startRecording, stopRecording, abortRecording };
+  /** Get current mic amplitude (0-1) for visualization. */
+  const getAmplitude = useCallback(() => {
+    if (!analyserRef.current || !freqDataRef.current) return 0;
+    analyserRef.current.getByteFrequencyData(freqDataRef.current);
+    let sum = 0;
+    const arr = freqDataRef.current;
+    for (let i = 0; i < arr.length; i++) sum += arr[i];
+    return sum / (arr.length * 255);
+  }, []);
+
+  return { recording, startRecording, stopRecording, abortRecording, getAmplitude };
 }

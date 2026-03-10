@@ -42,6 +42,9 @@ export function createWsHandlers({
   setDirectorAutoGenerate,
   setHeroMode,
   onLanguageDetected,
+  onNavigate,
+  onAudioChunk,
+  onAudioDone,
 }) {
   return function handleMessage(data) {
     switch (data.type) {
@@ -387,6 +390,24 @@ export function createWsHandlers({
             language: data.language,
             template: data.template,
           });
+        }
+        return true;
+
+      case 'director_chat_audio_chunk':
+        // Streaming PCM chunk — feed to Web Audio for immediate playback
+        if (setDirectorChatLoading) setDirectorChatLoading(false);
+        if (onAudioChunk && data.data) onAudioChunk(data.data);
+        return true;
+
+      case 'director_chat_audio_done':
+        // Stream complete — transcripts and metadata arrive here
+        if (setDirectorChatLoading) setDirectorChatLoading(false);
+        if (onAudioDone) onAudioDone(data);
+        return true;
+
+      case 'director_chat_navigate':
+        if (onNavigate && data.destination) {
+          onNavigate(data.destination);
         }
         return true;
 

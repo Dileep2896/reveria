@@ -43,7 +43,8 @@ export function AuthProvider({ children }) {
         // Check admin status
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          setIsAdmin(userDoc.exists() && userDoc.data()?.is_admin === true);
+          const data = userDoc.exists() ? userDoc.data() : {};
+          setIsAdmin(data?.is_admin === true);
         } catch {
           setIsAdmin(false);
         }

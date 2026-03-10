@@ -135,7 +135,7 @@ This is the feature I'm most excited about. Director Chat is a real-time voice c
 ### How It Works
 
 1. **Start session**: Frontend sends story context, language, and voice preference. Backend opens a persistent bidirectional Gemini Live session configured with function calling, native audio transcription, and context window compression. The Director's audio greeting plays back.
-2. **Conversation**: User speaks. Web Audio's `AnalyserNode` computes RMS levels on a 100ms polling interval and detects 1.2s of silence to auto-stop the recorder. Base64 audio goes over WebSocket to the Live session. Response audio, transcripts, and any tool calls come back.
+2. **Conversation**: User speaks. Web Audio's `AnalyserNode` computes RMS levels on a 100ms polling interval and detects 800ms of silence to auto-stop the recorder. Base64 audio goes over WebSocket to the Live session. Response audio, transcripts, and any tool calls come back.
 3. **Tool-driven generation**: When the model decides brainstorming is done, it calls the `generate_story` tool with a vivid 2-3 sentence prompt. The backend sends a `FunctionResponse` back so the model can say "Generating your story now!", then fires generation.
 4. **Manual fallback**: A "Suggest" button calls `request_suggestion()` directly on the existing session. This handles the ~30-40% of cases where tool calling doesn't fire in audio mode.
 
@@ -206,6 +206,38 @@ The Director speaks the story's language. For non-English stories, language dire
 ### During Generation
 
 When the Director triggers story generation, its voice orb switches to a "watching" state (eye icon with accent-primary pulse). Per-scene `proactive_comment()` voice messages are skipped to prevent audio overlap. Only `generation_wrapup()` fires at the end with a combined reaction covering all generated scenes plus a continuation prompt. Recording auto-resumes 800ms after generation completes.
+
+### Streaming Audio: Eliminating the "Thinking" Gap
+
+The original Director Chat had a noticeable delay between when you stopped speaking and when the Director started responding. The full audio response had to be collected, encoded as a WAV, and sent as a data URL before playback could begin.
+
+The fix: stream PCM audio chunks incrementally. The backend's `collect_response_streaming()` calls an `on_audio_chunk` callback for each audio chunk as it arrives from the Gemini Live API. Each chunk is base64-encoded and sent as a `director_chat_audio_chunk` WebSocket message. On the frontend, `useStreamingAudio` feeds each chunk into a Web Audio API `AudioBufferSource`, scheduled for gapless playback via a `nextPlayTime` tracker. The Director's voice starts playing as soon as the first chunk arrives — typically within 200-400ms of the request.
+
+The two audio paths coexist cleanly. Streaming handles normal conversational responses. The legacy `Audio(dataUrl)` path handles greetings (session start) and tool call acknowledgments, which still use the non-streaming endpoint.
+
+### Barge-In: Interrupting the Director
+
+Real conversations have interruptions. The Director Chat now supports barge-in — start speaking while the Director is talking, and the Director's audio cuts immediately.
+
+The implementation keeps the microphone hot during Director speech. When Director audio starts playing (either streaming or legacy), recording begins immediately with `echoCancellation: true`. The existing VAD (Voice Activity Detection) monitors for actual speech onset via an `onVoiceStart` callback. When the user speaks, `handleVoiceStart` fires: `stopStreaming()` kills all scheduled Web Audio sources, the legacy `Audio` element is paused, and `speaking` state drops to false. The user's speech is captured normally and sent when silence is detected.
+
+Manual barge-in also works: tapping the orb during the `speaking` state triggers the same interrupt flow.
+
+### Voice-Reactive Orb
+
+The voice orb went from a CSS-animated circle to a living, breathing canvas blob that reacts to actual audio amplitude.
+
+`VoiceOrb.jsx` renders 8 control points arranged in a circle, displaced by pseudo-noise (overlapping sine waves at irrational frequency ratios — no external library needed), and connected via Catmull-Rom spline interpolation for smooth curves. Real-time amplitude from the mic's `AnalyserNode` (when recording) or the streaming audio's `AnalyserNode` (when the Director speaks) drives the deformation magnitude and noise traversal speed.
+
+The key to making it feel alive: **asymmetric smoothing**. Fast attack (0.25-0.35) makes it responsive to voice onset. Slow decay (0.05-0.1) creates a natural tail-off between words, so the blob doesn't jitter between syllables. Six visual modes blend smoothly via per-frame lerping: idle (gentle violet breathing), recording (red, erratic, high amplitude response), speaking (amber, confident, smooth motion), loading (subtle violet drift), watching (calm pulse during generation), and waiting (amber shimmer during hero photo analysis).
+
+Three layers create depth at minimal GPU cost: an outer glow blob (CSS blur), the main radial-gradient blob (canvas), and an inner specular highlight (canvas). The icon overlay fades out during the `speaking` state — the blob itself becomes the visualization. At 72px with DPR capped at 2, it's 144x144 pixels of canvas fill per frame. Negligible.
+
+### Director Navigation
+
+The Director can now navigate you around the app. Say "take me to my library" or "let's start a new story," and the Director uses a `navigate_app` tool call to route you there. Four destinations: library, explore, new_story, and settings.
+
+The graceful part: before navigating away, the Director Chat session ends cleanly. There's a 1.5-second delay so the Director's farewell audio has time to start playing before the page transition happens.
 
 ![Director Chat](Screenshot/04-director-chat.jpg)
 *Voice brainstorming with the Director, then watching generation unfold*
@@ -506,7 +538,7 @@ The difference between "write an image prompt" and our hybrid construction pipel
 
 ### 2. Use Native API Features Before Building Workarounds
 
-Our Director Chat initially used 3-5 separate Gemini calls per interaction because we didn't know the Live API natively supports transcription, function calling, and context compression. Enabling four config options eliminated every workaround we'd built. Before writing a separate STT service or intent classifier, check if the API you're already using has the feature built in. The platform team usually thought of it first.
+Our Director Chat initially used 3-5 separate Gemini calls per interaction because we didn't know the Live API natively supports transcription, function calling, and context compression. Enabling four config options eliminated every workaround we'd built. The same lesson applied again with audio streaming: we built a collect-encode-send pipeline for Director responses when the Live API already sends audio in chunks — streaming them incrementally to a Web Audio playback queue cut perceived latency from seconds to under 400ms. Before writing a separate STT service or intent classifier, check if the API you're already using has the feature built in. The platform team usually thought of it first.
 
 ### 3. Per-Scene is the Right Granularity
 
@@ -568,6 +600,7 @@ Google's ADK let us compose agents like building blocks. `SequentialAgent` for o
 | Image Gen | Imagen 3 (Vertex AI) | Scene illustrations, book covers |
 | Director Chat | Gemini Live API (`gemini-live-2.5-flash-native-audio`) | Real-time voice brainstorming |
 | Voice | Web Audio API + Gemini Native Audio | Input capture + expressive narration |
+| Audio Streaming | Web Audio API (AudioBufferSource) | Gapless PCM chunk playback for Director voice |
 | Auth | Firebase Authentication | Google Sign-In |
 | Database | Cloud Firestore | Story persistence, user libraries, social features |
 | Storage | Google Cloud Storage | Scene images, cover images |
@@ -582,7 +615,7 @@ Even with our hybrid prompt architecture (verbatim character sheets, anti-drift 
 
 - **Imagen Visual Anchor API** (`CONTROL_TYPE_FACE_MESH`): use the first scene's character render as a reference image for subsequent scenes. Deferred due to pose constraints in dynamic story scenes, but the most promising path to true character consistency. Dynamic weight adjustment and cross-scene visual DNA feedback are also on the table.
 - **Cinematic Video Scenes (Veo 2)**: short video clips for high-tension climax scenes, triggered when the Director's `tension_level >= 8`. Auto-play on page flip with a golden "Cinematic" border treatment.
-- **Floating Director Orb for Mobile**: move the voice orb out of the sidebar into a floating FAB with bottom-sheet transcript drawer. Tap to expand, voice input for natural mobile interaction.
+- **Mobile Director Experience**: the voice-reactive orb (canvas blob with amplitude-driven deformation, barge-in, streaming audio) is built. The next step is adapting it for mobile: a floating FAB placement with bottom-sheet transcript drawer, touch-optimized hit targets, and power-efficient animation on lower-end devices.
 - **Multi-Voice Narration**: character-specific voices so dialogue scenes sound like distinct people, mapped from personality traits in the Director's character analysis. The current single-narrator approach works for prose but falls flat in dialogue-heavy scenes.
 
 ---

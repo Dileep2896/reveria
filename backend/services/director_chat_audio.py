@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Callable, Awaitable
 
 from utils.audio_helpers import audio_data_url
 
@@ -76,4 +77,68 @@ async def collect_response(session, timeout: float = 30.0) -> dict:
         "input_transcript": " ".join(input_transcript_parts).strip(),
         "output_transcript": " ".join(output_transcript_parts).strip(),
         "tool_calls": tool_calls,
+    }
+
+
+async def collect_response_streaming(
+    session,
+    on_audio_chunk: Callable[[bytes], Awaitable[None]],
+    timeout: float = 30.0,
+) -> dict:
+    """Like collect_response but streams audio chunks via callback as they arrive.
+
+    Calls on_audio_chunk(pcm_bytes) for each audio chunk from Gemini,
+    allowing the frontend to start playback immediately.
+
+    Returns dict with keys:
+        input_transcript: str
+        output_transcript: str
+        tool_calls: list[dict]
+        chunk_count: int
+    """
+    input_transcript_parts: list[str] = []
+    output_transcript_parts: list[str] = []
+    tool_calls: list[dict] = []
+    chunk_count = 0
+
+    async def _receive():
+        nonlocal chunk_count
+        async for response in session.receive():
+            server = response.server_content
+            if server:
+                if server.model_turn:
+                    for part in server.model_turn.parts:
+                        if part.inline_data and isinstance(part.inline_data.data, bytes):
+                            chunk_count += 1
+                            try:
+                                await on_audio_chunk(part.inline_data.data)
+                            except Exception as e:
+                                logger.warning("on_audio_chunk failed: %s", e)
+                if server.input_transcription and server.input_transcription.text:
+                    input_transcript_parts.append(server.input_transcription.text)
+                if server.output_transcription and server.output_transcription.text:
+                    output_transcript_parts.append(server.output_transcription.text)
+                if server.turn_complete:
+                    break
+
+            # --- Tool call ---
+            if response.tool_call:
+                for fc in response.tool_call.function_calls:
+                    tool_calls.append({
+                        "name": fc.name,
+                        "args": dict(fc.args) if fc.args else {},
+                        "id": fc.id,
+                    })
+                break
+
+    try:
+        await asyncio.wait_for(_receive(), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.warning("collect_response_streaming timed out after %.0fs", timeout)
+
+    return {
+        "input_transcript": " ".join(input_transcript_parts).strip(),
+        "output_transcript": " ".join(output_transcript_parts).strip(),
+        "tool_calls": tool_calls,
+        "chunk_count": chunk_count,
     }

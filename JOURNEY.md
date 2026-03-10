@@ -1,6 +1,6 @@
-# The Reveria Journey: From Zero to 62 Sessions
+# The Reveria Journey: From Zero to 64 Sessions
 
-*How a hackathon project evolved through 62 coding sessions, 3 major rewrites, and countless "why isn't this working" moments.*
+*How a hackathon project evolved through 64 coding sessions, 3 major rewrites, and countless "why isn't this working" moments.*
 
 ---
 
@@ -164,13 +164,33 @@ The Director Panel started with 9 analysis cards. By Session 62, it was clear th
 
 The backend fix that came with this: accumulated scenes now persist across batches so the Director's post-batch analysis covers the entire story, not just the latest batch. The frontend director data merge logic, which was already fragile, was replaced by simply trusting that the latest analysis is complete.
 
+### Streaming Audio & Barge-In (Session 63)
+
+Three improvements to Director Chat latency and conversational feel:
+
+**Streaming PCM audio.** Instead of collecting the Director's full audio response, encoding it as WAV, and sending it as a data URL, the backend now streams raw PCM chunks incrementally via WebSocket. A `useStreamingAudio` hook on the frontend feeds each base64-encoded chunk into Web Audio API `AudioBufferSource` nodes scheduled for gapless playback. The Director's voice starts within 200-400ms of the request instead of 1-2 seconds. The legacy `Audio(dataUrl)` path stays for session greetings and tool call acknowledgments.
+
+**Barge-in.** The microphone stays hot during Director speech (`echoCancellation: true`). VAD detects user speech onset via a new `onVoiceStart` callback, which immediately kills all scheduled Web Audio sources and pauses any legacy Audio element. The user's speech is captured and sent normally. Manual barge-in (tapping the orb during speaking state) also works.
+
+**Director navigation.** A `navigate_app` tool lets the Director route users to library, explore, new_story, or settings. The chat session ends gracefully with a 1.5-second delay for farewell audio before navigation.
+
+VAD silence threshold also dropped from 1200ms to 800ms for snappier auto-send.
+
+### Voice-Reactive Canvas Orb (Session 64)
+
+The CSS-animated voice orb was replaced with a canvas-based organic blob that reacts to real-time audio amplitude. `VoiceOrb.jsx` uses 8 control points with Catmull-Rom spline interpolation, displaced by pseudo-noise (overlapping sine waves at irrational frequency ratios). Amplitude from the mic's `AnalyserNode` (recording) or streaming audio's `AnalyserNode` (Director speaking) drives blob deformation and noise speed.
+
+Asymmetric smoothing (fast attack 0.25-0.35, slow decay 0.05-0.1) makes it feel alive — responsive to voice onset but with organic tail-off between words. Six visual modes blend smoothly via per-frame lerping. Three-layer composition: outer glow blob (CSS blur), main radial-gradient canvas blob, inner specular highlight. The icon overlay fades during speaking — the blob becomes the visualization.
+
+No external dependencies. 72px canvas, DPR capped at 2, `requestAnimationFrame` only. Performance is negligible.
+
 ---
 
 ## The Numbers
 
 | Metric | Count |
 |--------|-------|
-| Coding sessions | 62 |
+| Coding sessions | 64 |
 | Lines of code (approx.) | ~60,000 |
 | Story templates | 12 |
 | Art styles | 32+ |
@@ -208,6 +228,7 @@ The backend fix that came with this: accumulated scenes now persist across batch
 | Day 6 | Feb 23 | 50-53 | Subscription tiers, feature cleanup, author attribution |
 | Day 7 | Feb 24 | 54-58 | Per-scene streaming, Director Chat, native API rewrite |
 | Day 8+ | Feb 25+ | 59-62 | Interaction audit, visual narratives, cinematic opening, panel redesign |
+| Day 9 | Mar 10 | 63-64 | Streaming audio, barge-in, navigation tools, voice-reactive orb |
 
 ---
 

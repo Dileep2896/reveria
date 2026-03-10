@@ -228,17 +228,31 @@ export default function LibraryPage({ user, onOpenBook, onNewStory, bookMeta, ac
       <div className="library-container" ref={containerRef}>
         <LibraryHeader compact={false} {...headerProps} />
         <div className="library-empty">
-          {/* Stacked books visual */}
+          {/* Floating books visual */}
           <div className="library-empty-visual">
-            <div className="library-empty-book library-empty-book-1" />
-            <div className="library-empty-book library-empty-book-2" />
-            <div className="library-empty-book library-empty-book-3" />
+            <div className="library-empty-book library-empty-book-1">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+            </div>
+            <div className="library-empty-book library-empty-book-2">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            </div>
+            <div className="library-empty-book library-empty-book-3">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+            </div>
           </div>
 
-          <h3>Your library is empty</h3>
+          <h3>Your bookshelf is waiting</h3>
           <p>
-            Stories you save will appear here. Create a story with 2+ scenes and
-            hit Save to start building your collection.
+            Stories you create will live here. Start writing and save
+            your first story to begin your collection.
           </p>
 
           <button className="library-empty-cta" onClick={onNewStory}>

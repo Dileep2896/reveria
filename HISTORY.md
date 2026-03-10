@@ -960,6 +960,46 @@ Comprehensive audit of all major user flows (generation, Director Chat, save/lib
 
 - Files modified: `frontend/src/components/DirectorPanel.jsx`, `frontend/src/components/director/SceneInsightPair.jsx` (new), `frontend/src/components/director/StoryHealthCard.jsx` (new), `frontend/src/components/director/StoryDetails.jsx` (new), `backend/services/generation_flow.py`, `backend/handlers/ws_handler.py`, `README.md`, `ARCHITECTURE.md`
 
+**Session 63: Streaming Audio, Barge-In & Director Navigation**
+
+- Implemented streaming PCM audio for Director Chat responses:
+  - Backend: `collect_response_streaming()` in `director_chat_audio.py` with `on_audio_chunk` callback
+  - Backend: `send_audio_streaming()` / `send_text_streaming()` methods in `DirectorChatSession`
+  - Backend: `_make_chunk_sender()` factory in `director_chat_handlers.py` sends `director_chat_audio_chunk` WS messages
+  - Frontend: `useStreamingAudio.js` — Web Audio API gapless PCM playback with `feedChunk()`, `stop()`, `reset()`
+  - Frontend: `wsHandlers.js` — new `director_chat_audio_chunk` and `director_chat_audio_done` message handlers
+  - Frontend: `useWebSocket.js` — `audioChunkRef`/`audioDoneRef` refs + setter callbacks
+- Implemented barge-in support:
+  - `useVoiceCapture.js`: Added `onVoiceStart` callback firing on first speech detection
+  - `DirectorChat.jsx`: `handleVoiceStart` stops streaming audio + pauses legacy Audio
+  - Hot mic: recording starts immediately when Director audio plays (`echoCancellation: true`)
+  - Orb visual priority: `speaking` > `recording` (user sees "Director speaking" during hot mic)
+- Added Director navigation tools:
+  - `director_chat_prompts.py`: `NAVIGATE_APP_TOOL` with 4 destinations (library, explore, new_story, settings)
+  - `ALL_TOOLS = [GENERATE_STORY_TOOL, NAVIGATE_APP_TOOL]`
+  - `director_chat_handlers.py`: `_handle_tool_call()` shared handler for navigate_app + generate_story
+  - Frontend: `director_chat_navigate` WS message handler, graceful session end with 1.5s farewell delay
+- Reduced VAD silence duration from 1200ms to 800ms
+- Wired `setAudioChunkHandler`/`setAudioDoneHandler` through App.jsx → DirectorPanel → DirectorChat
+
+**Session 64: Voice-Reactive Canvas Orb**
+
+- Created `VoiceOrb.jsx` — canvas-based organic blob animation replacing CSS-only orb:
+  - 8-point blob with Catmull-Rom spline interpolation
+  - Pseudo-noise via overlapping sine waves at irrational frequency ratios (no external lib)
+  - 6 visual modes: idle, recording, speaking, loading, watching, waiting
+  - Asymmetric smoothing (fast attack, slow decay) for organic feel
+  - 3-layer composition: outer glow blob, main gradient blob, inner specular highlight
+  - Mode transitions lerped at 8% per frame
+- Added `getAmplitude()` to `useStreamingAudio.js` via `AnalyserNode` in audio chain
+- Added `getAmplitude()` to `useVoiceCapture.js` exposing existing analyser data
+- Updated `DirectorChat.jsx`:
+  - Unified `getOrbAmplitude()` selecting mic/streaming/synthetic amplitude source
+  - Integrated VoiceOrb component with mode and amplitude props
+  - Icon overlay fades during speaking state
+- Replaced ~200 lines of CSS orb styles with ~40 lines for canvas button + icon overlay
+- Removed 7 unused CSS keyframe animations
+
 ### What Needs to Be Built
 
 - **Demo Video** - 4-minute walkthrough for submission

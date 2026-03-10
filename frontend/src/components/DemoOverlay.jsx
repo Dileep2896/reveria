@@ -275,16 +275,16 @@ function DirectorSlide({ chatActive, chatLoading }) {
     <>
       <h3 className="demo-slide-title">Gemini Live API · Bidirectional Audio</h3>
       <p className="demo-slide-sub">
-        Persistent voice session with <strong>native tool calling</strong> where the Director decides when to generate
+        Persistent voice session with <strong>native tool calling</strong>, <strong>streaming PCM audio</strong>, and <strong>barge-in</strong> support
       </p>
 
       <div className="demo-flow-h">
-        <Node label="Your Voice" sub="Browser MediaRecorder" badge="MIC" active={live} accent="green" />
+        <Node label="Your Voice" sub="VAD auto-send · barge-in" badge="MIC" active={live} accent="green" />
         <FlowArrowRight bidir />
         <Node
           label="Gemini Live Session"
           sub="gemini-live-2.5-flash-native-audio"
-          detail="Bidirectional audio · sliding window compression"
+          detail="Streaming PCM chunks · sliding window compression"
           badge="LIVE API"
           active={live}
           pulse={chatLoading}
@@ -293,9 +293,10 @@ function DirectorSlide({ chatActive, chatLoading }) {
         />
         <FlowArrowRight />
         <div className="demo-flow-v-mini">
-          <Node label="Native Tool Call" sub="GENERATE_STORY_TOOL" badge="TOOL" active={live} accent="orange" />
-          <FlowArrowDown />
-          <Node label="Full ADK Pipeline" sub="Triggers story generation" active={live} accent="blue" />
+          <div className="demo-flow-parallel-mini">
+            <Node label="GENERATE_STORY" sub="Triggers ADK pipeline" badge="TOOL" active={live} accent="orange" />
+            <Node label="NAVIGATE_APP" sub="Opens pages by voice" badge="TOOL" active={live} accent="blue" />
+          </div>
         </div>
       </div>
 
@@ -303,28 +304,30 @@ function DirectorSlide({ chatActive, chatLoading }) {
         <div className="demo-live-col">
           <h4 className="demo-live-heading">Session Capabilities</h4>
           <Feature text="Persistent bidirectional audio (not request/response)" />
-          <Feature text="Native input_audio_transcription + output_audio_transcription" />
-          <Feature text="Native tool calling: model decides when brainstorming is done" />
+          <Feature text="Streaming PCM audio chunks via WebSocket" />
+          <Feature text="Native tool calling: model decides when to generate or navigate" />
+          <Feature text="Barge-in: user voice interrupts Director playback instantly" />
           <Feature text="ContextWindowCompressionConfig with SlidingWindow" />
-          <Feature text="asyncio.Lock() serializes all session access" />
         </div>
         <div className="demo-live-col">
-          <h4 className="demo-live-heading">Context Awareness</h4>
-          <Feature text="Reads full story text, characters, themes, art style" />
+          <h4 className="demo-live-heading">Real-time Features</h4>
+          <Feature text="Voice-reactive canvas orb (Web Audio AnalyserNode)" />
+          <Feature text="Web Audio API gapless PCM playback scheduling" />
           <Feature text="proactive_comment() on each scene during generation" />
-          <Feature text="generation_wrapup() summary after pipeline completes" />
           <Feature text="director_suggestion injected into Narrator's next prompt" />
-          <Feature text="Tool call screening via _screen_input() safety check" />
+          <Feature text="NAVIGATE_APP bypasses screening (no user content)" />
         </div>
       </div>
 
       <div className="demo-tech-pills">
         <Pill label="Gemini Live API" hl />
-        <Pill label="Native Audio" hl />
+        <Pill label="Streaming PCM" hl />
         <Pill label="Native Tool Calling" hl />
+        <Pill label="Barge-in" hl />
+        <Pill label="Web Audio API" />
+        <Pill label="Voice-Reactive Orb" />
+        <Pill label="Canvas Animation" />
         <Pill label="SlidingWindow" />
-        <Pill label="FunctionResponse ack" />
-        <Pill label="Session lock" />
       </div>
     </>
   );
@@ -548,6 +551,8 @@ const EVOLUTION_TRACKS = [
       { label: 'Director-as-Driver', desc: 'Suggestion field injected into Narrator next prompt' },
       { label: 'Gemini Live API', desc: 'Bidirectional voice, native tool calling, zero extra API calls' },
       { label: 'VAD auto-send', desc: 'Web Audio silence detection for natural conversation flow' },
+      { label: 'Streaming PCM + Barge-in', desc: 'Gapless audio playback, voice interrupts Director mid-sentence' },
+      { label: 'Voice-Reactive Orb', desc: 'Canvas blob reacts to real-time audio amplitude from mic & speaker' },
     ],
   },
   {
@@ -574,7 +579,7 @@ function EvolutionSlide() {
     <>
       <h3 className="demo-slide-title">Iterative Evolution</h3>
       <p className="demo-slide-sub">
-        How we <strong>brainstormed and improved</strong> each system through 60+ development sessions
+        How we <strong>brainstormed and improved</strong> each system through 64+ development sessions
       </p>
 
       <div className="demo-evo-grid">
@@ -613,7 +618,7 @@ function EvolutionSlide() {
       </div>
 
       <div className="demo-tech-pills">
-        <Pill label="60+ Sessions" hl />
+        <Pill label="64+ Sessions" hl />
         <Pill label="Character DNA" />
         <Pill label="Visual DNA" hl />
         <Pill label="Anchor Portraits" />

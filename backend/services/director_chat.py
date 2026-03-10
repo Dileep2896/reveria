@@ -8,7 +8,7 @@ from services.gemini_client import get_client
 
 from services.director_chat_prompts import (
     DIRECTOR_LIVE_MODEL,
-    GENERATE_STORY_TOOL,
+    ALL_TOOLS,
     build_system_prompt as _build_system_prompt,
     VOICE_PREVIEW_LINES,
     REANCHOR_INTERVAL as _REANCHOR_INTERVAL,
@@ -24,6 +24,7 @@ from services.director_chat_security import (
 from services.director_chat_audio import (
     collect_audio as _collect_audio,
     collect_response as _collect_response,
+    collect_response_streaming as _collect_response_streaming,
 )
 
 logger = logging.getLogger("storyforge.director_chat")
@@ -106,7 +107,7 @@ class DirectorChatSession:
             system_instruction=types.Content(
                 parts=[types.Part(text=system_prompt)],
             ),
-            tools=[types.Tool(function_declarations=[GENERATE_STORY_TOOL])],
+            tools=[types.Tool(function_declarations=ALL_TOOLS)],
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
             context_window_compression=types.ContextWindowCompressionConfig(
@@ -148,6 +149,7 @@ class DirectorChatSession:
                     "role": "director",
                     "text": result["output_transcript"],
                 })
+
             logger.info("Director chat session started")
             return result
 
@@ -308,6 +310,132 @@ class DirectorChatSession:
                 logger.error("Director chat send_text failed: %s", e)
                 self._session = None  # Mark session as dead
                 return {**_EMPTY_RESPONSE, "session_dead": True}
+
+    # ── Streaming send (audio chunks streamed to frontend as they arrive) ─
+
+    async def send_audio_streaming(self, audio_bytes: bytes, mime_type: str, on_audio_chunk) -> dict:
+        """Like send_audio but streams audio chunks via on_audio_chunk callback.
+
+        Returns dict with input_transcript, output_transcript, tool_calls, chunk_count.
+        Post-screening still runs after the full response arrives.
+        """
+        if not self._session:
+            return {**_EMPTY_RESPONSE, "chunk_count": 0}
+
+        async with self._session_lock:
+            try:
+                await self._maybe_reanchor()
+
+                content = types.Content(
+                    role="user",
+                    parts=[types.Part(
+                        inline_data=types.Blob(mime_type=mime_type, data=audio_bytes),
+                    )],
+                )
+                await self._session.send_client_content(
+                    turns=content, turn_complete=True
+                )
+                result = await _collect_response_streaming(
+                    self._session, on_audio_chunk, timeout=30.0
+                )
+
+                # Post-screen input transcript
+                safe_in, category = _screen_input(result.get("input_transcript", ""))
+                if not safe_in:
+                    logger.warning("Director streaming audio input flagged [%s]", category)
+                    if result.get("tool_calls"):
+                        for tc in result["tool_calls"]:
+                            try:
+                                await self._reject_tool_call(tc)
+                            except Exception:
+                                pass
+                    return {
+                        "input_transcript": result.get("input_transcript", ""),
+                        "output_transcript": _REDIRECT_TRANSCRIPT,
+                        "tool_calls": [],
+                        "chunk_count": result.get("chunk_count", 0),
+                        "flagged": True,
+                    }
+
+                # Post-screen output transcript
+                if not _check_output(result.get("output_transcript", "")):
+                    if result.get("tool_calls"):
+                        for tc in result["tool_calls"]:
+                            try:
+                                await self._reject_tool_call(tc)
+                            except Exception:
+                                pass
+                    return {
+                        "input_transcript": result.get("input_transcript", ""),
+                        "output_transcript": _REDIRECT_TRANSCRIPT,
+                        "tool_calls": [],
+                        "chunk_count": result.get("chunk_count", 0),
+                        "flagged": True,
+                    }
+
+                # Log transcripts
+                if result.get("input_transcript"):
+                    self.conversation_log.append({"role": "user", "text": result["input_transcript"]})
+                if result.get("output_transcript"):
+                    self.conversation_log.append({"role": "director", "text": result["output_transcript"]})
+                self._trim_log()
+                return result
+
+            except Exception as e:
+                logger.error("Director chat send_audio_streaming failed: %s", e)
+                self._session = None
+                return {**_EMPTY_RESPONSE, "session_dead": True, "chunk_count": 0}
+
+    async def send_text_streaming(self, text: str, on_audio_chunk) -> dict:
+        """Like send_text but streams audio chunks via on_audio_chunk callback."""
+        if not self._session:
+            return {**_EMPTY_RESPONSE, "chunk_count": 0}
+
+        # Pre-screen
+        safe, category = _screen_input(text)
+        if not safe:
+            return {
+                "input_transcript": text,
+                "output_transcript": _REDIRECT_TRANSCRIPT,
+                "tool_calls": [],
+                "chunk_count": 0,
+            }
+
+        async with self._session_lock:
+            try:
+                await self._maybe_reanchor()
+
+                content = types.Content(
+                    role="user",
+                    parts=[types.Part(text=text)],
+                )
+                await self._session.send_client_content(
+                    turns=content, turn_complete=True
+                )
+                self.conversation_log.append({"role": "user", "text": text})
+                result = await _collect_response_streaming(
+                    self._session, on_audio_chunk, timeout=30.0
+                )
+
+                # Post-screen output
+                if not _check_output(result.get("output_transcript", "")):
+                    return {
+                        "input_transcript": text,
+                        "output_transcript": _REDIRECT_TRANSCRIPT,
+                        "tool_calls": [],
+                        "chunk_count": result.get("chunk_count", 0),
+                        "flagged": True,
+                    }
+
+                if result.get("output_transcript"):
+                    self.conversation_log.append({"role": "director", "text": result["output_transcript"]})
+                self._trim_log()
+                return result
+
+            except Exception as e:
+                logger.error("Director chat send_text_streaming failed: %s", e)
+                self._session = None
+                return {**_EMPTY_RESPONSE, "session_dead": True, "chunk_count": 0}
 
     # ── Tool call handling ────────────────────────────────────────────────
 

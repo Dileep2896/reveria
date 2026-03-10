@@ -36,7 +36,7 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Cinematic Book Opening** — When the first prompt is sent, the cover page appears with a faux spine, entrance animation with brightness bloom, then a synchronized flip and slide to the first scene
 - **Portraits and Visual DNA** — Anchor portraits generated before scene images using Imagen. Gemini Vision analyzes each portrait to extract visual DNA (100-150 word natural-language description), which is used for consistent character rendering across all scenes
 - **Hybrid Character Consistency** — Three-stage image pipeline: character sheet extraction, scene composition (Gemini), verbatim character descriptions prepended to prompt. Split DNA separates physical traits from style traits, with outfit descriptions automatically stripped when scene text describes clothing changes
-- **Director Chat** — Voice-based brainstorming with the Director using Gemini Live API (`gemini-live-2.5-flash-native-audio`). Features native tool calling (model decides when to generate), native transcription, auto-send on silence detection (Web Audio API VAD), text input fallback, and 8 configurable voices. After generation, a single combined wrap-up message replaces overlapping audio
+- **Director Chat** — Voice-based brainstorming with the Director using Gemini Live API (`gemini-live-2.5-flash-native-audio`). Features native tool calling (model decides when to generate), native transcription, auto-send on silence detection (Web Audio API VAD), text input fallback, 8 configurable voices, streaming audio for low-latency voice, barge-in (interrupt Director mid-speech), and navigation tools. After generation, a single combined wrap-up message replaces overlapping audio
 - **Director Panel** — A focused sidebar with 4 sections: **Scene Insight Pair** (spread-aware left/right cards with mood, tension bars, and expandable craft notes), **Story Health** (5-dimension quality bars for Pacing, Characters, World, Dialogue, Coherence), **Story Details** (Next Direction, Characters, Visual Style, Themes, Emotional Arc), and **Live Notes** (collapsible director commentary with audio playback). Accumulated scenes persist across batches so analysis always covers the full story
 - **Live Director Commentary** — Real-time per-scene creative notes (mood, tension, craft observations) stream to the Director Panel during generation
 - **Mid-Generation Steering** — Type direction changes while the story generates. Steering is injected between scenes via the narrator's conversation history
@@ -71,11 +71,15 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 - **Pro User Visual Indicators** — Tier-based avatar styling: Pro users get a golden glowing ring + amber "PRO" pill; Standard gets violet ring + pill; Free shows default glass border
 - **Theme-Aware Book Shadows** — Light mode uses softer book depth shadows and page gutter shadows via CSS variables
 - **Settings Dialog** — Centralized settings for theme (light/dark) and Director voice selection
-- **Auto-Send on Silence (VAD)** — Web Audio API `AnalyserNode` detects 1.2s of silence after speech and auto-stops recording, enabling natural conversation flow
+- **Auto-Send on Silence (VAD)** — Web Audio API `AnalyserNode` detects 800ms of silence after speech and auto-stops recording, enabling snappy natural conversation flow
 - **Hero Mode** — Upload a selfie to become the protagonist; Gemini Vision extracts Visual DNA, injected into character sheets for personalized illustrations in trend art styles
 - **Token Expiry Recovery** — Automatic WebSocket reconnection and REST token refresh on auth failure
 - **404 Page** — Themed not-found page with navigation to create or explore stories
 - **Marble Avatar Fallbacks** — Users without profile photos get unique deterministic marble gradient avatars (via `boring-avatars`)
+- **Voice-Reactive Orb** — Canvas-based organic blob animation (`VoiceOrb.jsx`) with 8-point Catmull-Rom spline interpolation and pseudo-noise via overlapping sine waves. Real-time audio amplitude from mic (recording) or streaming audio (Director speaking) drives blob deformation with asymmetric smoothing (fast attack, slow decay). 6 visual modes: idle (violet), recording (red), speaking (amber), loading, watching, waiting. 3-layer composition: outer glow, main gradient, inner specular highlight
+- **Streaming Director Audio** — Low-latency PCM audio streaming for Director voice. Backend streams PCM chunks incrementally via WebSocket (`director_chat_audio_chunk` messages) instead of waiting for the full response. Frontend `useStreamingAudio` hook uses Web Audio API to schedule gapless playback — Director's voice starts playing as soon as the first chunk arrives. Legacy `Audio(dataUrl)` path still used for greetings and tool call acknowledgments
+- **Barge-In** — Hot mic mode keeps the microphone active during Director speech via `echoCancellation: true`. Web Audio VAD detects user speech onset via `onVoiceStart` callback, immediately stopping Director audio playback (both streaming PCM and legacy Audio elements). Manual barge-in also available by tapping the orb during speaking state
+- **Director Navigation** — Director can navigate the user to different pages via `navigate_app` tool (library, explore, new_story, settings). Director Chat session ends gracefully before navigation with a 1.5s delay for farewell audio
 - **CI/CD Pipeline** — GitHub Actions with 4 jobs: backend tests, frontend tests, backend deploy (Cloud Run), frontend deploy (Firebase Hosting). Auto-deploys on merge to `main`
 
 ---
@@ -605,12 +609,15 @@ flowchart LR
 flowchart LR
     subgraph Client["Frontend (Browser)"]
         direction TB
-        Orb["Voice Orb<br/>tap to record"]
-        VAD["Web Audio VAD<br/>AnalyserNode RMS<br/>1.2s silence → auto-stop"]
+        Orb["VoiceOrb<br/>canvas blob animation<br/>6 visual modes"]
+        VAD["Web Audio VAD<br/>AnalyserNode RMS<br/>800ms silence → auto-stop"]
         Recorder["MediaRecorder<br/>webm/opus"]
         TextInput2["Text Input<br/>(fallback)"]
+        StreamPlay["useStreamingAudio<br/>Web Audio API<br/>gapless PCM playback"]
+        BargeIn["Barge-In<br/>echoCancellation: true<br/>onVoiceStart → stop playback"]
         Orb --> VAD
         VAD -->|"auto-stop"| Recorder
+        BargeIn -->|"interrupt"| StreamPlay
     end
 
     subgraph WS["WebSocket Messages"]
@@ -626,14 +633,17 @@ flowchart LR
         direction TB
         Session["Gemini Live Session<br/>gemini-live-2.5-flash-native-audio<br/>+ native tool calling<br/>+ native transcription<br/>+ context compression"]
         Tool["generate_story tool<br/>model decides when ready"]
+        NavTool["navigate_app tool<br/>library, explore,<br/>new_story, settings"]
         Screen["Prompt screening<br/>(injection detection)"]
     end
 
     subgraph Response["Response Flow"]
         direction TB
-        PCM["PCM Audio Chunks"] --> WAV["_pcm_to_wav()"]
+        PCM["PCM Audio Chunks"] --> Stream["Streaming Path<br/>director_chat_audio_chunk<br/>incremental PCM via WS"]
+        Stream --> StreamPlay2["useStreamingAudio<br/>Web Audio API<br/>gapless scheduling"]
+        PCM --> WAV["Legacy Path<br/>_pcm_to_wav()"]
         WAV --> DataURL["Base64 WAV Data URL"]
-        DataURL --> Playback["Browser Audio Playback"]
+        DataURL --> Playback["Browser Audio()<br/>(greetings, tool acks)"]
     end
 
     Recorder -->|"base64"| Audio
@@ -644,7 +654,9 @@ flowchart LR
     Text --> Session
     Session --> PCM
     Session -->|"tool call"| Tool
+    Session -->|"tool call"| NavTool
     Tool -->|"FunctionResponse"| Session
+    NavTool -->|"FunctionResponse"| Session
     Suggest --> Session
 
     style Client fill:#1a1a2e,stroke:#b48cff,color:#e2e8f0
@@ -653,7 +665,7 @@ flowchart LR
     style Response fill:#0f172a,stroke:#10b981,color:#e2e8f0
 ```
 
-**During generation**, the Director Chat session stays active. `proactive_comment()` sends per-scene reactions through the chat thread (instead of standalone `live_commentary()`). After generation completes, `generation_wrapup()` sends a single combined wrap-up message through the chat, avoiding overlapping audio.
+**During generation**, the Director Chat session stays active. `proactive_comment()` sends per-scene reactions through the chat thread (instead of standalone `live_commentary()`). After generation completes, `generation_wrapup()` sends a single combined wrap-up message through the chat, avoiding overlapping audio. Director voice responses stream as incremental PCM chunks via `director_chat_audio_chunk` WebSocket messages for low-latency playback — the user hears the Director's voice as soon as the first chunk arrives. Barge-in is supported: the microphone stays hot during Director speech (`echoCancellation: true`), and the VAD's `onVoiceStart` callback immediately stops all Director audio playback so the user can interrupt naturally. The Director can also navigate users to different pages (library, explore, new story, settings) via the `navigate_app` tool.
 
 ---
 
@@ -690,6 +702,7 @@ The output *weaves* modalities together, not just appends them sequentially:
 | Image Gen | Imagen 3 (Vertex AI) | Scene illustrations, book covers, character portraits |
 | Director Chat | Gemini Live API (`gemini-live-2.5-flash-native-audio`) | Real-time voice brainstorming with native tool calling and transcription |
 | Voice Output | Gemini Native Audio (Live API) | Expressive, mood-adaptive story narration |
+| Audio Streaming | Web Audio API (AudioContext) | Low-latency gapless PCM playback for Director voice streaming |
 | Vision | Gemini Vision | Visual DNA extraction from portraits, text overlay placement |
 | Database | Cloud Firestore | Story persistence, user libraries, likes, ratings, comments |
 | Object Storage | Google Cloud Storage | Scene images, cover images, portrait images |
@@ -727,6 +740,7 @@ storyforge/
 │   │   │   ├── PortraitGallery.jsx    # Horizontal scroll character portraits
 │   │   │   ├── SplashScreen.jsx       # Loading splash with branded animation
 │   │   │   ├── AuthScreen.jsx         # Sign-in/sign-up with Google + email/password
+│   │   │   ├── VoiceOrb.jsx            # Canvas voice-reactive blob animation (6 modes)
 │   │   │   ├── DirectorChat.jsx       # Voice/text brainstorming with Director (Gemini Live)
 │   │   │   ├── SettingsDialog.jsx     # Theme + Director voice settings dialog
 │   │   │   ├── AdminDashboard.jsx     # Admin panel for user tier management
@@ -762,6 +776,7 @@ storyforge/
 │   │   │   ├── useVoiceCapture.js     # Web Audio API hook
 │   │   │   ├── useAuth.js             # Firebase Auth hook (Google + email/password)
 │   │   │   ├── useUsage.js            # Usage tracking hook (generations, regens, exports)
+│   │   │   ├── useStreamingAudio.js   # Web Audio API streaming playback for PCM chunks
 │   │   │   └── useAdminUsers.js       # Admin user management hook
 │   │   ├── utils/
 │   │   │   └── audioPlayer.js         # Queue and play TTS audio chunks
@@ -794,6 +809,7 @@ storyforge/
 │   ├── services/
 │   │   ├── gemini_client.py           # Gemini API wrapper (GenAI SDK)
 │   │   ├── director_chat.py           # Director Chat session (Gemini Live API)
+│   │   ├── director_chat_audio.py     # Audio collection and streaming for Director Chat
 │   │   ├── director_chat_prompts.py   # Model config + tool declarations
 │   │   ├── director_chat_security.py  # Prompt injection detection
 │   │   ├── imagen_client.py           # Imagen 3 via Vertex AI (per-user circuit breaker)

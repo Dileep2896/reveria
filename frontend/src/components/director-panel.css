@@ -291,11 +291,11 @@
   animation: directorLiveIn 0.4s ease-out both;
 }
 
-/* ── Orb container ── */
-.director-voice-orb {
+/* ── Canvas orb button ── */
+.director-voice-orb-btn {
   position: relative;
-  width: 110px;
-  height: 110px;
+  width: 80px;
+  height: 80px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -303,52 +303,31 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.director-voice-orb-btn.waiting {
+  cursor: default;
 }
 
-/* ── Inner circle ── */
-.voice-orb-inner {
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
+/* ── Icon overlay on canvas orb ── */
+.voice-orb-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--glass-bg-strong);
-  border: 1.5px solid var(--glass-border-secondary);
-  color: var(--accent-secondary);
-  position: relative;
-  z-index: 2;
-  transition: transform 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+  color: var(--text-primary);
+  pointer-events: none;
+  transition: color 0.3s ease, opacity 0.3s ease;
 }
-
-/* ── Rings ── */
-.voice-ring {
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid var(--accent-secondary);
+/* Hide icon during speaking (blob IS the visualization) */
+.director-voice-orb-btn.speaking .voice-orb-icon {
   opacity: 0;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  transition: border-color 0.3s ease;
-}
-.voice-ring-1 { width: 80px; height: 80px; }
-.voice-ring-2 { width: 94px; height: 94px; }
-.voice-ring-3 { width: 108px; height: 108px; }
-
-/* ── Glow ── */
-.voice-glow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  z-index: 1;
-  pointer-events: none;
-  transition: box-shadow 0.4s ease;
 }
 
 /* ── Status label ── */
@@ -360,157 +339,6 @@
   transition: color 0.3s ease;
 }
 
-/* ── IDLE STATE ── */
-.director-voice-orb.idle .voice-orb-inner {
-  animation: voiceIdlePulse 3s ease-in-out infinite;
-}
-.director-voice-orb.idle .voice-ring-1 {
-  opacity: 0.12;
-  animation: voiceRingIdle 3s ease-in-out infinite;
-}
-.director-voice-orb.idle .voice-glow {
-  box-shadow: 0 0 30px color-mix(in srgb, var(--accent-secondary) 15%, transparent);
-}
-
-/* ── RECORDING STATE ── */
-.director-voice-orb.recording .voice-orb-inner {
-  border-color: #ef4444;
-  color: #ef4444;
-  transform: scale(1.06);
-  box-shadow: 0 0 24px rgba(239, 68, 68, 0.25);
-}
-.director-voice-orb.recording .voice-ring {
-  border-color: rgba(239, 68, 68, 0.5);
-}
-.director-voice-orb.recording .voice-ring-1 {
-  animation: voiceRingExpand 1.8s ease-out infinite;
-}
-.director-voice-orb.recording .voice-ring-2 {
-  animation: voiceRingExpand 1.8s ease-out 0.5s infinite;
-}
-.director-voice-orb.recording .voice-ring-3 {
-  animation: voiceRingExpand 1.8s ease-out 1s infinite;
-}
-.director-voice-orb.recording .voice-glow {
-  box-shadow: 0 0 45px rgba(239, 68, 68, 0.2);
-  animation: voiceGlowPulse 1s ease-in-out infinite;
-}
-
-/* ── SPEAKING STATE ── */
-.director-voice-orb.speaking .voice-orb-inner {
-  border-color: var(--accent-secondary);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--accent-secondary) 25%, transparent);
-  transform: scale(1.04);
-}
-.director-voice-orb.speaking .voice-ring-1 {
-  opacity: 0.25;
-  animation: voiceRingSpeakPulse 1s ease-in-out infinite;
-}
-.director-voice-orb.speaking .voice-ring-2 {
-  opacity: 0.15;
-  animation: voiceRingSpeakPulse 1s ease-in-out 0.25s infinite;
-}
-.director-voice-orb.speaking .voice-ring-3 {
-  opacity: 0.08;
-  animation: voiceRingSpeakPulse 1s ease-in-out 0.5s infinite;
-}
-.director-voice-orb.speaking .voice-glow {
-  box-shadow: 0 0 55px color-mix(in srgb, var(--accent-secondary) 30%, transparent);
-  animation: voiceGlowPulse 1s ease-in-out infinite;
-}
-
-/* ── LOADING STATE ── */
-.director-voice-orb.loading .voice-orb-inner {
-  opacity: 0.75;
-}
-.director-voice-orb.loading .voice-ring-1 {
-  opacity: 0.2;
-  border-style: dashed;
-  animation: voiceRingSpin 3s linear infinite;
-}
-.director-voice-orb.loading .voice-glow {
-  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-secondary) 12%, transparent);
-}
-
-/* ── Watching state (during generation) ── */
-.director-voice-orb.watching .voice-orb-inner {
-  color: var(--accent-primary);
-}
-.director-voice-orb.watching .voice-ring-1 {
-  opacity: 0.3;
-  border-color: var(--accent-primary);
-  animation: voiceRingSpin 4s linear infinite;
-}
-.director-voice-orb.watching .voice-ring-2 {
-  opacity: 0.15;
-  border-color: var(--accent-primary);
-  animation: voiceRingSpin 6s linear infinite reverse;
-}
-.director-voice-orb.watching .voice-glow {
-  box-shadow: 0 0 24px color-mix(in srgb, var(--accent-primary) 18%, transparent);
-  animation: voiceWatchPulse 2s ease-in-out infinite;
-}
-.voice-watching {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: voiceWatchEye 2.5s ease-in-out infinite;
-}
-@keyframes voiceWatchPulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-@keyframes voiceWatchEye {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50% { transform: scale(1.08); opacity: 1; }
-}
-
-/* ── Waiting (cast upload) state ── */
-.director-voice-orb.waiting {
-  cursor: default;
-}
-.director-voice-orb.waiting .voice-orb-inner {
-  color: var(--accent-secondary);
-  opacity: 0.7;
-}
-.director-voice-orb.waiting .voice-ring-1 {
-  opacity: 0.25;
-  border-color: var(--accent-secondary);
-  animation: voiceRingSpin 5s linear infinite;
-}
-.director-voice-orb.waiting .voice-ring-2 {
-  opacity: 0.12;
-  border-color: var(--accent-secondary);
-  animation: voiceRingSpin 7s linear infinite reverse;
-}
-.director-voice-orb.waiting .voice-glow {
-  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-secondary) 15%, transparent);
-  animation: voiceWaitPulse 3s ease-in-out infinite;
-}
-@keyframes voiceWaitPulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
-}
-
-/* ── Waveform bars ── */
-.voice-wave {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  height: 28px;
-}
-.voice-wave-bar {
-  width: 3.5px;
-  border-radius: 2px;
-  background: var(--accent-secondary);
-  animation: voiceWaveBar 0.5s ease-in-out infinite alternate;
-}
-.voice-wave-bar:nth-child(1) { height: 10px; }
-.voice-wave-bar:nth-child(2) { height: 18px; }
-.voice-wave-bar:nth-child(3) { height: 26px; }
-.voice-wave-bar:nth-child(4) { height: 18px; }
-.voice-wave-bar:nth-child(5) { height: 10px; }
-
 /* ── Loading dots ── */
 .voice-loading {
   display: flex;
@@ -518,8 +346,8 @@
   align-items: center;
 }
 .voice-loading-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--accent-secondary);
   animation: analyzeDot 1.2s ease-in-out infinite;
@@ -671,35 +499,6 @@
 }
 
 /* ── Voice Orb Keyframes ── */
-@keyframes voiceIdlePulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
-}
-@keyframes voiceRingIdle {
-  0%, 100% { opacity: 0.1; transform: translate(-50%, -50%) scale(1); }
-  50% { opacity: 0.22; transform: translate(-50%, -50%) scale(1.03); }
-}
-@keyframes voiceRingExpand {
-  0% { opacity: 0.6; transform: translate(-50%, -50%) scale(0.82); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
-}
-@keyframes voiceRingSpeakPulse {
-  0%, 100% { opacity: 0.12; transform: translate(-50%, -50%) scale(1); }
-  50% { opacity: 0.35; transform: translate(-50%, -50%) scale(1.07); }
-}
-@keyframes voiceGlowPulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-@keyframes voiceRingSpin {
-  0% { transform: translate(-50%, -50%) rotate(0deg); }
-  100% { transform: translate(-50%, -50%) rotate(360deg); }
-}
-@keyframes voiceWaveBar {
-  0% { transform: scaleY(0.3); }
-  100% { transform: scaleY(1); }
-}
-
 /* ── Powered by Gemini ── */
 .powered-by-gemini {
   display: flex;

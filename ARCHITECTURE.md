@@ -269,13 +269,15 @@ The image pipeline separates character definition from scene composition:
 - `DirectorChatSession` class manages Gemini Live session lifecycle
 - **`_session_lock`** (`asyncio.Lock`): Serializes all Live session access — prevents concurrent sends (e.g. two scenes completing close together, or rapid user messages from network jitter)
 - **Typed `LiveConnectConfig`** with native features:
-  - `tools=[Tool(function_declarations=[GENERATE_STORY_TOOL])]` — model decides when to generate
+  - `tools=[Tool(function_declarations=ALL_TOOLS)]` — `ALL_TOOLS = [GENERATE_STORY_TOOL, NAVIGATE_APP_TOOL]`
   - `input_audio_transcription=AudioTranscriptionConfig()` — native user speech transcription
   - `output_audio_transcription=AudioTranscriptionConfig()` — native model speech transcription
   - `context_window_compression=ContextWindowCompressionConfig(sliding_window=SlidingWindow())` — handles long sessions
 - `start(story_context, language, voice_name)`: Opens Live session, sends greeting prompt, returns response dict
 - `send_audio(audio_bytes, mime_type)`: Sends user audio (lock-wrapped), returns `{audio_url, input_transcript, output_transcript, tool_calls}`
 - `send_text(text)`: Sends user text (lock-wrapped), returns same response dict format
+- `send_audio_streaming(audio_bytes, mime_type, on_audio_chunk)`: Streaming variant — calls `on_audio_chunk(pcm_bytes)` for each audio chunk as it arrives (lock-wrapped). Returns `{input_transcript, output_transcript, tool_calls}` (no `audio_url`)
+- `send_text_streaming(text, on_audio_chunk)`: Streaming variant for text input — same `on_audio_chunk` callback pattern (lock-wrapped)
 - `respond_to_tool_call(tool_call, success)`: Sends `FunctionResponse` back so model can acknowledge (lock-wrapped); returns follow-up audio
 - `request_suggestion(story_context)`: Asks the Live session directly for a story prompt (lock-wrapped, no extra API call)
 - `proactive_comment(scene_text, scene_number)`: During generation, sends scene to Live session for in-conversation Director reaction. Lock-wrapped. Strips `tool_calls` from response. Returns response dict.
@@ -294,6 +296,12 @@ The image pipeline separates character definition from scene composition:
 - Returns `{prompt: "vivid 2-3 sentence story prompt"}` in the tool call args
 - System prompt includes explicit tool usage instructions with strict conditions
 - ~60-70% reliability in audio mode; manual "Suggest" button via `request_suggestion()` as fallback
+
+### NAVIGATE_APP_TOOL (Function Declaration)
+- Declared at module level alongside `GENERATE_STORY_TOOL`; both included via `ALL_TOOLS`
+- Allows the Director to navigate the user to different app sections: `library`, `explore`, `new_story`, `settings`
+- Returns `{destination: "library|explore|new_story|settings"}` in the tool call args
+- Navigation tool calls bypass prompt screening (no user-generated content to screen)
 
 ### What Was Eliminated (vs. Previous Architecture)
 | Before | After |
@@ -314,6 +322,10 @@ The image pipeline separates character definition from scene composition:
 - `director_chat_cancel_generate`: Logs cancellation (no flag to reset)
 - `director_chat_end`: Closes session
 - Auto-generate flow: Model calls `generate_story` tool → handler sends `FunctionResponse` → model says "Generating!" → `director_chat_generate` sent to frontend with prompt/art_style/scene_count/language
+- `director_chat_audio_chunk`: `{data: base64_pcm}` — streaming PCM chunk for immediate playback
+- `director_chat_audio_done`: `{output_transcript, flagged}` — signals streaming response complete
+- `director_chat_navigate`: `{destination}` — triggers frontend navigation to `library`/`explore`/`new_story`/`settings`
+- Streaming response flow: chunks sent individually via `director_chat_audio_chunk` → `director_chat_audio_done` signals completion (no `audio_url` for streaming responses)
 
 ### Seamless Director Chat During Generation
 
@@ -353,8 +365,10 @@ Director Chat active → generate_story tool fires → generation starts
 
 ### Frontend: VAD (Voice Activity Detection)
 - `useVoiceCapture.js`: Web Audio API `AnalyserNode` + `getFloatTimeDomainData()` for RMS computation
-- Constants: `SILENCE_THRESHOLD = 0.01`, `SILENCE_DURATION_MS = 1200`, `VAD_POLL_INTERVAL_MS = 100`
-- Detects speech → silence transition; auto-stops `MediaRecorder` after 1.2s of continuous silence post-speech
+- Constants: `SILENCE_THRESHOLD = 0.01`, `SILENCE_DURATION_MS = 800`, `VAD_POLL_INTERVAL_MS = 100`
+- Detects speech → silence transition; auto-stops `MediaRecorder` after 800ms of continuous silence post-speech
+- `onVoiceStart` callback: fires on first speech detection during recording — enables barge-in support
+- `getAmplitude()` exposed from analyser node for voice-reactive visualization (returns current RMS amplitude)
 - Graceful degradation: try/catch around AudioContext — manual stop still works if VAD fails
 
 ### Director Panel UI (Redesigned)
@@ -502,6 +516,50 @@ Removed components: `DirectorCardList`, `DirectorAnalyzing`, `StoryTimeline` (St
 - `director_chat_handlers.py`: Before processing `generate_story` tool call, runs `_screen_input()` on the prompt argument.
 - If flagged: rejects via `respond_to_tool_call(tc, success=False)` — model gets cancellation reason.
 - Applied to both `handle_director_chat_audio` and `handle_director_chat_text`.
+- `navigate_app` tool calls bypass screening entirely — no user-generated prompt content to screen.
+
+### Streaming Director Audio (Low-Latency Voice)
+
+Instead of collecting the full audio response and encoding as a WAV data URL, the backend now streams PCM chunks incrementally:
+
+#### Backend
+- `director_chat_audio.collect_response_streaming(session, on_audio_chunk, timeout)`: Calls `on_audio_chunk(pcm_bytes)` for each audio chunk as it arrives from Gemini
+- `_make_chunk_sender(websocket)`: Factory that creates async callback sending `director_chat_audio_chunk` WS messages (base64-encoded PCM)
+- `send_audio_streaming()` / `send_text_streaming()` in `DirectorChatSession`: Lock-wrapped streaming methods
+- Legacy path (greeting, tool call responses) still uses `audio_url` WAV data URL
+
+#### Frontend
+- `useStreamingAudio.js`: Web Audio API hook — `feedChunk(base64Pcm)` decodes base64 → Int16 → Float32, creates `AudioBuffer`, schedules via `source.start(nextPlayTime)` for gapless playback
+- `AnalyserNode` in audio chain provides `getAmplitude()` for voice-reactive visualization
+- `stop()`: Closes AudioContext to kill all scheduled sources (barge-in)
+- `reset()`: Resets scheduling for new response
+- `playing` state tracks active playback; `onPlaybackStart`/`onPlaybackEnd` callbacks for UI state
+
+#### Coexistence
+- Streaming path: `director_chat_audio_chunk` → `feedChunk()` → Web Audio playback
+- Legacy path: `director_chat_started` / `director_chat_response` → `new Audio(dataUrl)` playback
+- Both paths drive the same `speaking` state in DirectorChat
+
+### Barge-In (Interrupt Director Mid-Speech)
+
+- **Hot mic**: Microphone starts recording immediately when Director audio begins playing (`echoCancellation: true` in `getUserMedia`)
+- **VAD-triggered barge-in**: `onVoiceStart` callback in `useVoiceCapture` fires on first speech detection during Director playback
+- `handleVoiceStart` in `DirectorChat.jsx`: Calls `stopStreaming()` (kills Web Audio scheduled sources) + pauses legacy `Audio` element
+- **Manual barge-in**: Tapping the orb during `speaking` state starts recording; VAD will cut Director audio when user actually speaks
+- Orb visual priority: `speaking` > `recording` (user sees "Director speaking" even when mic is hot)
+
+### Voice-Reactive Orb Animation
+
+- `VoiceOrb.jsx`: Canvas-based organic blob replacing CSS-only orb
+- 8 control points with Catmull-Rom spline interpolation for smooth curves
+- Pseudo-noise via overlapping sine waves at irrational frequency ratios (PHI, sqrt(3), sqrt(5)) — no external library
+- Real-time `getAmplitude()` from mic analyser (recording) or streaming audio analyser (Director speaking)
+- Asymmetric smoothing: fast attack (0.25-0.35), slow decay (0.05-0.1) — responsive onset, organic tail-off
+- 6 visual modes: idle (violet breathing), recording (red, erratic), speaking (amber, smooth), loading (violet drift), watching (calm violet), waiting (amber pulse)
+- 3-layer composition: outer glow blob (CSS blur), main radial-gradient blob (canvas), inner specular highlight (canvas)
+- Mode transitions lerped at 8% per frame for smooth color/shape blending
+- Icon overlay fades out during `speaking` state — blob IS the visualization
+- DPR capped at 2, refs for mutable values, `requestAnimationFrame` only
 
 ## Future Work
 
