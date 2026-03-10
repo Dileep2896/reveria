@@ -129,21 +129,14 @@ export default function DirectorChat({
     }
   }, [messages]);
 
-  // Auto-resume recording after Director finishes speaking (fallback if mic wasn't already hot)
+  // Track speaking transitions for orb state (no auto-resume — tap to speak)
   useEffect(() => {
     if (speaking) {
       prevSpeakingRef.current = true;
     } else if (prevSpeakingRef.current) {
       prevSpeakingRef.current = false;
-      // Don't auto-resume during generation or cast photo upload flow
-      if (generating || castAnalyzing) return;
-      // Director just finished — if not already recording, start after brief pause
-      const timer = setTimeout(() => {
-        if (mountedRef.current && !recording) startRecording();
-      }, 600);
-      return () => clearTimeout(timer);
     }
-  }, [speaking, recording, startRecording, generating, castAnalyzing]);
+  }, [speaking]);
 
   // Abort recording (discard audio) when cast photo upload starts
   // Note: Director speaking no longer aborts — barge-in cuts Director audio instead
@@ -151,33 +144,6 @@ export default function DirectorChat({
     if (castAnalyzing && recording) abortRecording();
   }, [castAnalyzing, recording, abortRecording]);
 
-  // Auto-resume when generation ends
-  const prevGenerating = useRef(false);
-  useEffect(() => {
-    if (prevGenerating.current && !generating && !speaking) {
-      // Generation just finished — auto-resume after brief pause
-      const timer = setTimeout(() => {
-        if (mountedRef.current && !speaking) startRecording();
-      }, 800);
-      prevGenerating.current = false;
-      return () => clearTimeout(timer);
-    }
-    prevGenerating.current = generating;
-  }, [generating, speaking, startRecording]);
-
-  // Auto-resume when cast upload flow ends
-  const prevCastAnalyzing = useRef(false);
-  useEffect(() => {
-    if (prevCastAnalyzing.current && !castAnalyzing && !speaking && !generating) {
-      // Cast flow just finished — auto-resume after brief pause
-      const timer = setTimeout(() => {
-        if (mountedRef.current && !speaking) startRecording();
-      }, 800);
-      prevCastAnalyzing.current = false;
-      return () => clearTimeout(timer);
-    }
-    prevCastAnalyzing.current = castAnalyzing;
-  }, [castAnalyzing, speaking, generating, startRecording]);
 
   // Cleanup on unmount
   useEffect(() => {
