@@ -1,30 +1,65 @@
 flowchart LR
-    subgraph Client["Browser"]
+    subgraph Client["Frontend (Browser)"]
         direction TB
-        Orb["Voice Orb"] --> VAD["Web Audio VAD<br/>AnalyserNode"]
-        VAD -->|"1.2s silence"| Stop["Auto-stop<br/>MediaRecorder"]
-        Stop --> B64["Base64 audio"]
+        Orb["VoiceOrb<br/>canvas blob animation<br/>6 visual modes"]
+        Worklet["AudioWorklet<br/>off-main-thread PCM capture<br/>16kHz mono Int16"]
+        Streaming["Continuous PCM Streaming<br/>100ms chunk interval<br/>Float32 → Int16 → base64<br/>NO client-side VAD"]
+        ServerVAD["Server-Side VAD<br/>Gemini detects speech boundaries<br/>startSensitivity: HIGH<br/>endSensitivity: LOW"]
+        TextInput["Text Input<br/>(fallback)"]
+        StreamPlay["useStreamingAudio<br/>Web Audio API<br/>gapless PCM playback"]
+        MuteStop["Mute-to-Stop<br/>Tap orb to halt Director<br/>stopStreaming() + abort mic"]
+        IdleNudge["Idle Re-Engagement<br/>20s no interaction → nudge<br/>2 nudges max → idle stop"]
+        Orb --> Worklet
+        Worklet -->|"PCM chunks"| Streaming
+        Streaming -->|"Gemini handles VAD"| ServerVAD
+        ServerVAD -->|"response arrives"| StreamPlay
+        Orb -->|"tap while speaking"| MuteStop
+        MuteStop -->|"kill playback"| StreamPlay
     end
 
-    subgraph WS["WebSocket"]
+    subgraph WS["WebSocket Messages"]
         direction TB
-        M1["director_chat_start<br/>{context, lang, voice}"]
-        M2["director_chat_audio<br/>{base64, mime}"]
-        M3["director_chat_text"]
-        M4["director_chat_suggest"]
+        Start["director_chat_start<br/>{story_context, language,<br/>voice_name, template}"]
+        StreamStart["director_chat_audio_stream_start<br/>Begin realtime streaming"]
+        Chunk["director_chat_audio_chunk<br/>{data: base64_pcm}<br/>continuous ~10/sec"]
+        StreamEnd["director_chat_audio_stream_end<br/>User stopped talking"]
+        Text["director_chat_text<br/>{content}"]
+        Suggest["director_chat_suggest<br/>{story_context}"]
+        End["director_chat_end"]
     end
 
-    subgraph Backend["DirectorChatSession"]
+    subgraph Backend["Backend — DirectorChatSession"]
         direction TB
-        Live["Gemini Live Session<br/>tools + transcription<br/>+ context compression"]
-        Tool["generate_story tool call<br/>model decides when ready"]
+        Session["Gemini Live Session<br/>gemini-live-2.5-flash-native-audio<br/>+ native tool calling<br/>+ native transcription<br/>+ context compression<br/>+ server-side VAD"]
+        Realtime["send_realtime_input()<br/>Streams PCM to Gemini<br/>asyncio.Queue → sender task<br/>concurrent with response collector"]
+        Tool["generate_story tool<br/>model decides when ready"]
+        Screen["5-Layer Security<br/>Regex pre-screen (26 patterns)<br/>Output post-screen<br/>Identity anchoring<br/>Re-anchor every 5 msgs<br/>Flagged audio kill"]
     end
 
-    B64 --> M2 --> Live
-    Live -->|"audio + transcripts<br/>+ tool calls"| Client
-    Live -->|"tool call"| Tool
-    Tool -->|"FunctionResponse"| Live
+    subgraph Response["Response Flow"]
+        direction TB
+        PCM["PCM Audio Chunks"] --> Stream["Streaming Path<br/>director_chat_audio_chunk<br/>incremental PCM via WS"]
+        Stream --> StreamPlay2["useStreamingAudio<br/>Web Audio API<br/>gapless scheduling"]
+        PCM --> WAV["Legacy Path<br/>_pcm_to_wav()"]
+        WAV --> DataURL["Base64 WAV Data URL"]
+        DataURL --> Playback["Browser Audio()<br/>(greetings, tool acks)"]
+    end
 
-    style Client fill:#1a1a2e,stroke:#7c3aed,color:#e2e8f0
-    style WS fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
+    Streaming -->|"base64 PCM"| Chunk
+    StreamStart --> Realtime
+    Chunk --> Realtime
+    StreamEnd -->|"sentinel"| Realtime
+    Realtime -->|"send_realtime_input"| Session
+    TextInput --> Text
+    Start --> Session
+    Text --> Screen
+    Screen --> Session
+    Session --> PCM
+    Session -->|"tool call"| Tool
+    Tool -->|"FunctionResponse"| Session
+    Suggest --> Session
+
+    style Client fill:#1a1a2e,stroke:#b48cff,color:#e2e8f0
+    style WS fill:#0f172a,stroke:#ffa86c,color:#e2e8f0
     style Backend fill:#1a1a2e,stroke:#3b82f6,color:#e2e8f0
+    style Response fill:#0f172a,stroke:#10b981,color:#e2e8f0

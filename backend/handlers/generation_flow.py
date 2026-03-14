@@ -404,16 +404,31 @@ async def handle_generate(
 
             state.batch_index += 1
 
-            # Director Chat wrap-up — invite continuation (only for Director-triggered generation)
-            if from_director and state.director_chat and current_batch_scenes:
+            # Director Chat wrap-up — stream audio so user hears the Director react
+            # Only run if persistence succeeded, so Director doesn't say "Great story!" when nothing was saved
+            if from_director and state.director_chat and current_batch_scenes and persist_ok:
                 try:
-                    scene_texts = [s.get("text", "") for s in current_batch_scenes]
-                    wrapup = await state.director_chat.generation_wrapup(len(current_batch_scenes), scene_texts=scene_texts)
-                    if wrapup.get("audio_url"):
+                    import base64
+
+                    async def _wrapup_chunk(pcm_bytes: bytes) -> None:
+                        b64 = base64.b64encode(pcm_bytes).decode("ascii")
                         await _safe_send(websocket, {
-                            "type": "director_chat_response",
-                            "audio_url": wrapup["audio_url"],
+                            "type": "director_chat_audio_chunk",
+                            "data": b64,
                         })
+
+                    scene_texts = [s.get("text", "") for s in current_batch_scenes]
+                    result = await state.director_chat.generation_wrapup(
+                        len(current_batch_scenes),
+                        scene_texts=scene_texts,
+                        on_audio_chunk=_wrapup_chunk,
+                    )
+                    # Signal audio stream complete so frontend transitions out of speaking state
+                    await _safe_send(websocket, {
+                        "type": "director_chat_audio_done",
+                        "output_transcript": result.get("output_transcript", ""),
+                        "flagged": False,
+                    })
                 except Exception:
                     pass  # non-critical
 

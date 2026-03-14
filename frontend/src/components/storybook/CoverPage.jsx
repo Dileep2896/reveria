@@ -1,10 +1,10 @@
 import { forwardRef } from 'react';
 import { BookCover } from '../TemplateChooser';
 
-const CoverPage = forwardRef(function CoverPage({ generating, template, bookSize }, ref) {
+const CoverPage = forwardRef(function CoverPage({ generating, template, bookSize, language }, ref) {
   return (
     <div ref={ref} className="book-page-cover-host">
-      <BookCover templateKey={template || 'storybook'} size={bookSize} standalone selected />
+      <BookCover templateKey={template || 'storybook'} size={bookSize} standalone selected language={language} />
       {generating && <div className="book-cover-shimmer" />}
     </div>
   );

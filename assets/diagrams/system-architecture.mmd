@@ -1,7 +1,7 @@
 flowchart TB
-    subgraph Frontend["Frontend - React + Vite"]
+    subgraph Frontend["Frontend — React + Vite"]
         direction TB
-        Auth["Firebase Auth<br/>(Google Sign-In)"]
+        Auth["Firebase Auth<br/>(Google Sign-In + Email)"]
         subgraph Views["Application Views"]
             direction LR
             Canvas["Story Canvas<br/>Interactive Flipbook"]
@@ -12,78 +12,85 @@ flowchart TB
         subgraph Controls["User Input"]
             direction LR
             TextInput["Text Input"]
-            VoiceInput["Voice Capture<br/>(Web Audio API)"]
-            Templates["Template Carousel<br/>12 templates"]
+            VoiceInput["Voice Capture<br/>(AudioWorklet · PCM streaming)"]
+            Templates["Template Carousel<br/>9 templates"]
             ArtStyle["Art Style Picker<br/>32+ styles"]
         end
         subgraph Features["Features"]
             direction LR
             ReadMode["Reading Mode<br/>Karaoke Narration"]
             PDFExport["PDF Export<br/>fpdf2 Backend"]
+            Social["Social Features<br/>Likes, Ratings, Comments"]
         end
         FSClient["Firestore Client SDK<br/>(Library / Explore queries)"]
     end
 
-    subgraph Backend["Backend - Python FastAPI"]
+    subgraph Backend["Backend — Python FastAPI (Cloud Run)"]
         WS["WebSocket Handler<br/>Session Management"]
         AuthMW["Auth Middleware<br/>(Firebase Admin SDK)"]
+        REST["REST API<br/>Social, Usage, Admin,<br/>Stories, PDF Export"]
 
-        subgraph Orchestrator["Story Orchestrator (ADK)"]
+        subgraph Orchestrator["Story Orchestrator (Google ADK)"]
             direction TB
-            Narrator["Narrator Agent<br/>(per-scene streaming loop)"]
+            Narrator["NarratorADKAgent<br/>Gemini Native Interleaved Output<br/>response_modalities: TEXT + IMAGE"]
 
             subgraph PerScene["Per-Scene Tasks (asyncio)"]
                 direction LR
-                Illustrator["Illustrator<br/>Scene image"]
-                TTS["TTS<br/>Scene audio"]
+                Illustrator["Imagen 3 Upgrade<br/>Visual DNA + anchoring"]
+                TTS["Gemini Native Audio<br/>Multi-voice TTS"]
                 DirectorLive["Director Live<br/>Scene commentary"]
             end
 
             subgraph PostBatch["Post-Batch Analysis"]
-                DirectorAgent["Director Agent<br/>Full analysis"]
+                DirectorAgent["Director Agent<br/>Full story analysis"]
             end
 
-            Narrator -->|"each scene ready"| PerScene
+            Narrator -->|"text + image per scene"| PerScene
             PerScene -->|"all scenes done"| PostBatch
+        end
+
+        subgraph DirectorChat["Director Chat — Gemini Live API"]
+            LiveSession["Gemini Live Session<br/>Bidirectional native audio<br/>+ native tool calling<br/>+ native transcription<br/>+ context compression<br/>+ server-side VAD"]
+            Security["5-Layer Security<br/>Input screening<br/>Output monitoring<br/>Identity anchoring<br/>Re-anchoring (every 5 msgs)<br/>Flagged audio kill"]
         end
 
         Persist["Firestore Client<br/>(persist stories)"]
         Storage["GCS Storage Client<br/>(store images)"]
-        PDFService["PDF Service<br/>(fpdf2)"]
     end
 
     subgraph Google["Google AI Services"]
         direction LR
-        Gemini["Gemini 2.0 Flash<br/>(Vertex AI)"]
-        GeminiLive["Gemini Live API<br/>(native audio)"]
-        Imagen["Imagen 3<br/>(Vertex AI)"]
-        CloudTTS["Gemini Native Audio"]
+        Gemini["Gemini 2.5 Flash<br/>Interleaved Output<br/>(TEXT + IMAGE)"]
+        GeminiLive["Gemini Live API<br/>send_realtime_input<br/>(native audio + VAD)"]
+        Imagen["Imagen 3<br/>(Vertex AI<br/>quality upgrade)"]
+        NativeAudio["Gemini Native Audio<br/>(TTS via Live API)"]
     end
 
     subgraph Data["Data Layer"]
         direction LR
-        Firestore[("Cloud Firestore<br/>Stories, Scenes,<br/>Generations, Likes,<br/>Ratings, Comments")]
-        GCS[("Cloud Storage<br/>Scene Images,<br/>Cover Images")]
+        Firestore[("Cloud Firestore<br/>Stories, Scenes,<br/>Generations, Social")]
+        GCS[("Cloud Storage<br/>Scene Images,<br/>Cover Images,<br/>Portraits")]
     end
 
     Auth -.->|ID Token| AuthMW
-    Controls -->|prompt + audio| WS
-    WS -->|text, image, audio,<br/>director analysis| Canvas
-    WS -->|director data| Director
-    FSClient <-->|read/write| Firestore
+    Controls -->|"prompt + PCM audio"| WS
+    WS -->|"text, image, audio,<br/>director analysis"| Canvas
+    WS -->|"director data"| Director
+    FSClient <-->|"read/write"| Firestore
     Library & Explore --- FSClient
 
     WS --> Orchestrator
-    Narrator -->|Gemini API| Gemini
-    Illustrator -->|Gemini → Imagen| Gemini & Imagen
-    DirectorAgent -->|Gemini API| Gemini
-    TTS -->|native audio| CloudTTS
+    Narrator -->|"interleaved generation"| Gemini
+    Illustrator -->|"character-consistent upgrade"| Imagen
+    DirectorAgent -->|"Gemini API"| Gemini
+    TTS -->|"native audio"| NativeAudio
 
-    Persist -->|save| Firestore
-    Storage -->|upload| GCS
+    Persist -->|"save"| Firestore
+    Storage -->|"upload"| GCS
 
-    WS -->|"director chat audio"| DirectorChat["Director Chat<br/>Gemini Live Session"]
-    DirectorChat -->|"Live API"| GeminiLive
+    WS -->|"director chat<br/>PCM stream / text"| LiveSession
+    LiveSession -->|"Live API +<br/>send_realtime_input"| GeminiLive
+    Security -.->|"pre-screen input<br/>post-screen output"| LiveSession
 
     style Frontend fill:#1a1a2e,stroke:#b48cff,color:#e2e8f0
     style Backend fill:#1a1a2e,stroke:#ffa86c,color:#e2e8f0
@@ -92,3 +99,4 @@ flowchart TB
     style Orchestrator fill:#1e1b4b,stroke:#818cf8,color:#e2e8f0
     style PerScene fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
     style PostBatch fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
+    style DirectorChat fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe

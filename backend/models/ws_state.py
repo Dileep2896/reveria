@@ -41,6 +41,10 @@ class WsConnectionState:
     language_current: str = "English"
     template_current: str = "storybook"
 
+    # Streaming audio state (realtime input to Gemini)
+    audio_chunk_queue: asyncio.Queue | None = field(default=None, init=False)
+    audio_stream_task: asyncio.Task | None = field(default=None, init=False)
+
     # Initialized in __post_init__
     orchestrator: Any = field(default=None, init=False)
     shared_state: Any = field(default=None, init=False)

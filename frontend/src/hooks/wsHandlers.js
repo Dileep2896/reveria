@@ -5,6 +5,10 @@
 
 let _msgId = 0;
 
+const WS_DEBUG = true;
+const wsLog = (...args) => WS_DEBUG && console.log('%c[WS-Director]', 'color: #a29bfe; font-weight: bold', ...args);
+const wsWarn = (...args) => WS_DEBUG && console.warn('%c[WS-Director]', 'color: #fd79a8; font-weight: bold', ...args);
+
 /**
  * Detect story language from transcript text via Unicode script ranges.
  * Returns a supported language key or null if Latin/ambiguous.
@@ -41,6 +45,7 @@ export function createWsHandlers({
   setDirectorChatActive, setDirectorChatMessages, setDirectorChatLoading, setDirectorChatPrompt,
   setDirectorAutoGenerate,
   setHeroMode,
+  setGenerationStage,
   onLanguageDetected,
   onNavigate,
   onAudioChunk,
@@ -54,6 +59,7 @@ export function createWsHandlers({
         return true;
 
       case 'book_meta':
+        if (setGenerationStage) setGenerationStage('finishing');
         setBookMeta({ title: data.title, coverUrl: data.cover_image_url });
         addToastRef.current?.('AI title & cover ready!', 'info');
         return true;
@@ -62,7 +68,10 @@ export function createWsHandlers({
         setGenerating(data.content === 'generating');
         if (data.content === 'generating') {
           setError(null);
-          // Don't clear directorLiveNotes — accumulate across generations
+          if (setGenerationStage) setGenerationStage('writing');
+        }
+        if (data.content === 'done' || data.content === 'error') {
+          if (setGenerationStage) setGenerationStage(null);
         }
         // Track hero photo analysis in progress
         if (data.content === 'analyzing_photo' && setHeroMode) {
@@ -71,6 +80,7 @@ export function createWsHandlers({
         return true;
 
       case 'text': {
+        if (setGenerationStage) setGenerationStage('illustrating');
         // Discard stale scene data after reset (story switched)
         if (!storyIdRef.current) return true;
         if (data.is_regen) {
@@ -103,6 +113,7 @@ export function createWsHandlers({
       }
 
       case 'image':
+        if (setGenerationStage) setGenerationStage('narrating');
         if (!storyIdRef.current) return true;
         setScenes((prev) =>
           prev.map((scene) =>
@@ -121,6 +132,7 @@ export function createWsHandlers({
         return true;
 
       case 'audio':
+        if (setGenerationStage) setGenerationStage('saving');
         if (!storyIdRef.current) return true;
         setScenes((prev) =>
           prev.map((scene) =>
@@ -318,11 +330,14 @@ export function createWsHandlers({
 
       case 'error':
         setError(data.content);
+        setUserPrompt(null); // Clear prompt so book cover glow stops on rejection
+        if (setGenerationStage) setGenerationStage(null);
         addToastRef.current?.(data.content, 'error');
         return true;
 
       // ── Director Chat handlers ──
       case 'director_chat_started':
+        wsLog('🎬 Chat STARTED', data.audio_url ? '(with greeting audio)' : '(no audio)', data.transcript ? `"${data.transcript.slice(0, 60)}..."` : '');
         if (setDirectorChatActive) setDirectorChatActive(true);
         if (setDirectorChatLoading) setDirectorChatLoading(false);
         addToastRef.current?.('Director mode entered', 'success');
@@ -332,11 +347,13 @@ export function createWsHandlers({
             role: 'director',
             type: 'audio',
             audioUrl: data.audio_url,
+            transcript: data.transcript || '',
           }]);
         }
         return true;
 
       case 'director_chat_response':
+        wsLog('💬 Chat RESPONSE', data.audio_url ? `(audio: ${data.audio_url.slice(0, 50)}...)` : '(no audio!)');
         if (setDirectorChatLoading) setDirectorChatLoading(false);
         if (setDirectorChatMessages && data.audio_url) {
           setDirectorChatMessages(prev => [...prev, {
@@ -349,6 +366,7 @@ export function createWsHandlers({
         return true;
 
       case 'director_chat_user_transcript':
+        wsLog('📝 User transcript:', data.content?.slice(0, 80));
         if (setDirectorChatMessages) {
           setDirectorChatMessages(prev => {
             // Find the latest user voice message and add transcript
@@ -370,11 +388,17 @@ export function createWsHandlers({
         return true;
 
       case 'director_chat_suggestion':
+        wsLog('💡 Suggestion:', data.content?.slice(0, 80));
         if (setDirectorChatLoading) setDirectorChatLoading(false);
-        if (setDirectorChatPrompt) setDirectorChatPrompt(data.content);
+        if (data.content?.startsWith("Couldn't generate")) {
+          addToastRef.current?.(data.content, 'warning');
+        } else if (setDirectorChatPrompt) {
+          setDirectorChatPrompt(data.content);
+        }
         return true;
 
       case 'director_chat_ended':
+        wsLog('🔴 Chat ENDED');
         if (setDirectorChatActive) setDirectorChatActive(false);
         if (setDirectorChatMessages) setDirectorChatMessages([]);
         if (setDirectorChatLoading) setDirectorChatLoading(false);
@@ -382,6 +406,7 @@ export function createWsHandlers({
         return true;
 
       case 'director_chat_generate':
+        wsLog('⚡ Auto-generate:', data.prompt?.slice(0, 80));
         if (setDirectorAutoGenerate) {
           setDirectorAutoGenerate({
             prompt: data.prompt,
@@ -401,17 +426,22 @@ export function createWsHandlers({
 
       case 'director_chat_audio_done':
         // Stream complete — transcripts and metadata arrive here
+        wsLog('🏁 Audio stream DONE', data.output_transcript ? `transcript: "${data.output_transcript.slice(0, 80)}..."` : '(no transcript)', data.flagged ? '⚠️ FLAGGED' : '', data.noise_rejected ? '🔇 NOISE' : '');
         if (setDirectorChatLoading) setDirectorChatLoading(false);
         if (onAudioDone) onAudioDone(data);
-        return true;
-
-      case 'director_chat_navigate':
-        if (onNavigate && data.destination) {
-          onNavigate(data.destination);
+        // Store Director's transcript as a message for display
+        if (data.output_transcript && setDirectorChatMessages) {
+          setDirectorChatMessages(prev => [...prev, {
+            id: `director-transcript-${++_msgId}`,
+            role: 'director',
+            type: 'transcript',
+            transcript: data.output_transcript,
+          }]);
         }
         return true;
 
       case 'director_chat_error':
+        wsWarn('❌ Chat ERROR:', data.content, data.fatal ? '(FATAL)' : '');
         if (setDirectorChatLoading) setDirectorChatLoading(false);
         addToastRef.current?.(data.content || 'Director chat error', 'error');
         // Only tear down chat on fatal errors or if session never started (no messages)

@@ -10,7 +10,7 @@
 - Created Docker setup with `docker-compose.yml` and Dockerfiles for both services
 - Built WebSocket echo endpoint and verified end-to-end communication
 - Set up GCP project (`storyforge-hackathon`) with billing, budget alerts ($5 cap), and Vertex AI API enabled
-- Created GitHub repo: https://github.com/Dileep2896/storyforge
+- Created GitHub repo: https://github.com/Dileep2896/reveria
 
 **Session 2: UI Design & Gemini Integration**
 
@@ -999,6 +999,33 @@ Comprehensive audit of all major user flows (generation, Director Chat, save/lib
   - Icon overlay fades during speaking state
 - Replaced ~200 lines of CSS orb styles with ~40 lines for canvas button + icon overlay
 - Removed 7 unused CSS keyframe animations
+
+**Session 65: Interleaved Output, i18n, Demo Polish**
+
+- Added Gemini Native Interleaved Output (`response_modalities: ["TEXT", "IMAGE"]`):
+  - `gemini_client.py`: `generate_interleaved()` — text+image in single Gemini call
+  - `narrator.py`: `generate_with_images()`, `_build_interleaved_system_prompt()`, `_parse_interleaved_parts()`
+  - `narrator_agent.py`: `_run_interleaved()` (primary) with `_run_streaming()` fallback
+  - Imagen 3 always primary for character-consistent images; Gemini native image = tier 0 fallback only
+- Removed barge-in (replaced with simple mute):
+  - Tap voice orb during Director speech to stop playback
+  - Removed hot mic, noise debouncing, interruption context, `onVoiceStart` barge-in logic
+  - Simpler, more reliable for demo environments
+- Removed `NAVIGATE_APP_TOOL` and `director_chat_navigate` (navigation tool from Session 63):
+  - `ALL_TOOLS` now contains only `GENERATE_STORY_TOOL`
+  - Frontend navigate handler remains as dead code
+- Added Director Chat text input fallback:
+  - `DirectorChat.jsx`: "Type" button toggles text input field
+  - Text messages go through existing `send_text()` Live session path
+  - Demo safety: if voice recognition fails, presenter can type
+- Added multilingual template cards:
+  - `languages.js`: `TEMPLATE_I18N` map — 9 templates × 7 languages (Hindi, Spanish, French, Japanese, German, Portuguese, Chinese)
+  - `TemplateChooser.jsx`: `language` prop, translated labels/descriptions/taglines/UI strings
+  - `StoryCanvas.jsx`, `CoverPage.jsx`: pass `language` to BookCover
+- Added ControlBar language indicator:
+  - Globe pill shows active language name when non-English selected
+- Added fun generation stage messages in ControlBar
+- Fixed ControlBar placeholder vertical centering (`padding: 4px 0; display: flex; align-items: center`)
 
 ### What Needs to Be Built
 

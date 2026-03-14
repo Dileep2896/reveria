@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { TEMPLATES } from '../data/templates';
 import { CARD_DESIGNS } from '../data/templateCardDesigns';
-import { LANGUAGES } from '../data/languages';
+import { LANGUAGES, TEMPLATE_I18N } from '../data/languages';
 import './templateChooser.css';
 
 /* Template icons — scalable via CSS */
@@ -285,10 +285,16 @@ function LanguagePicker({ language, onChange }) {
  * `standalone` = full page-size idle cover.
  * Otherwise uses the scale factor for carousel/grid display.
  */
-function BookCover({ templateKey, size, selected, onClick, standalone, scale = 0.55, style, flipId }) {
+function BookCover({ templateKey, size, selected, onClick, standalone, scale = 0.55, style, flipId, language }) {
   const t = TEMPLATES.find(x => x.key === templateKey) || TEMPLATES[0];
   const design = CARD_DESIGNS[t.key] || CARD_DESIGNS.storybook;
   const Ornament = ORNAMENT[design.frameStyle] || MinimalOrnament;
+
+  // Translated strings (fallback to English defaults)
+  const i18n = language && TEMPLATE_I18N[language]?.[t.key];
+  const tLabel = i18n?.label || t.label;
+  const tDesc = i18n?.description || t.description;
+  const tTagline = i18n?.tagline || design.tagline;
 
   const coverH = standalone ? size.h : Math.round(size.h * scale);
   const coverW = standalone ? size.w : Math.round(coverH * 0.7);
@@ -314,7 +320,7 @@ function BookCover({ templateKey, size, selected, onClick, standalone, scale = 0
       onClick={onClick}
     >
       <div className="tc-book-spine" style={{ width: spineW }}>
-        <span className="tc-book-spine-title">{t.label}</span>
+        <span className="tc-book-spine-title">{tLabel}</span>
       </div>
       <div className="tc-book-cover" style={{ width: coverW, height: coverH }}>
         <div className="tc-book-pattern" />
@@ -330,11 +336,11 @@ function BookCover({ templateKey, size, selected, onClick, standalone, scale = 0
           <div className="tc-book-emblem" style={{ width: iconSize, height: iconSize }}>
             {ICONS[t.icon] || ICONS.book}
           </div>
-          <h3 className="tc-book-title" style={{ fontSize: titleSize }}>{t.label}</h3>
-          {design.tagline && (
-            <p className="tc-book-tagline" style={{ fontSize: taglineSize }}>{design.tagline}</p>
+          <h3 className="tc-book-title" style={{ fontSize: titleSize }}>{tLabel}</h3>
+          {tTagline && (
+            <p className="tc-book-tagline" style={{ fontSize: taglineSize }}>{tTagline}</p>
           )}
-          <p className="tc-book-desc" style={{ fontSize: descSize }}>{t.description}</p>
+          <p className="tc-book-desc" style={{ fontSize: descSize }}>{tDesc}</p>
           <div className="tc-book-ornament">
             <Ornament color={design.accent} />
           </div>
@@ -348,7 +354,7 @@ function BookCover({ templateKey, size, selected, onClick, standalone, scale = 0
 export { BookCover };
 
 /* ---- 3D Coverflow Carousel ---- */
-function CoverflowCarousel({ items, focusIndex, onFocusChange, onSelect, size }) {
+function CoverflowCarousel({ items, focusIndex, onFocusChange, onSelect, size, language }) {
   const containerRef = useRef(null);
   const [containerH, setContainerH] = useState(0);
 
@@ -459,6 +465,7 @@ function CoverflowCarousel({ items, focusIndex, onFocusChange, onSelect, size })
                 selected={isFocused}
                 scale={derivedScale}
                 flipId={isFocused ? 'hero-book' : undefined}
+                language={language}
               />
             </div>
           );
@@ -525,16 +532,25 @@ export default function TemplateChooser({ onSelect, language, onLanguageChange, 
   const gridSelectedTemplate = gridSelected ? TEMPLATES.find(t => t.key === gridSelected) : null;
   const gridSelectedDesign = gridSelected ? CARD_DESIGNS[gridSelected] : null;
 
+  // Translated UI strings
+  const ui18n = TEMPLATE_I18N[language]?._ui || {};
+  const uiChooseCanvas = ui18n.chooseCanvas || 'Choose Your Canvas';
+  const uiChoose = ui18n.choose || 'Choose';
+  const uiViewAll = ui18n.viewAll || 'VIEW ALL';
+
+  // Helper to get translated template label
+  const tLabel = (key) => TEMPLATE_I18N[language]?.[key]?.label;
+
   return (
     <div className="template-chooser" onKeyDown={handleKeyDown} tabIndex={-1}>
       <div className="tc-header">
-        <h2 className="tc-title">Choose Your Canvas</h2>
+        <h2 className="tc-title">{uiChooseCanvas}</h2>
         <button
           type="button"
           className="tc-view-toggle"
           onClick={() => setViewMode(v => v === 'carousel' ? 'grid' : 'carousel')}
         >
-          {viewMode === 'carousel' ? 'View All' : 'Carousel'}
+          {viewMode === 'carousel' ? uiViewAll : 'Carousel'}
         </button>
       </div>
 
@@ -546,6 +562,7 @@ export default function TemplateChooser({ onSelect, language, onLanguageChange, 
             onFocusChange={setFocusIndex}
             onSelect={(key) => onSelect(key)}
             size={size}
+            language={language}
           />
           <div className="tc-footer">
             <button
@@ -554,7 +571,7 @@ export default function TemplateChooser({ onSelect, language, onLanguageChange, 
               style={{ '--confirm-accent': focusedDesign?.accent || 'var(--accent-primary)' }}
               onClick={() => onSelect(focusedTemplate.key)}
             >
-              Choose {focusedTemplate?.label || 'Template'}
+              {uiChoose} {tLabel(focusedTemplate?.key) || focusedTemplate?.label || 'Template'}
             </button>
             {onLanguageChange && (
               <LanguagePicker language={language} onChange={onLanguageChange} />
@@ -573,6 +590,7 @@ export default function TemplateChooser({ onSelect, language, onLanguageChange, 
                 onClick={() => setGridSelected(prev => prev === t.key ? null : t.key)}
                 scale={0.44}
                 flipId={t.key === gridSelected ? 'hero-book' : undefined}
+                language={language}
               />
             ))}
           </div>
@@ -584,7 +602,7 @@ export default function TemplateChooser({ onSelect, language, onLanguageChange, 
                 style={{ '--confirm-accent': gridSelectedDesign?.accent || 'var(--accent-primary)' }}
                 onClick={() => onSelect(gridSelected)}
               >
-                Choose {gridSelectedTemplate?.label || 'Template'}
+                {uiChoose} {tLabel(gridSelectedTemplate?.key) || gridSelectedTemplate?.label || 'Template'}
               </button>
             )}
             {onLanguageChange && (

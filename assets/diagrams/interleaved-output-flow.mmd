@@ -1,0 +1,59 @@
+flowchart TB
+    subgraph Input["User Input"]
+        Prompt["Story Prompt<br/>(voice or text)"]
+        Template["Template + Art Style<br/>9 templates · 32+ styles"]
+    end
+
+    subgraph Interleaved["Gemini Native Interleaved Output"]
+        direction TB
+        Call["Single Gemini API Call<br/>response_modalities: TEXT, IMAGE<br/>Gemini 2.5 Flash"]
+        Parse["Parse Interleaved Parts<br/>text → scene narrative<br/>image → scene illustration<br/>woven together in one response"]
+        Call --> Parse
+    end
+
+    subgraph PerScene["Per-Scene Parallel Tasks"]
+        direction LR
+        subgraph ImageUpgrade["Image Quality Upgrade"]
+            direction TB
+            DNA["Visual DNA Pipeline<br/>Anchor portraits → Gemini Vision<br/>→ 150-word descriptors"]
+            Imagen["Imagen 3 (1024×1024)<br/>Character sheet + Visual DNA<br/>→ consistent illustrations"]
+            Fallback["Tiered Fallback<br/>Imagen fail → Gemini native image<br/>Tier 2 → Tier 1 → Tier 0"]
+            DNA --> Imagen
+            Imagen --> Fallback
+        end
+
+        subgraph Audio["Audio Generation"]
+            direction TB
+            TTS["Gemini Native Audio<br/>Multi-voice narration<br/>Emotion-aware TTS"]
+        end
+
+        subgraph Analysis["Director Analysis"]
+            direction TB
+            Director["Per-Scene Analysis<br/>Mood · Tension · Craft notes<br/>Creative suggestion"]
+        end
+    end
+
+    subgraph Output["Streaming Output to Browser"]
+        direction LR
+        WSText["Text Stream<br/>Scene narrative"]
+        WSImage["Image Stream<br/>Scene illustration"]
+        WSAudio["Audio Stream<br/>Scene narration"]
+        WSDirector["Director Notes<br/>Live commentary"]
+    end
+
+    Prompt --> Call
+    Template --> Call
+    Parse -->|"text + Gemini image"| PerScene
+    Parse -->|"text immediately"| WSText
+
+    Fallback -->|"best available image"| WSImage
+    TTS --> WSAudio
+    Director --> WSDirector
+
+    style Input fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Interleaved fill:#1e1b4b,stroke:#b48cff,color:#e2e8f0
+    style PerScene fill:#1a1a2e,stroke:#ffa86c,color:#e2e8f0
+    style ImageUpgrade fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
+    style Audio fill:#0f172a,stroke:#10b981,color:#e2e8f0
+    style Analysis fill:#0f172a,stroke:#818cf8,color:#c7d2fe
+    style Output fill:#1a1a2e,stroke:#10b981,color:#e2e8f0

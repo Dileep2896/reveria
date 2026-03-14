@@ -7,7 +7,16 @@ import { PLACEHOLDERS } from '../data/languages';
 import { useToast } from '../contexts/ToastContext';
 import Tooltip from './Tooltip';
 
-export default function ControlBar({ onSend, onSendAudio, connected, generating, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, usage, onHeroPhoto, heroMode, template = 'storybook' }) {
+// Fun stage messages that cycle during generation
+const STAGE_MESSAGES = {
+  writing:      ['Summoning the narrator...', 'Once upon a time...', 'The quill dances across the page...', 'Words weaving into worlds...'],
+  illustrating: ['Painting the scene...', 'Mixing magical colors...', 'The canvas comes alive...', 'Brushstrokes of imagination...'],
+  narrating:    ['Finding the perfect voice...', 'Rehearsing the narration...', 'Tuning the storyteller...', 'Giving voice to the tale...'],
+  saving:       ['Binding the pages...', 'Sealing with stardust...', 'Pressing the pages...', 'Stitching the spine...'],
+  finishing:    ['Choosing a title...', 'Adding final flourishes...', 'Polishing the cover...', 'Almost ready to read...'],
+};
+
+export default function ControlBar({ onSend, onSendAudio, connected, generating, generationStage, quotaCooldown = 0, inputValue, setInputValue, artStyle, setArtStyle, language, usage, onHeroPhoto, heroMode, template = 'storybook' }) {
   const { addToast } = useToast();
   const [focused, setFocused] = useState(false);
   const [heroPhoto, setHeroPhotoRaw] = useState(() => {
@@ -132,6 +141,21 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
       if (onSendAudio) onSendAudio(base64, mimeType);
     },
   });
+
+  // Cycle through fun stage messages during generation
+  const [stageMessageIndex, setStageMessageIndex] = useState(0);
+  useEffect(() => {
+    if (!generationStage) { setStageMessageIndex(0); return; }
+    setStageMessageIndex(0); // Reset on stage change
+    const iv = setInterval(() => {
+      const msgs = STAGE_MESSAGES[generationStage];
+      if (msgs) setStageMessageIndex(prev => (prev + 1) % msgs.length);
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [generationStage]);
+  const stageMessage = generationStage && STAGE_MESSAGES[generationStage]
+    ? STAGE_MESSAGES[generationStage][stageMessageIndex % STAGE_MESSAGES[generationStage].length]
+    : null;
 
   const heroAnalyzing = !!heroMode?.analyzing || heroLoading;
   const isHeroTemplate = template === 'hero';
@@ -381,32 +405,72 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
             </Tooltip>
           )}
 
+          {/* Language indicator pill (non-English) */}
+          {language && language !== 'English' && (
+            <Tooltip label={`Story language: ${language}`}>
+            <div
+              style={{
+                padding: '2px 8px',
+                borderRadius: '999px',
+                fontSize: '0.65rem',
+                fontWeight: 600,
+                color: 'var(--accent-primary)',
+                background: 'var(--accent-primary-soft, rgba(180, 140, 255, 0.12))',
+                border: '1px solid var(--glass-border-accent)',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+              {language}
+            </div>
+            </Tooltip>
+          )}
+
           <div className="control-input-divider" />
 
-          <textarea
-            ref={(el) => {
-              // Auto-grow: reset height then set to scrollHeight
-              if (el) {
-                el.style.height = 'auto';
-                el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-              }
-            }}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
-              }
-            }}
-            placeholder={heroBlocked ? 'Upload your photo to begin Hero Quest...' : recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : generating ? 'Generating...' : (getTemplate(template).placeholder || PLACEHOLDERS[language] || PLACEHOLDERS.English)}
-            disabled={isDisabled || generating}
-            className="flex-1 bg-transparent outline-none control-input"
-            style={{ color: 'var(--text-primary)', resize: 'none', overflowY: 'auto' }}
-            rows={1}
-          />
+          <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+            <textarea
+              ref={(el) => {
+                // Auto-grow: reset height then set to scrollHeight
+                if (el) {
+                  el.style.height = 'auto';
+                  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+                }
+              }}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
+              placeholder={heroBlocked ? 'Upload your photo to begin Hero Quest...' : recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : !generating ? (getTemplate(template).placeholder || PLACEHOLDERS[language] || PLACEHOLDERS.English) : ''}
+              disabled={isDisabled || generating}
+              className="bg-transparent outline-none control-input"
+              style={{ width: '100%', color: 'var(--text-primary)', resize: 'none', overflowY: 'auto' }}
+              rows={1}
+            />
+            {/* Animated stage message overlay during generation */}
+            {generating && (
+              <span
+                key={stageMessage}
+                className="control-stage-label"
+              >
+                {stageMessage || 'Generating...'}
+              </span>
+            )}
+          </div>
 
           {/* Single morphing action button: mic → send → spinner */}
           {generating ? (
@@ -622,6 +686,26 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
         @keyframes controlShimmer {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
+        }
+        .control-stage-label {
+          position: absolute;
+          left: 0; right: 0; top: 0; bottom: 0;
+          display: flex;
+          align-items: center;
+          padding: 0 12px;
+          pointer-events: none;
+          font-size: 0.85rem;
+          font-style: italic;
+          color: var(--accent-primary);
+          opacity: 0.75;
+          animation: stageFade 0.5s ease-out;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        @keyframes stageFade {
+          from { opacity: 0; filter: blur(4px); transform: translateY(6px); }
+          to { opacity: 0.75; filter: blur(0); transform: translateY(0); }
         }
         @keyframes heroShimmer {
           0%, 100% { opacity: 1; }

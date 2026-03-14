@@ -1,6 +1,11 @@
+import base64
+import logging
+
 from google.genai import types
-from services.gemini_client import generate_stream
+from services.gemini_client import generate_stream, generate_interleaved
 from templates.registry import get_template
+
+logger = logging.getLogger("storyforge.narrator")
 
 
 def _template_voice(template: str) -> str:
@@ -61,6 +66,113 @@ FORMAT:
 <next scene>"""
 
 
+def _build_interleaved_system_prompt(scene_count: int = 1, language: str = "English", template: str = "storybook") -> str:
+    """Build system prompt for Gemini interleaved text+image generation."""
+    min_w, max_w = get_template(template).scene_word_range
+    if language and language.lower() != "english":
+        language_rule = (
+            f"\n- Write ALL narrative text in {language}."
+            f"\n- IMPORTANT: Always respond in {language}. The story language is {language}."
+        )
+    else:
+        language_rule = (
+            "\n- IMPORTANT: Always write in English regardless of input language."
+        )
+
+    voice = _template_voice(template)
+
+    return f"""You are the Narrator of Reveria, a master storyteller who crafts vivid, \
+immersive narratives WITH illustrations. You write cinematic prose and generate \
+a matching illustration for each scene.
+{voice}
+RULES:
+- Write in present tense, third person{language_rule}
+- Each response should contain exactly {scene_count} scene(s)
+- For EACH scene: first write the [SCENE: title] marker, then the narrative text ({min_w}-{max_w} words), \
+then generate ONE vivid illustration that captures the scene's key moment
+- The illustration should match the narrative exactly — same characters, setting, lighting, mood
+- Mark scene breaks with [SCENE: <short evocative title>] on its own line
+- Open each scene with a vivid sensory detail (sight, sound, smell, touch)
+- Include dialogue using quotation marks
+- End on a hook that makes the reader want more
+- Write in PLAIN TEXT only. No markdown formatting.
+- If asked for inappropriate content, playfully redirect in character.
+
+FORMAT EXAMPLE:
+[SCENE: The Enchanted Grove]
+<narrative text with dialogue and sensory details>
+<generate an illustration of this scene>"""
+
+
+def _parse_interleaved_parts(parts: list) -> list[dict]:
+    """Parse Gemini interleaved response parts into scene dicts.
+
+    Each scene dict has: text (str), title (str|None), image_data (str|None).
+    image_data is a base64 data URL if the model generated an image.
+    """
+    import re
+
+    scenes: list[dict] = []
+    current_text = ""
+    current_title: str | None = None
+    current_image: str | None = None
+
+    for part in parts:
+        # Text part
+        if hasattr(part, "text") and part.text:
+            text = part.text
+            # Check for scene markers
+            while "[SCENE" in text:
+                idx = text.index("[SCENE")
+                close = text.find("]", idx)
+                if close == -1:
+                    break
+
+                before = text[:idx].strip()
+                marker = text[idx:close + 1]
+                text = text[close + 1:]
+
+                # If we have accumulated text, save as a scene
+                if current_text.strip():
+                    scenes.append({
+                        "text": current_text.strip(),
+                        "title": current_title,
+                        "image_data": current_image,
+                    })
+                    current_image = None
+
+                # Parse title from marker
+                colon_match = re.match(r"\[SCENE:\s*(.+)\]", marker)
+                current_title = colon_match.group(1).strip() if colon_match else None
+                current_text = before + "\n" if before else ""
+
+            current_text += text
+
+        # Image part (inline_data)
+        elif hasattr(part, "inline_data") and part.inline_data:
+            try:
+                img_data = part.inline_data
+                mime = getattr(img_data, "mime_type", "image/png") or "image/png"
+                raw_bytes = img_data.data
+                if isinstance(raw_bytes, bytes):
+                    b64 = base64.b64encode(raw_bytes).decode("ascii")
+                else:
+                    b64 = str(raw_bytes)
+                current_image = f"data:{mime};base64,{b64}"
+            except Exception as e:
+                logger.warning("Failed to extract inline image: %s", e)
+
+    # Don't forget the last scene
+    if current_text.strip():
+        scenes.append({
+            "text": current_text.strip(),
+            "title": current_title,
+            "image_data": current_image,
+        })
+
+    return scenes
+
+
 class Narrator:
     # Keep last N turns (user+model pairs) to stay within context window.
     # Each turn is ~2 scenes (~800 tokens), so 10 turns ≈ 8K tokens of history.
@@ -94,6 +206,45 @@ class Narrator:
         max_entries = self.MAX_HISTORY_TURNS * 2
         if len(self.history) > max_entries:
             self.history = self.history[-max_entries:]
+
+    async def generate_with_images(
+        self,
+        user_input: str,
+        scene_count: int = 1,
+        language: str = "English",
+        template: str = "storybook",
+    ) -> list[dict]:
+        """Generate story with native Gemini interleaved text+image output.
+
+        Returns a list of scene dicts: [{text, title, image_data}].
+        image_data is a base64 data URL or None if the model didn't produce one.
+        """
+        system_prompt = _build_interleaved_system_prompt(scene_count, language, template)
+
+        parts = await generate_interleaved(
+            system_prompt=system_prompt,
+            user_prompt=user_input,
+            history=self.history,
+        )
+
+        # Parse interleaved parts into scenes
+        scenes = _parse_interleaved_parts(parts)
+        logger.info("Interleaved generation: %d parts → %d scenes", len(parts), len(scenes))
+
+        # Build history from text only (images not useful in history)
+        full_text = "\n\n".join(s["text"] for s in scenes if s.get("text"))
+        if full_text:
+            self.history.append(
+                types.Content(role="user", parts=[types.Part(text=user_input)])
+            )
+            self.history.append(
+                types.Content(role="model", parts=[types.Part(text=full_text)])
+            )
+            max_entries = self.MAX_HISTORY_TURNS * 2
+            if len(self.history) > max_entries:
+                self.history = self.history[-max_entries:]
+
+        return scenes
 
     def reset(self):
         self.history = []

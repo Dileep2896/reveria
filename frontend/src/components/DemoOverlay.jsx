@@ -177,9 +177,9 @@ function Node({ label, sub, detail, badge, active, pulse, accent, large, classNa
 function PipelineSlide({ generating }) {
   return (
     <>
-      <h3 className="demo-slide-title">ADK Agent Pipeline</h3>
+      <h3 className="demo-slide-title">ADK Agent Pipeline · Interleaved Output</h3>
       <p className="demo-slide-sub">
-        Google Agent Development Kit orchestrates a <strong>SequentialAgent</strong> with per-scene parallel task spawning
+        <strong>Gemini native interleaved output</strong> generates text + images in a single call · Imagen 3 upgrades quality
       </p>
 
       <div className="demo-flow-v">
@@ -195,26 +195,27 @@ function PipelineSlide({ generating }) {
 
         <FlowArrowDown />
 
-        {/* Narrator */}
+        {/* Narrator — interleaved */}
         <Node
-          label="NarratorADKAgent"
-          sub="Gemini 2.5 Flash · streaming text"
-          detail="Per-scene task spawning · steering queue between scenes"
-          badge="ADK"
+          label="Gemini Interleaved Output"
+          sub='response_modalities: ["TEXT", "IMAGE"]'
+          detail="Single API call produces story text + illustrations together"
+          badge="NATIVE"
           active={generating}
           pulse={generating}
           large
+          accent="violet"
         />
 
         <FlowArrowFork />
 
-        {/* Parallel tasks */}
+        {/* Parallel upgrade tasks */}
         <div className="demo-flow-parallel">
           <Node
-            label="Imagen 3"
+            label="Imagen 3 Upgrade"
             sub="Vertex AI · 1024×1024"
-            detail="Visual DNA + character anchoring"
-            badge="VERTEX"
+            detail="Visual DNA + character anchoring · Gemini image as fallback"
+            badge="QUALITY"
             active={generating}
             pulse={generating}
             accent="orange"
@@ -223,7 +224,7 @@ function PipelineSlide({ generating }) {
             label="Gemini Native Audio"
             sub="Gemini 2.5 Flash"
             detail="Multi-voice narration per character"
-            badge="GEMINI"
+            badge="AUDIO"
             active={generating}
             pulse={generating}
             accent="green"
@@ -232,10 +233,9 @@ function PipelineSlide({ generating }) {
             label="Director Analysis"
             sub="Gemini Flash · per-scene"
             detail="Mood, tension, craft notes, suggestion"
-            badge="GEMINI"
+            badge="ANALYSIS"
             active={generating}
             pulse={generating}
-            accent="violet"
           />
         </div>
 
@@ -253,14 +253,14 @@ function PipelineSlide({ generating }) {
       </div>
 
       <div className="demo-tech-pills">
+        <Pill label="Interleaved Output" hl />
         <Pill label="Google ADK" hl />
-        <Pill label="SequentialAgent" />
         <Pill label="Gemini 2.5 Flash" hl />
-        <Pill label="Imagen 3" />
+        <Pill label="Imagen 3 Upgrade" />
         <Pill label="Gemini Native Audio" hl />
-        <Pill label="asyncio.Semaphore(1)" />
-        <Pill label="Per-scene streaming" />
         <Pill label="Visual DNA" />
+        <Pill label="Per-scene streaming" />
+        <Pill label="Tier 0/1/2 Fallback" />
       </div>
     </>
   );
@@ -273,18 +273,18 @@ function DirectorSlide({ chatActive, chatLoading }) {
   const live = chatActive || true; // always show as active for visual appeal
   return (
     <>
-      <h3 className="demo-slide-title">Gemini Live API · Bidirectional Audio</h3>
+      <h3 className="demo-slide-title">Gemini Live API · Director Chat</h3>
       <p className="demo-slide-sub">
-        Persistent voice session with <strong>native tool calling</strong>, <strong>streaming PCM audio</strong>, and <strong>barge-in</strong> support
+        Persistent bidirectional audio with <strong>server-side VAD</strong>, <strong>native tool calling</strong>, <strong>session resumption</strong>, and <strong>security screening</strong>
       </p>
 
       <div className="demo-flow-h">
-        <Node label="Your Voice" sub="VAD auto-send · barge-in" badge="MIC" active={live} accent="green" />
+        <Node label="Your Voice" sub="AudioWorklet · 16kHz Int16 PCM" badge="MIC" active={live} accent="green" />
         <FlowArrowRight bidir />
         <Node
           label="Gemini Live Session"
           sub="gemini-live-2.5-flash-native-audio"
-          detail="Streaming PCM chunks · sliding window compression"
+          detail="Server-side VAD · native transcription · sliding window compression"
           badge="LIVE API"
           active={live}
           pulse={chatLoading}
@@ -292,41 +292,36 @@ function DirectorSlide({ chatActive, chatLoading }) {
           accent="violet"
         />
         <FlowArrowRight />
-        <div className="demo-flow-v-mini">
-          <div className="demo-flow-parallel-mini">
-            <Node label="GENERATE_STORY" sub="Triggers ADK pipeline" badge="TOOL" active={live} accent="orange" />
-            <Node label="NAVIGATE_APP" sub="Opens pages by voice" badge="TOOL" active={live} accent="blue" />
-          </div>
-        </div>
+        <Node label="generate_story" sub="Model-triggered · ADK pipeline" badge="TOOL" active={live} accent="orange" />
       </div>
 
       <div className="demo-live-features">
         <div className="demo-live-col">
-          <h4 className="demo-live-heading">Session Capabilities</h4>
-          <Feature text="Persistent bidirectional audio (not request/response)" />
-          <Feature text="Streaming PCM audio chunks via WebSocket" />
-          <Feature text="Native tool calling: model decides when to generate or navigate" />
-          <Feature text="Barge-in: user voice interrupts Director playback instantly" />
-          <Feature text="ContextWindowCompressionConfig with SlidingWindow" />
+          <h4 className="demo-live-heading">Streaming Architecture</h4>
+          <Feature text="AudioWorklet captures Float32 → Int16 PCM off-main-thread" />
+          <Feature text="Continuous chunks via send_realtime_input() (~100ms intervals)" />
+          <Feature text="Server-side VAD: HIGH start sensitivity, LOW end, 300ms silence" />
+          <Feature text="Native input + output audio transcription" />
+          <Feature text="Session resumption tokens for auto-reconnect on disconnect" />
         </div>
         <div className="demo-live-col">
-          <h4 className="demo-live-heading">Real-time Features</h4>
-          <Feature text="Voice-reactive canvas orb (Web Audio AnalyserNode)" />
-          <Feature text="Web Audio API gapless PCM playback scheduling" />
-          <Feature text="proactive_comment() on each scene during generation" />
-          <Feature text="director_suggestion injected into Narrator's next prompt" />
-          <Feature text="NAVIGATE_APP bypasses screening (no user content)" />
+          <h4 className="demo-live-heading">Intelligence & Safety</h4>
+          <Feature text="Native tool calling: model decides when to trigger generation" />
+          <Feature text="Proactive Director comments injected during story generation" />
+          <Feature text="director_suggestion steers the Narrator's next scene" />
+          <Feature text="2-layer security: input pre-screen + output post-screen" />
+          <Feature text="Text input fallback for demo-safe voice alternative" />
         </div>
       </div>
 
       <div className="demo-tech-pills">
         <Pill label="Gemini Live API" hl />
-        <Pill label="Streaming PCM" hl />
+        <Pill label="Server-Side VAD" hl />
         <Pill label="Native Tool Calling" hl />
-        <Pill label="Barge-in" hl />
-        <Pill label="Web Audio API" />
-        <Pill label="Voice-Reactive Orb" />
-        <Pill label="Canvas Animation" />
+        <Pill label="AudioWorklet" hl />
+        <Pill label="Native Transcription" hl />
+        <Pill label="Session Resumption" />
+        <Pill label="Security Screening" />
         <Pill label="SlidingWindow" />
       </div>
     </>
@@ -522,14 +517,14 @@ function CICDSlide() {
 
 const EVOLUTION_TRACKS = [
   {
-    title: 'Image Consistency',
+    title: 'Image Generation',
     accent: 'orange',
     steps: [
-      { label: 'Naive prompts', desc: 'Characters looked different every scene' },
-      { label: 'Hybrid prompts', desc: 'Gemini writes scene only, characters prepended verbatim' },
+      { label: 'Separate API calls', desc: 'Text first, then image — disjointed, slow' },
+      { label: 'Interleaved output', desc: 'Gemini generates text + image in single call (native modality)' },
+      { label: 'Imagen 3 upgrade', desc: 'Parallel quality upgrade; Gemini image as tier-0 fallback' },
       { label: 'Character DNA', desc: 'Hex colors, face shapes, signature items, anti-drift anchors' },
-      { label: 'Anchor Portraits', desc: 'Imagen portrait per character, Gemini Vision extracts Visual DNA' },
-      { label: 'Text-free defense', desc: 'Triple-layer stack prevents AI text baked into comic/manga art' },
+      { label: 'Visual DNA', desc: 'Anchor portraits → Gemini Vision → 150-word appearance descriptors' },
     ],
   },
   {
@@ -550,8 +545,9 @@ const EVOLUTION_TRACKS = [
       { label: 'Per-scene live notes', desc: 'Mood, tension, craft notes stream during generation' },
       { label: 'Director-as-Driver', desc: 'Suggestion field injected into Narrator next prompt' },
       { label: 'Gemini Live API', desc: 'Bidirectional voice, native tool calling, zero extra API calls' },
-      { label: 'VAD auto-send', desc: 'Web Audio silence detection for natural conversation flow' },
-      { label: 'Streaming PCM + Barge-in', desc: 'Gapless audio playback, voice interrupts Director mid-sentence' },
+      { label: 'Client-side VAD', desc: 'Web Audio silence detection for natural conversation flow' },
+      { label: 'Server-side VAD', desc: 'Eliminated client VAD — Gemini handles speech detection natively' },
+      { label: 'AudioWorklet streaming', desc: 'Off-thread PCM capture → send_realtime_input, zero latency' },
       { label: 'Voice-Reactive Orb', desc: 'Canvas blob reacts to real-time audio amplitude from mic & speaker' },
     ],
   },
@@ -560,9 +556,9 @@ const EVOLUTION_TRACKS = [
     accent: 'blue',
     steps: [
       { label: 'Batch sequential', desc: 'All text, then all images, then all audio' },
-      { label: 'Per-scene streaming', desc: 'Image + audio + director spawn per-scene as text completes' },
+      { label: 'Interleaved + parallel', desc: 'Gemini native text+image, then per-scene audio/analysis tasks' },
       { label: 'Mid-gen steering', desc: 'Users steer story direction during active generation' },
-      { label: 'Circuit breakers', desc: 'Per-user quota isolation with jittered retry backoff' },
+      { label: 'Tiered fallback', desc: 'Imagen → Gemini native image → graceful degradation' },
     ],
   },
 ];
@@ -619,6 +615,7 @@ function EvolutionSlide() {
 
       <div className="demo-tech-pills">
         <Pill label="64+ Sessions" hl />
+        <Pill label="Interleaved Output" hl />
         <Pill label="Character DNA" />
         <Pill label="Visual DNA" hl />
         <Pill label="Anchor Portraits" />

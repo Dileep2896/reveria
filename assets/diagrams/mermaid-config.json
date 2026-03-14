@@ -7,6 +7,15 @@
     "lineColor": "#94a3b8",
     "secondaryColor": "#1a1a2e",
     "tertiaryColor": "#0f172a",
-    "fontSize": "14px"
+    "fontSize": "18px",
+    "fontFamily": "Inter, Segoe UI, Helvetica, Arial, sans-serif"
+  },
+  "flowchart": {
+    "nodeSpacing": 60,
+    "rankSpacing": 80,
+    "padding": 20,
+    "htmlLabels": true,
+    "curve": "basis",
+    "wrappingWidth": 280
   }
 }

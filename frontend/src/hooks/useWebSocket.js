@@ -39,6 +39,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const [directorChatPrompt, setDirectorChatPrompt] = useState(null);
   const [directorAutoGenerate, setDirectorAutoGenerate] = useState(null);
   const [heroMode, setHeroMode] = useState({ active: false, description: '' });
+  const [generationStage, setGenerationStage] = useState(null);
   const storyDeletedRef = useRef(null);
   const controlBarInputRef = useRef(null);
   const languageDetectedRef = useRef(null);
@@ -79,6 +80,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
       setDirectorChatActive, setDirectorChatMessages, setDirectorChatLoading, setDirectorChatPrompt,
       setDirectorAutoGenerate,
       setHeroMode,
+      setGenerationStage,
       onLanguageDetected: (lang) => languageDetectedRef.current?.(lang),
       onNavigate: (dest) => navigateRef.current?.(dest),
       onAudioChunk: (data) => audioChunkRef.current?.(data),
@@ -147,6 +149,11 @@ export default function useWebSocket(idToken, initialState, addToast) {
       setConnected(false);
       setGenerating(false);
       setSceneBusy(new Set());
+      setDirectorChatLoading(false);
+      setDirectorChatActive(false);
+      setDirectorChatMessages([]);
+      setDirectorChatPrompt(null);
+      setDirectorAutoGenerate(null);
       if (!disposed.current) {
         // Auth failure (4003) — wait for token refresh from AuthContext, don't spam reconnect
         if (e.code === 4003) {
@@ -155,7 +162,9 @@ export default function useWebSocket(idToken, initialState, addToast) {
         }
         const delay = reconnectDelay.current;
         reconnectDelay.current = Math.min(delay * 2, RECONNECT_MAX_MS);
-        reconnectTimer.current = setTimeout(connect, delay);
+        // Jitter: ±20% to prevent thundering herd on backend restart
+        const jitter = delay * (0.8 + Math.random() * 0.4);
+        reconnectTimer.current = setTimeout(connect, jitter);
       }
     };
 
@@ -271,6 +280,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
   }, []);
 
   const startDirectorChat = useCallback((storyContext, { language, voiceName, template } = {}) => {
+    console.log('%c[WS-Send]', 'color: #a29bfe; font-weight: bold', `🎬 Starting Director Chat (lang=${language}, voice=${voiceName}, template=${template})`);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       setDirectorChatActive(true);
       setDirectorChatLoading(true);
@@ -281,11 +291,16 @@ export default function useWebSocket(idToken, initialState, addToast) {
       if (voiceName) msg.voice_name = voiceName;
       if (template) msg.template = template;
       wsRef.current.send(JSON.stringify(msg));
+    } else {
+      console.warn('%c[WS-Send]', 'color: #fd79a8; font-weight: bold', `🚫 Can't start chat — WS state=${wsRef.current?.readyState}`);
     }
   }, []);
 
+  // Legacy blob-based audio send (kept for backward compat / text-to-speech fallback)
   const sendDirectorChatAudio = useCallback((base64, mimeType) => {
+    if (generatingRef.current) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('%c[WS-Send]', 'color: #a29bfe; font-weight: bold', `🎤 Sending audio blob (${(base64.length / 1024).toFixed(1)}KB)`);
       setDirectorChatLoading(true);
       const id = `user-${Date.now()}`;
       setDirectorChatMessages(prev => [...prev, { id, role: 'user', type: 'audio', content: 'Voice message' }]);
@@ -293,11 +308,38 @@ export default function useWebSocket(idToken, initialState, addToast) {
     }
   }, []);
 
+  // Streaming audio: send PCM chunks continuously (server-side VAD)
+  const sendDirectorAudioChunk = useCallback((b64chunk) => {
+    if (generatingRef.current) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'director_chat_audio_chunk', data: b64chunk }));
+    }
+  }, []);
+
+  // Signal that mic streaming has started (so backend can prepare for chunks)
+  const sendDirectorAudioStreamStart = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('%c[WS-Send]', 'color: #a29bfe; font-weight: bold', '🎤 Audio stream START');
+      const id = `user-${Date.now()}`;
+      setDirectorChatMessages(prev => [...prev, { id, role: 'user', type: 'audio', content: 'Voice message' }]);
+      wsRef.current.send(JSON.stringify({ type: 'director_chat_audio_stream_start' }));
+    }
+  }, []);
+
+  // Signal that mic streaming has ended (user stopped / muted)
+  const sendDirectorAudioStreamEnd = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('%c[WS-Send]', 'color: #a29bfe; font-weight: bold', '🎤 Audio stream END');
+      setDirectorChatLoading(true);
+      wsRef.current.send(JSON.stringify({ type: 'director_chat_audio_stream_end' }));
+    }
+  }, []);
+
+  // Send silent text to Director (used for nudges — no message shown in chat)
   const sendDirectorChatText = useCallback((text) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('%c[WS-Send]', 'color: #a29bfe; font-weight: bold', '📝 Nudge:', text?.slice(0, 60));
       setDirectorChatLoading(true);
-      const id = `user-${Date.now()}`;
-      setDirectorChatMessages(prev => [...prev, { id, role: 'user', type: 'text', content: text }]);
       wsRef.current.send(JSON.stringify({ type: 'director_chat_text', content: text }));
     }
   }, []);
@@ -317,6 +359,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
   }, []);
 
   const endDirectorChat = useCallback(() => {
+    console.log('%c[WS-Send]', 'color: #a29bfe; font-weight: bold', '🔴 Ending Director Chat');
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'director_chat_end' }));
     }
@@ -392,5 +435,5 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const setAudioChunkHandler = useCallback((handler) => { audioChunkRef.current = handler; }, []);
   const setAudioDoneHandler = useCallback((handler) => { audioDoneRef.current = handler; }, []);
 
-  return { connected, scenes, generating, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendHeroName, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, setNavigateHandler, setAudioChunkHandler, setAudioDoneHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat };
+  return { connected, scenes, generating, generationStage, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendHeroName, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, setNavigateHandler, setAudioChunkHandler, setAudioDoneHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorAudioChunk, sendDirectorAudioStreamStart, sendDirectorAudioStreamEnd, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat };
 }

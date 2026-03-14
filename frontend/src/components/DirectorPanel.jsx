@@ -17,8 +17,9 @@ export default function DirectorPanel({
   singlePage = false, heroMode, template,
   data, generating, scenes = [], currentSceneNumber, language, liveNotes = [],
   chatActive, chatMessages = [], chatLoading, chatPrompt,
-  autoGenerate, onCancelAutoGenerate, castAnalyzing = false,
-  onStartChat, onEndChat, onChatAudio, onChatSuggest, onUsePrompt,
+  autoGenerate, onCancelAutoGenerate, castAnalyzing = false, demoSpeaking = false, demoListening = false,
+  onStartChat, onEndChat, onChatAudio, onChatAudioChunk, onChatAudioStreamStart, onChatAudioStreamEnd,
+  onChatNudge, onChatSuggest, onUsePrompt,
   setAudioChunkHandler, setAudioDoneHandler,
 }) {
   const hasLiveNotes = liveNotes.length > 0;
@@ -80,6 +81,11 @@ export default function DirectorPanel({
       {chatActive && (
         <DirectorChat
           onSendAudio={onChatAudio}
+          onSendAudioChunk={onChatAudioChunk}
+          onAudioStreamStart={onChatAudioStreamStart}
+          onAudioStreamEnd={onChatAudioStreamEnd}
+          onSendText={onChatNudge}
+          onNudge={onChatNudge}
           onEndChat={onEndChat}
           onSuggestPrompt={onChatSuggest}
           onUsePrompt={onUsePrompt}
@@ -90,6 +96,8 @@ export default function DirectorPanel({
           onCancelAutoGenerate={onCancelAutoGenerate}
           generating={generating}
           castAnalyzing={castAnalyzing || !!heroMode?.analyzing}
+          demoSpeaking={demoSpeaking}
+          demoListening={demoListening}
           setAudioChunkHandler={setAudioChunkHandler}
           setAudioDoneHandler={setAudioDoneHandler}
         />

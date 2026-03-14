@@ -1,0 +1,25 @@
+flowchart TB
+    UserInput["User Audio / Text"] --> L1["Layer 1: Regex Pre-Screen<br/>26 injection patterns<br/>(instruction override, role switch,<br/>DAN jailbreaks, multi-language,<br/>structured injection, encoding tricks)"]
+
+    L1 -->|"BLOCKED"| Redirect["Redirect Response<br/>(playful in-character)"]
+    L1 -->|"PASS"| Model["Gemini Live API<br/>(with identity-anchored<br/>system prompt)"]
+
+    Model --> L2["Layer 2: Output Post-Screen<br/>Character breaks<br/>Prompt leaks<br/>Off-topic detection"]
+
+    L2 -->|"FLAGGED"| Kill["Layer 5: Flagged Audio Kill<br/>stopStreaming() immediately"]
+    L2 -->|"SAFE"| Output["Director Response<br/>→ Frontend"]
+
+    L3["Layer 3: System Prompt<br/>Identity Anchoring<br/>Non-negotiable role<br/>Untrusted user messages<br/>Structured data = story content"]
+    L4["Layer 4: Re-Anchoring<br/>Every 5 messages<br/>Role reminder injection<br/>(coding, math, advice blocked)"]
+
+    L3 -.-> Model
+    L4 -.-> Model
+
+    style L1 fill:#1a1a2e,stroke:#ef4444,color:#e2e8f0
+    style L2 fill:#1a1a2e,stroke:#f59e0b,color:#e2e8f0
+    style L3 fill:#0f172a,stroke:#818cf8,color:#c7d2fe
+    style L4 fill:#0f172a,stroke:#818cf8,color:#c7d2fe
+    style Kill fill:#1a1a2e,stroke:#ef4444,color:#e2e8f0
+    style Model fill:#0f172a,stroke:#3b82f6,color:#e2e8f0
+    style Output fill:#0f172a,stroke:#10b981,color:#e2e8f0
+    style Redirect fill:#1a1a2e,stroke:#f59e0b,color:#e2e8f0

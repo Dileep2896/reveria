@@ -1,6 +1,6 @@
-# The Reveria Journey: From Zero to 64 Sessions
+# The Reveria Journey: From Zero to 65 Sessions
 
-*How a hackathon project evolved through 64 coding sessions, 3 major rewrites, and countless "why isn't this working" moments.*
+*How a hackathon project evolved through 65 coding sessions, 3 major rewrites, and countless "why isn't this working" moments.*
 
 ---
 
@@ -172,9 +172,15 @@ Three improvements to Director Chat latency and conversational feel:
 
 **Barge-in.** The microphone stays hot during Director speech (`echoCancellation: true`). VAD detects user speech onset via a new `onVoiceStart` callback, which immediately kills all scheduled Web Audio sources and pauses any legacy Audio element. The user's speech is captured and sent normally. Manual barge-in (tapping the orb during speaking state) also works.
 
-**Director navigation.** A `navigate_app` tool lets the Director route users to library, explore, new_story, or settings. The chat session ends gracefully with a 1.5-second delay for farewell audio before navigation.
+**Mute Director audio.** Tapping the voice orb during Director speech immediately stops all audio playback. Simple and reliable.
 
 VAD silence threshold also dropped from 1200ms to 800ms for snappier auto-send.
+
+**Barge-in noise debouncing.** The initial barge-in implementation was too trigger-happy — a single VAD frame (100ms) with RMS above 0.01 killed the Director's audio. Background noise (fan, typing, cough) easily exceeded that. Fixed with two-layer debouncing: a higher `BARGEIN_THRESHOLD` (0.02, 2x the silence threshold) for onset detection, and a consecutive frame requirement (3 frames, ~300ms) before `onVoiceStart` fires. Brief noise spikes reset the counter. Actual speech still triggers in ~300ms.
+
+**Silent user re-engagement.** The mic goes hot after the Director greets you, but if you don't speak, nothing happens — the VAD auto-stop only fires after speech→silence. Added a 10-second idle timeout: if no speech is ever detected, the recording silently aborts and a system nudge (invisible in chat) asks the Director to re-engage with a creative question or story suggestion. One nudge per silence period, reset when the user actually speaks.
+
+> **Note:** Barge-in and noise debouncing were later removed in Session 65 in favor of a simpler mute-to-stop approach. The streaming audio and silent re-engagement features remain.
 
 ### Voice-Reactive Canvas Orb (Session 64)
 
@@ -184,16 +190,30 @@ Asymmetric smoothing (fast attack 0.25-0.35, slow decay 0.05-0.1) makes it feel 
 
 No external dependencies. 72px canvas, DPR capped at 2, `requestAnimationFrame` only. Performance is negligible.
 
+### Session 65: Interleaved Output, i18n, and Demo Polish
+
+Five changes in one session, all driven by hackathon requirements and demo readiness:
+
+**Gemini Native Interleaved Output.** The hackathon requires "Must use Gemini's interleaved/mixed output capabilities." Added `response_modalities: ["TEXT", "IMAGE"]` to `generate_interleaved()` in `gemini_client.py`. The Narrator's primary path now uses `generate_with_images()` which calls this. But the key decision: Imagen 3 is always primary for images (character consistency pipeline), Gemini native image is only a tier-0 fallback when Imagen fails. `_run_interleaved()` tries interleaved first, falls back to `_run_streaming()` on failure.
+
+**Barge-in removal.** The barge-in implementation from Session 63 was too complex and fragile for a demo environment. Replaced with simple mute: tap the voice orb during Director speech to stop playback. No hot mic, no noise debouncing, no false triggers. Clean and reliable.
+
+**Director Chat text input.** A "Type" button in DirectorChat.jsx toggles a text input field for demo safety. If voice recognition fails during the hackathon presentation, the presenter can type messages to the Director. Reuses the existing `send_text()` path.
+
+**Multilingual template cards.** `TEMPLATE_I18N` map in `languages.js` provides translations for all 9 templates across 7 languages (Hindi, Spanish, French, Japanese, German, Portuguese, Chinese). Template names, descriptions, and taglines translate when a non-English language is selected. `language` prop threaded through TemplateChooser → CoverflowCarousel → BookCover → CoverPage.
+
+**Language indicator and generation messages.** Globe pill in ControlBar shows active language when non-English. Fun stage messages during generation: "Summoning the narrator...", "Painting the scene...", "Gathering the portraits...".
+
 ---
 
 ## The Numbers
 
 | Metric | Count |
 |--------|-------|
-| Coding sessions | 64 |
+| Coding sessions | 65 |
 | Lines of code (approx.) | ~60,000 |
-| Story templates | 12 |
-| Art styles | 32+ |
+| Story templates | 9 |
+| Art styles | 30+ |
 | Supported languages | 8 |
 | CI/CD pipeline jobs | 4 |
 | Major architecture rewrites | 3 |
@@ -228,8 +248,8 @@ No external dependencies. 72px canvas, DPR capped at 2, `requestAnimationFrame` 
 | Day 6 | Feb 23 | 50-53 | Subscription tiers, feature cleanup, author attribution |
 | Day 7 | Feb 24 | 54-58 | Per-scene streaming, Director Chat, native API rewrite |
 | Day 8+ | Feb 25+ | 59-62 | Interaction audit, visual narratives, cinematic opening, panel redesign |
-| Day 9 | Mar 10 | 63-64 | Streaming audio, barge-in, navigation tools, voice-reactive orb |
+| Day 9 | Mar 10 | 63-65 | Streaming audio, mute, navigation tools, voice-reactive orb, interleaved output, i18n templates |
 
 ---
 
-*Built for the [Gemini Live Agent Challenge](https://devpost.com/) hackathon. The codebase lives at [github.com/Dileep2896/storyforge](https://github.com/Dileep2896/storyforge).*
+*Built for the [Gemini Live Agent Challenge](https://devpost.com/) hackathon. The codebase lives at [github.com/Dileep2896/reveria](https://github.com/Dileep2896/reveria).*

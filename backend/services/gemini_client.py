@@ -107,6 +107,66 @@ async def generate_stream(
         raise ContentBlockedError("Content blocked by safety filters.")
 
 
+async def generate_interleaved(
+    system_prompt: str,
+    user_prompt: str,
+    history: list[types.Content] | None = None,
+) -> list[types.Part]:
+    """Generate text + images using Gemini's native interleaved output.
+
+    Uses response_modalities: ["TEXT", "IMAGE"] to produce a single response
+    containing both narrative text and inline illustrations.
+    Returns a list of Part objects (text and inline_data/image).
+    """
+    client = get_client()
+    model = get_model()
+
+    contents: list[types.Content] = []
+    if history:
+        contents.extend(history)
+    contents.append(types.Content(role="user", parts=[types.Part(text=user_prompt)]))
+
+    last_err: Exception | None = None
+    for _attempt in range(3):
+        try:
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=0.9,
+                    max_output_tokens=4096,
+                    response_modalities=["TEXT", "IMAGE"],
+                ),
+            )
+            if response.candidates:
+                candidate = response.candidates[0]
+                fr = getattr(candidate, "finish_reason", None)
+                if fr and str(fr).upper() in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"):
+                    raise ContentBlockedError("Content blocked by safety filters.")
+                parts = candidate.content.parts if candidate.content else []
+                if parts:
+                    return list(parts)
+            break
+        except ContentBlockedError:
+            raise
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "safety" in err_msg or "blocked" in err_msg or "prohibited" in err_msg:
+                raise ContentBlockedError("Content blocked by safety filters.") from e
+            if is_transient(e) and _attempt < 2:
+                last_err = e
+                delay = 1.0 * (2 ** _attempt)
+                logger.warning("generate_interleaved transient error (attempt %d/3), retrying in %.1fs: %s", _attempt + 1, delay, e)
+                await asyncio.sleep(delay)
+                continue
+            raise
+
+    if last_err:
+        raise last_err
+    raise ContentBlockedError("Interleaved generation produced no output.")
+
+
 async def transcribe_audio(audio_base64: str, mime_type: str) -> str | None:
     """Transcribe audio using Gemini 2.0 Flash multimodal input.
 

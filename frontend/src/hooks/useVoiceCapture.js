@@ -1,236 +1,258 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 
-const MIN_RECORDING_MS = 600; // Minimum hold duration to send audio
+const VC_DEBUG = true;
+const vcLog = (...args) => VC_DEBUG && console.log('%c[VoiceCapture]', 'color: #4ecdc4; font-weight: bold', ...args);
+const vcWarn = (...args) => VC_DEBUG && console.warn('%c[VoiceCapture]', 'color: #ff6b6b; font-weight: bold', ...args);
 
-// VAD (Voice Activity Detection) constants
-const SILENCE_THRESHOLD = 0.01; // RMS level below which = silence
-const SILENCE_DURATION_MS = 800; // Auto-stop after 0.8s of silence
-const VAD_POLL_INTERVAL_MS = 100; // Check audio level every 100ms
+// ── Streaming architecture ──
+// Following Google's reference implementation (live-api-web-console):
+// NO client-side VAD. Stream raw PCM chunks to backend → Gemini server-side VAD.
+// Gemini's server VAD (startOfSpeechSensitivity: HIGH, endOfSpeechSensitivity: LOW)
+// handles all speech boundary detection.
+const CHUNK_INTERVAL_MS = 100;         // Send audio chunks every 100ms
+const IDLE_TIMEOUT_MS = 20000;         // 20s no interaction → idle callback
+const MAX_STREAM_DURATION_MS = 60000;  // 60s hard cap on streaming
 
-export default function useVoiceCapture({ onAudioCaptured, onVoiceStart }) {
-  const [recording, setRecording] = useState(false);
-  const mediaRecorderRef = useRef(null);
+// PCM conversion: AudioWorklet sends Float32 samples, we convert to Int16 PCM
+// Gemini expects: PCM 16-bit, 16kHz, mono
+
+/**
+ * Audio processing worklet that captures raw PCM samples and sends them
+ * to the main thread. Runs off the main thread for zero-latency capture.
+ */
+const WORKLET_CODE = `
+class AudioCaptureProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this._buffer = [];
+    this._sampleCount = 0;
+    // Send chunks roughly every 100ms (at 16kHz = 1600 samples, at 48kHz = 4800)
+    this._chunkSamples = 4800;
+  }
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || !input[0]) return true;
+    const samples = input[0];
+    for (let i = 0; i < samples.length; i++) {
+      this._buffer.push(samples[i]);
+    }
+    this._sampleCount += samples.length;
+    if (this._sampleCount >= this._chunkSamples) {
+      this.port.postMessage({ type: 'audio', samples: new Float32Array(this._buffer) });
+      this._buffer = [];
+      this._sampleCount = 0;
+    }
+    return true;
+  }
+}
+registerProcessor('audio-capture-processor', AudioCaptureProcessor);
+`;
+
+export default function useVoiceCapture({ onAudioChunk, onStreamStart, onStreamEnd, onIdleTimeout }) {
+  const [streaming, setStreaming] = useState(false);
   const streamRef = useRef(null);
-  const chunksRef = useRef([]);
-  const startTimeRef = useRef(0);
-  const abortedRef = useRef(false);
-
-  // VAD refs
   const audioContextRef = useRef(null);
+  const sourceNodeRef = useRef(null);
+  const workletNodeRef = useRef(null);
   const analyserRef = useRef(null);
-  const vadIntervalRef = useRef(null);
-  const speechDetectedRef = useRef(false);
-  const silenceStartRef = useRef(null);
   const freqDataRef = useRef(null);
+  const abortedRef = useRef(false);
+  const startTimeRef = useRef(0);
+  const idleTimerRef = useRef(null);
+  const maxTimerRef = useRef(null);
+  const workletRegistered = useRef(false);
 
-  const cleanupVAD = useCallback(() => {
-    if (vadIntervalRef.current) {
-      clearInterval(vadIntervalRef.current);
-      vadIntervalRef.current = null;
+  const getStream = useCallback(async () => {
+    if (streamRef.current) {
+      const tracks = streamRef.current.getTracks();
+      if (tracks.length > 0 && tracks[0].readyState === 'live') return streamRef.current;
+      streamRef.current = null;
     }
-    if (analyserRef.current) {
-      analyserRef.current.disconnect();
-      analyserRef.current = null;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+    });
+    streamRef.current = stream;
+    vcLog('🎙️ New mic stream acquired');
+    return stream;
+  }, []);
+
+  const releaseStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
-    speechDetectedRef.current = false;
-    silenceStartRef.current = null;
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
+    }
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current.port.onmessage = null;
+      workletNodeRef.current = null;
+    }
   }, []);
 
   const cleanup = useCallback(() => {
-    cleanupVAD();
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+    if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
+    if (maxTimerRef.current) { clearTimeout(maxTimerRef.current); maxTimerRef.current = null; }
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current.port.onmessage = null;
+      workletNodeRef.current = null;
     }
-    mediaRecorderRef.current = null;
-    chunksRef.current = [];
-    setRecording(false);
-  }, [cleanupVAD]);
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
+    }
+  }, []);
+
+  // Convert Float32 samples to Int16 PCM bytes (what Gemini expects)
+  const float32ToInt16 = useCallback((float32Array) => {
+    const int16 = new Int16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return new Uint8Array(int16.buffer);
+  }, []);
+
+  // Convert Uint8Array to base64
+  const uint8ToBase64 = useCallback((uint8Array) => {
+    let binary = '';
+    for (let i = 0; i < uint8Array.length; i++) {
+      binary += String.fromCharCode(uint8Array[i]);
+    }
+    return btoa(binary);
+  }, []);
 
   const startRecording = useCallback(async () => {
-    // Reset abort flag
     abortedRef.current = false;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
+      const stream = await getStream();
+      if (abortedRef.current) return;
 
-      // If stopRecording was called while we awaited getUserMedia, abort
-      if (abortedRef.current) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
+      // Setup AudioContext and worklet
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      }
+      const audioCtx = audioContextRef.current;
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+      // Register worklet (once)
+      if (!workletRegistered.current) {
+        const blob = new Blob([WORKLET_CODE], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        await audioCtx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+        workletRegistered.current = true;
+        vcLog('🔧 AudioWorklet registered');
       }
 
-      streamRef.current = stream;
-      chunksRef.current = [];
+      // Create source → worklet → analyser chain
+      const source = audioCtx.createMediaStreamSource(stream);
+      const worklet = new AudioWorkletNode(audioCtx, 'audio-capture-processor');
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.5;
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm';
+      source.connect(worklet);
+      source.connect(analyser);
 
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
+      sourceNodeRef.current = source;
+      workletNodeRef.current = worklet;
+      analyserRef.current = analyser;
+      freqDataRef.current = new Uint8Array(analyser.frequencyBinCount);
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
+      // Handle audio chunks from worklet
+      worklet.port.onmessage = (e) => {
+        if (e.data.type === 'audio' && !abortedRef.current) {
+          const pcmBytes = float32ToInt16(e.data.samples);
+          const b64 = uint8ToBase64(pcmBytes);
+          onAudioChunk?.(b64);
         }
       };
 
-      recorder.onstop = () => {
-        const elapsed = Date.now() - startTimeRef.current;
-
-        // Discard audio that's too short - likely accidental tap
-        if (elapsed < MIN_RECORDING_MS) {
-          cleanup();
-          return;
-        }
-
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        chunksRef.current = [];
-
-        // Discard very small blobs (< 1KB = essentially silence)
-        if (blob.size < 1000) {
-          cleanup();
-          return;
-        }
-
-        // Convert to base64
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = reader.result.split(',')[1];
-          if (base64 && onAudioCaptured) {
-            onAudioCaptured(base64, mimeType);
-          }
-        };
-        reader.readAsDataURL(blob);
-
-        // Cleanup tracks
-        cleanupVAD();
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach((t) => t.stop());
-          streamRef.current = null;
-        }
-      };
-
-      recorder.start(250); // Collect data every 250ms for reliable chunks
       startTimeRef.current = Date.now();
-      setRecording(true);
+      setStreaming(true);
+      onStreamStart?.();
+      vcLog('🎤 Streaming STARTED (server-side VAD)');
 
-      // Set up VAD: Web Audio AnalyserNode for silence detection
-      try {
-        if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        const audioCtx = audioContextRef.current;
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 2048;
-        source.connect(analyser);
-        analyserRef.current = analyser;
-        freqDataRef.current = new Uint8Array(analyser.frequencyBinCount);
+      // Idle timeout
+      idleTimerRef.current = setTimeout(() => {
+        vcLog(`⏰ Idle timeout (${IDLE_TIMEOUT_MS / 1000}s)`);
+        onIdleTimeout?.();
+      }, IDLE_TIMEOUT_MS);
 
-        speechDetectedRef.current = false;
-        silenceStartRef.current = null;
+      // Max duration cap
+      maxTimerRef.current = setTimeout(() => {
+        vcLog('⏱️ Max stream duration — stopping');
+        stopRecording();
+      }, MAX_STREAM_DURATION_MS);
 
-        const dataArray = new Float32Array(analyser.fftSize);
-
-        vadIntervalRef.current = setInterval(() => {
-          if (!analyserRef.current) return;
-          analyserRef.current.getFloatTimeDomainData(dataArray);
-
-          // Compute RMS
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i] * dataArray[i];
-          }
-          const rms = Math.sqrt(sum / dataArray.length);
-
-          if (rms > SILENCE_THRESHOLD) {
-            // Speech detected — notify on first detection (barge-in signal)
-            if (!speechDetectedRef.current && onVoiceStart) {
-              onVoiceStart();
-            }
-            speechDetectedRef.current = true;
-            silenceStartRef.current = null;
-          } else if (speechDetectedRef.current) {
-            // Silence after speech
-            if (!silenceStartRef.current) {
-              silenceStartRef.current = Date.now();
-            } else if (Date.now() - silenceStartRef.current >= SILENCE_DURATION_MS) {
-              // 1.2s of silence after speech — auto-stop
-              if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-                mediaRecorderRef.current.stop();
-                setRecording(false);
-              }
-            }
-          }
-        }, VAD_POLL_INTERVAL_MS);
-      } catch (vadErr) {
-        // VAD is best-effort — if AudioContext fails, manual stop still works
-        console.warn('VAD setup failed, manual stop still available:', vadErr);
-      }
     } catch (err) {
-      console.error('Microphone access denied or error:', err);
-      cleanup();
+      vcWarn('🚫 Microphone error:', err);
+      setStreaming(false);
     }
-  }, [onAudioCaptured, onVoiceStart, cleanup, cleanupVAD]);
+  }, [getStream, onAudioChunk, onStreamStart, onIdleTimeout, float32ToInt16, uint8ToBase64]);
 
   const stopRecording = useCallback(() => {
-    // If startRecording is still awaiting getUserMedia, set abort flag
+    vcLog('⏹️ Streaming STOPPED');
     abortedRef.current = true;
-
-    // Clear VAD immediately on manual stop
-    cleanupVAD();
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-    } else {
-      // Recorder might not have started yet - clean up just in case
-      cleanup();
-    }
-  }, [cleanup, cleanupVAD]);
-
-  // Abort recording WITHOUT sending audio (discard captured data)
-  const abortRecording = useCallback(() => {
-    abortedRef.current = true;
-    cleanupVAD();
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      // Detach handlers so onstop doesn't fire onAudioCaptured
-      mediaRecorderRef.current.ondataavailable = null;
-      mediaRecorderRef.current.onstop = null;
-      mediaRecorderRef.current.stop();
-    }
-    // Full cleanup: release mic tracks, clear chunks, set recording=false
     cleanup();
-  }, [cleanup, cleanupVAD]);
+    setStreaming(false);
+    onStreamEnd?.();
+  }, [cleanup, onStreamEnd]);
+
+  const abortRecording = useCallback(() => {
+    vcLog('🚫 Streaming ABORTED');
+    abortedRef.current = true;
+    cleanup();
+    setStreaming(false);
+  }, [cleanup]);
+
+  // Reset idle timer when called (e.g., when user speaks and Gemini confirms speech)
+  const resetIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        vcLog(`⏰ Idle timeout (${IDLE_TIMEOUT_MS / 1000}s)`);
+        onIdleTimeout?.();
+      }, IDLE_TIMEOUT_MS);
+    }
+  }, [onIdleTimeout]);
 
   useEffect(() => {
     return () => {
+      cleanup();
+      releaseStream();
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close().catch(() => {});
         audioContextRef.current = null;
       }
     };
-  }, []);
+  }, [cleanup, releaseStream]);
 
-  /** Get current mic amplitude (0-1) for visualization. */
+  // Amplitude getter for orb visualization (kept from original — uses AnalyserNode)
   const getAmplitude = useCallback(() => {
     if (!analyserRef.current || !freqDataRef.current) return 0;
     analyserRef.current.getByteFrequencyData(freqDataRef.current);
     let sum = 0;
     const arr = freqDataRef.current;
+    if (arr.length === 0) return 0;
     for (let i = 0; i < arr.length; i++) sum += arr[i];
     return sum / (arr.length * 255);
   }, []);
 
-  return { recording, startRecording, stopRecording, abortRecording, getAmplitude };
+  // Backward compat: expose `recording` as alias for `streaming`
+  return {
+    recording: streaming,
+    streaming,
+    startRecording,
+    stopRecording,
+    abortRecording,
+    resetIdleTimer,
+    getAmplitude,
+    releaseStream,
+  };
 }

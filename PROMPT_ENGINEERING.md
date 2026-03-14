@@ -15,7 +15,7 @@ A comprehensive record of how we designed, iterated, and refined prompts across 
 8. [Content Filtering -- Pre-Pipeline Validation](#content-filtering----pre-pipeline-validation)
 9. [Book Meta -- Title & Cover Generation](#book-meta----title--cover-generation)
 10. [Art Style Suffixes](#art-style-suffixes)
-11. [Portrait Generation (Disabled — Future Work)](#portrait-generation-disabled--future-work)
+11. [Portrait Generation](#portrait-generation)
 12. [Visual Narrative Scene Composition](#visual-narrative-scene-composition)
 13. [Split DNA — Physical vs. Style Traits](#split-dna--physical-vs-style-traits)
 14. [Key Lessons & Patterns](#key-lessons--patterns)
@@ -956,7 +956,7 @@ Early versions asked Gemini to "end the prompt with the art style." It would som
 
 ---
 
-## Portrait Generation (Disabled — Future Work)
+## Portrait Generation
 
 The initial portrait approach used separate Imagen 3 calls with a 1:1 close-up prompt:
 

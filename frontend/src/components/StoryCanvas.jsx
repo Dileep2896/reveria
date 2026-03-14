@@ -35,12 +35,21 @@ const ContentPage = forwardRef(function ContentPage({ scene, isGenerating, isWit
 
 const MIN_PAGE_SLOTS = 21;
 
-function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English', onLanguageChange, singlePage = false, template = 'storybook', onTemplateSelect, onTemplateBack }) {
+function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt, spreadPrompts, bookmarkPage, language = 'English', onLanguageChange, singlePage = false, template = 'storybook', onTemplateSelect, onTemplateBack, flipRef }) {
   const { theme } = useTheme();
   const lang = getLangData(language);
   const bookRef = useRef(null);
   const wrapperRef = useRef(null);
   const prevGenerating = useRef(false);
+
+  // Expose flip function to parent via callback ref
+  useEffect(() => {
+    if (flipRef) {
+      flipRef.current = (pageIndex) => {
+        try { bookRef.current?.pageFlip()?.flip(pageIndex); } catch {}
+      };
+    }
+  });
   const [expandedPrompt, setExpandedPrompt] = useState(null);
   const initialPageRef = useRef(() => {
     const p = new URLSearchParams(window.location.search).get('page');
@@ -82,13 +91,21 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
     // ── First generation: cover → first scene flip ──
     if (generating && isFirstGen && !firstGenFlipDone.current && scenes.length > 0) {
       firstGenFlipDone.current = true;
-      const target = singlePage ? 1 : 1;
+      const target = 1;
       lastFlipTarget.current = target;
       // Start flip at 350ms — overlaps with entrance animation for one fluid motion
-      setTimeout(() => {
+      // Retry at 800ms if flip silently fails (book not fully initialized)
+      const doFlip = () => {
         setCurrentPage(target);
-        try { bookRef.current.pageFlip().flip(target); } catch {}
-      }, 350);
+        try { bookRef.current?.pageFlip()?.flip(target); } catch {}
+      };
+      setTimeout(doFlip, 350);
+      setTimeout(() => {
+        try {
+          const cur = bookRef.current?.pageFlip()?.getCurrentPageIndex();
+          if (cur === 0) doFlip();
+        } catch {}
+      }, 800);
     }
 
     // ── First generation, scene 2+: flip to new scene after cover flip done ──
@@ -102,28 +119,19 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
       }
     }
 
-    // ── Subsequent generations: flip to generating page ──
-    if (generating && !isFirstGen) {
-      if (!prevGenerating.current && scenes.length > 0) {
-        const target = singlePage ? scenes.length + 1 : spreadLeftPage(scenes.length + 1);
-        lastFlipTarget.current = target;
-        setTimeout(() => {
-          try { bookRef.current.pageFlip().flip(target); } catch {}
-        }, 200);
-      }
-      if (scenes.length > 0) {
-        let currentIdx;
-        try { currentIdx = bookRef.current.pageFlip().getCurrentPageIndex(); } catch { currentIdx = 0; }
-        const newScenePage = scenes.length;
-        const currentSpreadEnd = singlePage ? currentIdx : currentIdx + 1;
-        if (newScenePage > currentSpreadEnd) {
-          const target = singlePage ? newScenePage : spreadLeftPage(newScenePage);
-          if (target !== lastFlipTarget.current) {
-            lastFlipTarget.current = target;
-            setTimeout(() => {
-              try { bookRef.current.pageFlip().flip(target); } catch {}
-            }, 300);
-          }
+    // ── Subsequent generations: flip to new scene when it arrives ──
+    if (generating && !isFirstGen && scenes.length > scenesAtGenStart.current) {
+      const newScenePage = scenes.length;  // page index of latest scene
+      let currentIdx;
+      try { currentIdx = bookRef.current.pageFlip().getCurrentPageIndex(); } catch { currentIdx = 0; }
+      const currentSpreadEnd = singlePage ? currentIdx : currentIdx + 1;
+      if (newScenePage > currentSpreadEnd) {
+        const target = singlePage ? newScenePage : spreadLeftPage(newScenePage);
+        if (target !== lastFlipTarget.current) {
+          lastFlipTarget.current = target;
+          setTimeout(() => {
+            try { bookRef.current.pageFlip().flip(target); } catch {}
+          }, 300);
         }
       }
     }
@@ -145,15 +153,19 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
       clampedRef.current = false;
       return;
     }
-    if (currentPage <= maxValid) {
+    // Treat cover page (0) as needing a flip when scenes exist
+    const stuckOnCover = currentPage === 0 && maxValid > 0;
+    if (currentPage <= maxValid && !stuckOnCover) {
       clampedRef.current = true;
       return;
     }
-    const target = singlePage ? maxValid : spreadLeftPage(maxValid);
+    const target = stuckOnCover
+      ? 1
+      : (singlePage ? maxValid : spreadLeftPage(maxValid));
     const raf = requestAnimationFrame(() => {
       setTimeout(() => {
         if (!bookRef.current) return;
-        try { bookRef.current.pageFlip().turnToPage(target); } catch {}
+        try { bookRef.current.pageFlip().flip(target); } catch {}
         setCurrentPage(target);
         clampedRef.current = true;
       }, clampedRef.current ? 50 : 400);
@@ -194,7 +206,7 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
   // nodes that react-pageflip has rearranged during flip animations.
   const pageSlots = Math.max(MIN_PAGE_SLOTS, scenes.length + 2);
   const pages = [
-    <CoverPage key="cover" lang={lang} generating={generating && scenes.length === 0} template={template} bookSize={bookSize} />,
+    <CoverPage key="cover" lang={lang} generating={generating && scenes.length === 0} template={template} bookSize={bookSize} language={language} />,
     ...Array.from({ length: pageSlots }, (_, i) => {
       const pageIndex = i + 1;
       return (
@@ -331,7 +343,7 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
               <span>Templates</span>
             </button>
           )}
-          <BookCover templateKey={template} size={bookSize} standalone selected />
+          <BookCover templateKey={template} size={bookSize} standalone selected language={language} />
         </div>
       ) : (
         <>

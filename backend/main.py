@@ -23,6 +23,9 @@ from handlers.director_chat_handlers import (
     handle_director_chat_text,
     handle_director_chat_suggest,
     handle_director_chat_end,
+    handle_director_chat_audio_stream_start,
+    handle_director_chat_audio_chunk,
+    handle_director_chat_audio_stream_end,
 )
 from handlers.generation_flow import handle_generate, handle_hero_photo
 
@@ -265,6 +268,19 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             if msg_type == "director_chat_audio":
                 await handle_director_chat_audio(websocket, message, st)
+                continue
+
+            # ── Streaming audio (realtime input → server-side VAD) ──
+            if msg_type == "director_chat_audio_stream_start":
+                await handle_director_chat_audio_stream_start(websocket, message, st)
+                continue
+
+            if msg_type == "director_chat_audio_chunk":
+                await handle_director_chat_audio_chunk(websocket, message, st)
+                continue
+
+            if msg_type == "director_chat_audio_stream_end":
+                await handle_director_chat_audio_stream_end(websocket, message, st)
                 continue
 
             if msg_type == "director_chat_text":

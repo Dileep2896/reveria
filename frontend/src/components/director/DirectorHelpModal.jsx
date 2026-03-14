@@ -132,6 +132,29 @@ export default function DirectorHelpModal({ onClose }) {
       ),
     },
     {
+      title: 'Accessibility',
+      color: '#22c55e',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" />
+          <path d="M7 9h10M12 9v4M9 16l3-3 3 3" />
+        </svg>
+      ),
+      content: (
+        <>
+          <p>The Director supports <strong>both voice and text input</strong>, making it fully accessible:</p>
+          <ul>
+            <li><strong>Voice mode</strong> — speak naturally to brainstorm with the Director via the Gemini Live API</li>
+            <li><strong>Text mode</strong> — click the <strong>Type</strong> button to switch to text input for users who are deaf, hard of hearing, or prefer typing</li>
+            <li><strong>Transcripts</strong> — all voice interactions are transcribed and shown as text in the chat thread, so nothing is lost</li>
+            <li><strong>Suggest button</strong> — generates a story prompt from your conversation, usable without speaking at all</li>
+          </ul>
+          <p>You can seamlessly switch between voice and text at any time during a session.</p>
+        </>
+      ),
+    },
+    {
       title: 'Live Commentary',
       color: 'var(--accent-primary)',
       icon: (

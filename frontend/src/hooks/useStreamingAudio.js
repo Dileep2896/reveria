@@ -1,24 +1,48 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { AudioScheduler, DEFAULT_GRACE_MS } from './audioScheduler';
+
+const SA_DEBUG = true;
+const saLog = (...args) => SA_DEBUG && console.log('%c[StreamAudio]', 'color: #45b7d1; font-weight: bold', ...args);
 
 /**
  * Hook for gapless PCM audio playback from base64-encoded chunks.
- * Schedules AudioBufferSourceNodes back-to-back on a Web Audio timeline.
+ * Delegates scheduling logic to AudioScheduler (pure, testable).
  */
 export default function useStreamingAudio({ onPlaybackStart, onPlaybackEnd } = {}) {
   const [playing, setPlaying] = useState(false);
   const ctxRef = useRef(null);
-  const nextTimeRef = useRef(0);
-  const activeCountRef = useRef(0);
   const analyserRef = useRef(null);
   const dataArrayRef = useRef(null);
-  const playingRef = useRef(false);
   const onStartRef = useRef(onPlaybackStart);
   const onEndRef = useRef(onPlaybackEnd);
   onStartRef.current = onPlaybackStart;
   onEndRef.current = onPlaybackEnd;
 
+  // Scheduler manages timeline + active-source counting + grace period
+  const schedulerRef = useRef(null);
+  if (!schedulerRef.current) {
+    schedulerRef.current = new AudioScheduler({
+      graceMs: DEFAULT_GRACE_MS,
+      onStart: () => {
+        saLog('▶️ Playback STARTED');
+        setPlaying(true);
+        onStartRef.current?.();
+      },
+      onEnd: () => {
+        saLog('⏹️ Playback ENDED');
+        setPlaying(false);
+        onEndRef.current?.();
+      },
+    });
+  }
+
   // Lazily create AudioContext + AnalyserNode
   const getCtx = useCallback(() => {
+    if (ctxRef.current && ctxRef.current.state === 'closed') {
+      ctxRef.current = null;
+      analyserRef.current = null;
+      dataArrayRef.current = null;
+    }
     if (!ctxRef.current) {
       const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
       const analyser = ctx.createAnalyser();
@@ -30,7 +54,7 @@ export default function useStreamingAudio({ onPlaybackStart, onPlaybackEnd } = {
       dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
     }
     if (ctxRef.current.state === 'suspended') {
-      ctxRef.current.resume();
+      ctxRef.current.resume().catch(() => {});
     }
     return ctxRef.current;
   }, []);
@@ -38,6 +62,7 @@ export default function useStreamingAudio({ onPlaybackStart, onPlaybackEnd } = {
   const feedChunk = useCallback((b64data) => {
     const ctx = getCtx();
     const analyser = analyserRef.current;
+    const scheduler = schedulerRef.current;
 
     // Decode base64 to PCM 16-bit LE
     const raw = atob(b64data);
@@ -55,53 +80,31 @@ export default function useStreamingAudio({ onPlaybackStart, onPlaybackEnd } = {
     source.buffer = buffer;
     source.connect(analyser);
 
-    // Schedule gapless playback
-    const now = ctx.currentTime;
-    const startAt = Math.max(now, nextTimeRef.current);
-    nextTimeRef.current = startAt + buffer.duration;
-
-    activeCountRef.current++;
-    if (!playingRef.current) {
-      playingRef.current = true;
-      setPlaying(true);
-      onStartRef.current?.();
-    }
+    const { startAt } = scheduler.scheduleChunk(ctx.currentTime, buffer.duration);
 
     source.onended = () => {
-      activeCountRef.current--;
-      if (activeCountRef.current <= 0) {
-        activeCountRef.current = 0;
-        playingRef.current = false;
-        setPlaying(false);
-        onEndRef.current?.();
-      }
+      scheduler.onSourceEnded();
     };
 
     source.start(startAt);
   }, [getCtx]);
 
   const stop = useCallback(() => {
+    saLog(`🛑 stop() called`);
+    schedulerRef.current.stop();
     if (ctxRef.current) {
       ctxRef.current.close().catch(() => {});
       ctxRef.current = null;
       analyserRef.current = null;
     }
-    activeCountRef.current = 0;
-    nextTimeRef.current = 0;
-    if (playingRef.current) {
-      playingRef.current = false;
-      setPlaying(false);
-      onEndRef.current?.();
-    }
   }, []);
 
   const reset = useCallback(() => {
-    // Reset scheduling timeline for new response (don't close context)
-    nextTimeRef.current = 0;
+    schedulerRef.current.reset();
   }, []);
 
   const getAmplitude = useCallback(() => {
-    if (!analyserRef.current || !dataArrayRef.current || !playingRef.current) return 0;
+    if (!analyserRef.current || !dataArrayRef.current || !schedulerRef.current.playing) return 0;
     analyserRef.current.getByteFrequencyData(dataArrayRef.current);
     let sum = 0;
     for (let i = 0; i < dataArrayRef.current.length; i++) sum += dataArrayRef.current[i];
@@ -111,6 +114,7 @@ export default function useStreamingAudio({ onPlaybackStart, onPlaybackEnd } = {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      schedulerRef.current?.stop();
       if (ctxRef.current) {
         ctxRef.current.close().catch(() => {});
         ctxRef.current = null;

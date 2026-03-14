@@ -305,7 +305,7 @@
   position: absolute;
   left: calc(50% - 14px);
   width: 14px;
-  background: linear-gradient(180deg, #4a3070 0%, #2a1845 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-primary) 35%, #1a1520) 0%, color-mix(in srgb, var(--accent-primary) 20%, #0a0810) 100%);
   border-radius: 3px 0 0 3px;
   box-shadow: inset -2px 0 4px rgba(0,0,0,0.3), -2px 0 8px rgba(0,0,0,0.2);
   z-index: 10;

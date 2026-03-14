@@ -14,12 +14,12 @@ What makes it different from "give me a story" ChatGPT wrappers is the **Directo
 
 The other thing worth noting: this isn't a single API call. It's a multi-agent pipeline built on Google's Agent Development Kit (ADK), with Gemini 2.0 Flash for text, Imagen 3 for illustrations, Gemini Live API for voice, and Gemini Native Audio for narration. Each agent runs at a different temperature tuned for its task. The result feels less like "AI generated this" and more like watching a creative team work.
 
-Beyond generation, Reveria is a full application: a Library for your saved stories, an Explore page for discovering published work from other users, Reading Mode with karaoke-style narration, PDF export, 8-language support, 12 story templates, 32+ art styles, social features (likes, ratings, comments), and share links for public viewing.
+Beyond generation, Reveria is a full application: a Library for your saved stories, an Explore page for discovering published work from other users, Reading Mode with karaoke-style narration, PDF export, 8-language support, 9 story templates, 30+ art styles, social features (likes, ratings, comments), and share links for public viewing.
 
-**Live app**: [reveria.web.app](https://reveria.web.app) | **Source**: [github.com/Dileep2896/storyforge](https://github.com/Dileep2896/storyforge)
+**Live app**: [reveria.web.app](https://reveria.web.app) | **Source**: [github.com/Dileep2896/reveria](https://github.com/Dileep2896/reveria)
 
 ![Template Chooser](Screenshot/01-template-chooser.jpg)
-*12 story templates, from Storybook to Manga to Noir Detective*
+*9 story templates, from Storybook to Manga to Photo Journal*
 
 ---
 
@@ -215,13 +215,17 @@ The fix: stream PCM audio chunks incrementally. The backend's `collect_response_
 
 The two audio paths coexist cleanly. Streaming handles normal conversational responses. The legacy `Audio(dataUrl)` path handles greetings (session start) and tool call acknowledgments, which still use the non-streaming endpoint.
 
-### Barge-In: Interrupting the Director
+### Mute: Stopping Director Audio
 
-Real conversations have interruptions. The Director Chat now supports barge-in — start speaking while the Director is talking, and the Director's audio cuts immediately.
+Tapping the voice orb while the Director is speaking immediately stops all audio playback — both streaming PCM and legacy Audio elements. Recording resumes automatically so the user can speak next. Simple, reliable, no false triggers from background noise.
 
-The implementation keeps the microphone hot during Director speech. When Director audio starts playing (either streaming or legacy), recording begins immediately with `echoCancellation: true`. The existing VAD (Voice Activity Detection) monitors for actual speech onset via an `onVoiceStart` callback. When the user speaks, `handleVoiceStart` fires: `stopStreaming()` kills all scheduled Web Audio sources, the legacy `Audio` element is paused, and `speaking` state drops to false. The user's speech is captured normally and sent when silence is detected.
+### Silent User Re-Engagement
 
-Manual barge-in also works: tapping the orb during the `speaking` state triggers the same interrupt flow.
+A subtle UX problem: the Director greets you, the mic goes hot, and... you don't speak. Maybe you're thinking. Maybe you're confused about what to do next. The VAD auto-stop only triggers after speech→silence, so no speech means the recording runs forever, the orb sits in "recording" state, and nothing happens. Dead end.
+
+The solution uses a 10-second idle timeout in `useVoiceCapture.js`. If the VAD never detects speech (RMS never crosses the threshold), the recording silently aborts and fires an `onIdleTimeout` callback. In `DirectorChat.jsx`, this sends a silent system message to the Director — invisible in the chat transcript — asking it to re-engage the user with a creative question or story suggestion. A dedup guard ensures only one nudge per silence period, resetting when the user actually speaks.
+
+The Director doesn't know you're silent — it just gets a gentle prompt to be more engaging. From the user's perspective, the Director seems to sense the pause and offers help.
 
 ### Voice-Reactive Orb
 
@@ -233,11 +237,7 @@ The key to making it feel alive: **asymmetric smoothing**. Fast attack (0.25-0.3
 
 Three layers create depth at minimal GPU cost: an outer glow blob (CSS blur), the main radial-gradient blob (canvas), and an inner specular highlight (canvas). The icon overlay fades out during the `speaking` state — the blob itself becomes the visualization. At 72px with DPR capped at 2, it's 144x144 pixels of canvas fill per frame. Negligible.
 
-### Director Navigation
 
-The Director can now navigate you around the app. Say "take me to my library" or "let's start a new story," and the Director uses a `navigate_app` tool call to route you there. Four destinations: library, explore, new_story, and settings.
-
-The graceful part: before navigating away, the Director Chat session ends cleanly. There's a 1.5-second delay so the Director's farewell audio has time to start playing before the page transition happens.
 
 ![Director Chat](Screenshot/04-director-chat.jpg)
 *Voice brainstorming with the Director, then watching generation unfold*
@@ -308,7 +308,7 @@ The template selector uses a 3D coverflow carousel. Each card tilts in perspecti
 
 ### Art Styles Per Template
 
-Each template curates a subset of the 32+ available art styles that suit its format. Manga templates surface ink-and-screentone styles. Storybook templates surface watercolor and painterly styles. Noir Detective surfaces high-contrast and monochrome options. This keeps the dropdown focused rather than overwhelming users with 30+ choices that mostly don't fit their chosen format.
+Each template curates a subset of the 30+ available art styles that suit its format. Manga templates surface ink-and-screentone styles. Storybook templates surface watercolor and painterly styles. Comic Book surfaces classic comic and noir options. This keeps the dropdown focused rather than overwhelming users with 30+ choices that mostly don't fit their chosen format.
 
 The art style suffix itself is 20-25 words of rendering-specific detail. Not just "watercolor" but "traditional watercolor illustration, soft translucent washes, visible paper texture, delicate wet-on-wet brushstrokes, gentle color bleeding at edges, hand-painted look, luminous highlights, muted pastel palette." These details give Imagen concrete visual targets.
 
@@ -392,7 +392,7 @@ The background task starts automatically after the first generation completes. B
 
 ### Art Styles as First-Class Citizens
 
-We offer 32+ art styles, each with a rich suffix (20-25 words) including rendering-specific details:
+We offer 30+ art styles, each with a rich suffix (20-25 words) including rendering-specific details:
 
 ```python
 ART_STYLES = {
@@ -477,6 +477,22 @@ Reveria generates stories in 8 languages: English, Spanish, French, German, Japa
 The key insight: making it a field on `SharedPipelineState` (alongside art style) was the cleanest pattern. Every agent reads it from the same place. Adding a new language is a one-line addition to the voice mapping; the rest of the pipeline handles it automatically.
 
 The Director Chat also speaks the story's language. For non-English stories, language directives are appended to the Director's system prompt, so brainstorming happens in the user's chosen language.
+
+### Gemini Native Interleaved Output
+
+The hackathon requires using Gemini's interleaved/mixed output capabilities. Our primary generation path now uses `response_modalities: ["TEXT", "IMAGE"]` in `GenerateContentConfig`, making Gemini generate text and images together in a single call. The response contains mixed `Part` objects — text parts and image parts with inline data.
+
+But here's the key design decision: **Imagen 3 is always primary for images**. The Gemini native image is only a tier-0 fallback when Imagen fails entirely. Why? Character consistency. Our full pipeline — character sheet extraction, visual DNA from anchor portraits, hybrid prompt construction with verbatim descriptions — only works with Imagen. Gemini's native images bypass all of that. They're fine for a single scene, but characters would look completely different across a multi-scene story.
+
+The flow: Narrator generates text+images via interleaved output. Scene text streams to the frontend. Then Imagen runs the full character consistency pipeline. If Imagen succeeds (vast majority of cases), its image replaces the Gemini native one. If Imagen fails (quota, safety filter, timeout), the Gemini native image serves as a reasonable fallback instead of showing nothing.
+
+### Multilingual Template Cards
+
+When users select a non-English language, the template cards in the carousel translate their names, descriptions, and taglines. A `TEMPLATE_I18N` map provides translations for all 9 templates across 7 languages (Hindi, Spanish, French, Japanese, German, Portuguese, Chinese). The ControlBar also shows a globe indicator pill with the active language name when non-English is selected.
+
+### Director Chat Text Input
+
+For demo reliability, the Director Chat now has a text input fallback. A "Type" button toggles a text input field between the transcript and action buttons. When voice recognition has issues (background noise, mic problems, demo environments), the presenter can type messages to the Director instead. The text goes through the same `send_text()` path on the Live session.
 
 ---
 
@@ -564,7 +580,7 @@ The lesson: auditing code quality catches bugs in what you *wrote*. Auditing int
 
 ### 7. Templates Are Modes, Not Skins
 
-Adding 12 story templates seemed cosmetic. In practice, a Manga template changes the scene composer, activates the text-free defense stack, adjusts TTS to narrate only overlay text, and shifts the Narrator's tone. When a "configuration option" touches four or more pipeline stages, it's not configuration. It's a mode. Treat it as first-class architecture.
+Adding 9 story templates seemed cosmetic. In practice, a Manga template changes the scene composer, activates the text-free defense stack, adjusts TTS to narrate only overlay text, and shifts the Narrator's tone. When a "configuration option" touches four or more pipeline stages, it's not configuration. It's a mode. Treat it as first-class architecture.
 
 ### 8. Denormalize for Instant UI
 
@@ -592,11 +608,12 @@ Google's ADK let us compose agents like building blocks. `SequentialAgent` for o
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| Frontend | React + Tailwind CSS + Vite | Story canvas, director mode, library, explore |
+| Frontend | React + CSS (glassmorphism) + Vite | Story canvas, director mode, library, explore |
 | Real-time | WebSocket (native) | Stream interleaved output |
 | Backend | Python 3.12 + FastAPI + Uvicorn | WebSocket handler, orchestration |
 | Agent Framework | Google ADK | Multi-agent orchestration |
 | LLM | Gemini 2.0 Flash (Vertex AI) | Story generation, prompt engineering, analysis |
+| Interleaved Output | Gemini Native (`response_modalities: ["TEXT", "IMAGE"]`) | Text+image in single call (Imagen primary, Gemini fallback) |
 | Image Gen | Imagen 3 (Vertex AI) | Scene illustrations, book covers |
 | Director Chat | Gemini Live API (`gemini-live-2.5-flash-native-audio`) | Real-time voice brainstorming |
 | Voice | Web Audio API + Gemini Native Audio | Input capture + expressive narration |
@@ -611,18 +628,18 @@ Google's ADK let us compose agents like building blocks. `SequentialAgent` for o
 
 ## What's Next
 
-Even with our hybrid prompt architecture (verbatim character sheets, anti-drift anchoring, hex color codes, vision-anchored visual DNA), characters can still drift across scenes because each Imagen call is independent. The biggest remaining quality challenge.
+Even with our hybrid prompt architecture (verbatim character sheets, anti-drift anchoring, hex color codes, vision-anchored visual DNA), characters can still drift across scenes because each Imagen call is independent. The biggest remaining quality challenge. Gemini Native Interleaved Output provides a fallback, but the real fix will be visual anchor APIs.
 
 - **Imagen Visual Anchor API** (`CONTROL_TYPE_FACE_MESH`): use the first scene's character render as a reference image for subsequent scenes. Deferred due to pose constraints in dynamic story scenes, but the most promising path to true character consistency. Dynamic weight adjustment and cross-scene visual DNA feedback are also on the table.
 - **Cinematic Video Scenes (Veo 2)**: short video clips for high-tension climax scenes, triggered when the Director's `tension_level >= 8`. Auto-play on page flip with a golden "Cinematic" border treatment.
-- **Mobile Director Experience**: the voice-reactive orb (canvas blob with amplitude-driven deformation, barge-in, streaming audio) is built. The next step is adapting it for mobile: a floating FAB placement with bottom-sheet transcript drawer, touch-optimized hit targets, and power-efficient animation on lower-end devices.
+- **Mobile Director Experience**: the voice-reactive orb (canvas blob with amplitude-driven deformation, mute-to-stop, streaming audio) is built. The next step is adapting it for mobile: a floating FAB placement with bottom-sheet transcript drawer, touch-optimized hit targets, and power-efficient animation on lower-end devices.
 - **Multi-Voice Narration**: character-specific voices so dialogue scenes sound like distinct people, mapped from personality traits in the Director's character analysis. The current single-narrator approach works for prose but falls flat in dialogue-heavy scenes.
 
 ---
 
 ## Try It
 
-**Source code**: [github.com/Dileep2896/storyforge](https://github.com/Dileep2896/storyforge)
+**Source code**: [github.com/Dileep2896/reveria](https://github.com/Dileep2896/reveria)
 
 **Live app**: [reveria.web.app](https://reveria.web.app)
 

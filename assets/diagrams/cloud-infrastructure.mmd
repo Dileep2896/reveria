@@ -14,11 +14,12 @@ flowchart TB
         direction TB
         CloudRun["Cloud Run<br/>Backend Container<br/>(FastAPI + Uvicorn)"]
 
-        subgraph AI["AI & ML Services"]
+        subgraph AI["Google AI Services"]
             direction LR
-            VertexGemini["Vertex AI<br/>Gemini 2.0 Flash<br/>(text generation)"]
-            VertexImagen["Vertex AI<br/>Imagen 3<br/>(image generation)"]
-            GTTS["Gemini Native Audio<br/>(Live API, scene narration)"]
+            VertexGemini["Gemini 2.5 Flash<br/>Interleaved Output<br/>(text + image in one call)"]
+            VertexImagen["Imagen 3<br/>(quality upgrade +<br/>character consistency)"]
+            GeminiLive["Gemini Live API<br/>send_realtime_input<br/>(bidirectional audio +<br/>native tool calling +<br/>server-side VAD)"]
+            GTTS["Gemini Native Audio<br/>(Live API TTS,<br/>multi-voice narration)"]
         end
 
         GCSBucket[("Cloud Storage<br/>storyforge-hackathon-media<br/>──────────────────<br/>scene images (WebP)<br/>cover images (WebP)<br/>portrait images (WebP)")]
@@ -30,9 +31,10 @@ flowchart TB
     Browser -->|"Firestore SDK<br/>(library, explore,<br/>favorites, likes,<br/>ratings, comments)"| FBFirestore
 
     FBAuth -->|"verify ID token"| CloudRun
-    CloudRun -->|"Gemini API"| VertexGemini
-    CloudRun -->|"Imagen API"| VertexImagen
-    CloudRun -->|"Live API (audio)"| GTTS
+    CloudRun -->|"Interleaved Output<br/>(TEXT + IMAGE)"| VertexGemini
+    CloudRun -->|"Character-consistent<br/>image upgrade"| VertexImagen
+    CloudRun -->|"Director Chat<br/>(PCM streaming)"| GeminiLive
+    CloudRun -->|"Scene narration<br/>(native audio)"| GTTS
     CloudRun -->|"persist stories<br/>+ scenes"| FBFirestore
     CloudRun -->|"upload images"| GCSBucket
     GCSBucket -->|"public URLs"| Browser
