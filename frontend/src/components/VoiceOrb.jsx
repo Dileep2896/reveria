@@ -89,8 +89,6 @@ export default function VoiceOrb({ mode = 'idle', getAmplitude, size = 72 }) {
 
     // Detect mode change
     if (st.prevMode !== mode) {
-      const curPalette = MODE_PALETTES[mode] || MODE_PALETTES.idle;
-      const curSpeeds = MODE_SPEEDS[mode] || MODE_SPEEDS.idle;
       // Snapshot current interpolated palette
       st.prevPalette = st.prevPalette.map((c, i) =>
         lerpColor(c, (MODE_PALETTES[st.prevMode] || MODE_PALETTES.idle)[i], st.modeT)

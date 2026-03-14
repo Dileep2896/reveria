@@ -47,7 +47,6 @@ export function createWsHandlers({
   setHeroMode,
   setGenerationStage,
   onLanguageDetected,
-  onNavigate,
   onAudioChunk,
   onAudioDone,
 }) {

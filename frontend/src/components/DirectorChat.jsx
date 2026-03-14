@@ -10,7 +10,6 @@ const dcLog = (...args) => DC_DEBUG && console.log('%c[DirectorChat]', 'color: #
 const dcWarn = (...args) => DC_DEBUG && console.warn('%c[DirectorChat]', 'color: #ffa86c; font-weight: bold', ...args);
 
 export default function DirectorChat({
-  onSendAudio,
   onSendAudioChunk,
   onAudioStreamStart,
   onAudioStreamEnd,
@@ -169,7 +168,7 @@ export default function DirectorChat({
     onNudge?.(NUDGE_PROMPTS[idx] || NUDGE_PROMPTS[NUDGE_PROMPTS.length - 1]);
   }, [onNudge]);
 
-  const { recording, startRecording, stopRecording, abortRecording, resetIdleTimer, getAmplitude: getMicAmplitude, releaseStream } = useVoiceCapture({
+  const { recording, startRecording, stopRecording, abortRecording, getAmplitude: getMicAmplitude, releaseStream } = useVoiceCapture({
     onAudioChunk: handleAudioChunk,
     onStreamStart: handleStreamStart,
     onStreamEnd: handleStreamEnd,
