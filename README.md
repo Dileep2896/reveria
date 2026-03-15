@@ -1,10 +1,10 @@
 # Reveria
 
-**Stories from your imagination** — an interactive multimodal story engine powered by Google Gemini
+**Stories from your imagination** -an interactive multimodal story engine powered by Google Gemini
 
-Reveria is an interactive multimodal story engine. Users choose a story template, describe a scenario via voice or text — a mystery, a children's bedtime story, a comic adventure, a manga epic — and the agent builds it live. It generates scene illustrations, narrative text, narrated voiceover, and an interactive storybook, all streaming as interleaved output. Users can interrupt and steer the narrative in real-time ("make the villain scarier," "add a plot twist"), and the story dynamically reshapes.
+Reveria is an interactive multimodal story engine. Users choose a story template, describe a scenario via voice or text -a mystery, a children's bedtime story, a comic adventure, a manga epic -and the agent builds it live. It generates scene illustrations, narrative text, narrated voiceover, and an interactive storybook, all streaming as interleaved output. Users can interrupt and steer the narrative in real-time ("make the villain scarier," "add a plot twist"), and the story dynamically reshapes.
 
-**Killer Feature — Director Chat:** A voice-based brainstorming partner powered by Gemini Live API. Talk through your story ideas with the Director, who listens, suggests creative directions, and triggers generation when the moment is right. A split-screen Director Panel reveals the agent's creative reasoning — narrative structure decisions, tension arcs, character development logic, and per-scene mood analysis.
+**Killer Feature -Director Chat:** A voice-based brainstorming partner powered by Gemini Live API. Talk through your story ideas with the Director, who listens, suggests creative directions, and triggers generation when the moment is right. A split-screen Director Panel reveals the agent's creative reasoning -narrative structure decisions, tension arcs, character development logic, and per-scene mood analysis.
 
 Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Storyteller Track).
 
@@ -25,7 +25,7 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 | Service                                   | Usage                                                                            | Key API                                  |
 | ----------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------- |
-| **Gemini 2.0 Flash — Interleaved Output** | Text + image generation in one call                                              | `response_modalities: ["TEXT", "IMAGE"]` |
+| **Gemini 2.0 Flash -Interleaved Output** | Text + image generation in one call                                              | `response_modalities: ["TEXT", "IMAGE"]` |
 | **Gemini Live API**                       | Director Chat: bidirectional native audio conversation                           | `send_realtime_input()`, server-side VAD |
 | **Gemini Native Audio**                   | Multi-voice scene narration (emotion-aware TTS)                                  | Live API audio output                    |
 | **Gemini Vision**                         | Visual DNA extraction from character portraits                                   | `generate_content()` with image input    |
@@ -37,11 +37,11 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 | Pattern                  | Implementation                                                                                            |
 | ------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Native tool calling      | Director Chat's `generate_story` tool — Gemini decides when brainstorming is done and triggers generation |
+| Native tool calling      | Director Chat's `generate_story` tool -Gemini decides when brainstorming is done and triggers generation |
 | Native transcription     | `input_audio_transcription` + `output_audio_transcription` in Live API session config                     |
 | Context compression      | `ContextWindowCompressionConfig(sliding_window=SlidingWindow())` for long conversations                   |
 | Server-side VAD          | `AutomaticActivityDetection` with `startOfSpeechSensitivity: HIGH`, `endOfSpeechSensitivity: LOW`         |
-| Continuous PCM streaming | AudioWorklet → `send_realtime_input(audio=Blob)` — no client-side speech detection                        |
+| Continuous PCM streaming | AudioWorklet → `send_realtime_input(audio=Blob)` -no client-side speech detection                        |
 | Tiered image fallback    | Tier 2 (Imagen) → Tier 1 (Imagen reduced) → Tier 0 (Gemini native interleaved image)                      |
 | Per-scene streaming      | Image + audio + director tasks spawn per-scene as narrator text completes                                 |
 | Visual DNA pipeline      | Anchor portraits (Imagen) → Gemini Vision analysis → 150-word descriptors → scene prompt injection        |
@@ -53,74 +53,74 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 |                                                                                               |                                                                                           |
 | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | ![Template Chooser](Screenshot/01-template-chooser.jpg)                                       | ![Story Generation](Screenshot/02-story-generation.jpg)                                   |
-| **Template Chooser** — Pick from 9 story templates via a 3D coverflow carousel                | **Story Generation** — Live text, image, and audio streaming with Director analysis panel |
+| **Template Chooser** -Pick from 9 story templates via a 3D coverflow carousel                | **Story Generation** -Live text, image, and audio streaming with Director analysis panel |
 | ![Book Details](Screenshot/03-book-details.png)                                               | ![Director Chat](Screenshot/04-director-chat.jpg)                                         |
-| **Book Details** — Published story page with characters, genres, ratings, and social features | **Director Chat** — Voice brainstorming with the AI Director powered by Gemini Live API   |
+| **Book Details** -Published story page with characters, genres, ratings, and social features | **Director Chat** -Voice brainstorming with the AI Director powered by Gemini Live API   |
 
 ---
 
 ## Features
 
-- **Story Templates** — 9 curated templates (Storybook, Comic Book, Webtoon, Hero Quest, Manga, Novel, Diary, Poetry, Photo Journal) with unique cover designs, art styles, and formatting. Template selection via a 3D coverflow carousel before story creation
-- **30+ Art Styles** — Cinematic, Watercolor, Comic, Anime, Pixar 3D, Studio Ghibli, Marvel, Cyberpunk, Oil Painting, Pencil Sketch, Classic Comic, Noir Comic, Superhero, Indie Comic, Romantic Webtoon, Action Webtoon, Slice of Life, Fantasy Webtoon, Epic Fantasy, Shonen Manga, Shojo Manga, Seinen Manga, Chibi, Journal Sketch, Ink Wash, Impressionist, Ethereal, Minimalist, Photorealistic, Documentary, Retro Film. Each template gets its own curated subset
-- **Multimodal Storytelling** — Text, images, and audio stream together in real-time as an interactive flipbook in spread mode
-- **Visual Narrative Templates** — Comic Book, Manga, and Webtoon templates with character-focused composition (60%+ frame), text-free panel art, overlay text placement via Gemini Vision, and sequential image-to-audio pipeline
-- **Text-Free Images** — Triple-layer defense for visual narratives: scene composer instruction, positive prefix, art style suffix, and negative constraints ensure clean panel art without text artifacts
-- **Voice Input** — Voice capture using Web Audio API for hands-free story steering
-- **Audio Narration** — Gemini native audio (via Live API) narrates each scene with expressive, mood-adaptive voiceover
-- **Per-Scene Streaming** — Images and audio generate per-scene as text completes, not after all scenes. Scene 1's image paints in while Scene 2 is still being written
-- **Cinematic Book Opening** — When the first prompt is sent, the cover page appears with a faux spine, entrance animation with brightness bloom, then a synchronized flip and slide to the first scene
-- **Portraits and Visual DNA** — Anchor portraits generated before scene images using Imagen. Gemini Vision analyzes each portrait to extract visual DNA (100-150 word natural-language description), which is used for consistent character rendering across all scenes
-- **Hybrid Character Consistency** — Three-stage image pipeline: character sheet extraction, scene composition (Gemini), verbatim character descriptions prepended to prompt. Split DNA separates physical traits from style traits, with outfit descriptions automatically stripped when scene text describes clothing changes
-- **Director Chat** — Voice-based brainstorming with the Director using Gemini Live API (`gemini-live-2.5-flash-native-audio`). Continuous PCM streaming via AudioWorklet with Gemini's server-side VAD (no client-side speech detection). Features native tool calling (model decides when to generate), native transcription, `send_realtime_input()` for zero-latency audio delivery, text input fallback, 8 configurable voices, streaming audio for low-latency voice, mute (tap to stop Director audio), and silent re-engagement nudge. After generation, a single combined wrap-up message replaces overlapping audio
-- **Director Panel** — A focused sidebar with 4 sections: **Scene Insight Pair** (spread-aware left/right cards with mood, tension bars, and expandable craft notes), **Story Health** (5-dimension quality bars for Pacing, Characters, World, Dialogue, Coherence), **Story Details** (Next Direction, Characters, Visual Style, Themes, Emotional Arc), and **Live Notes** (collapsible director commentary with audio playback). Accumulated scenes persist across batches so analysis always covers the full story
-- **Live Director Commentary** — Real-time per-scene creative notes (mood, tension, craft observations) stream to the Director Panel during generation
-- **Mid-Generation Steering** — Type direction changes while the story generates. Steering is injected between scenes via the narrator's conversation history
-- **Separated Generation Modes** — ControlBar generates stories with narrator + images + audio only (fast, no Director overhead). Director Chat triggers full Director pipeline with live commentary, proactive scene reactions, and creative suggestions
-- **Playful Safety Redirect** — Instead of hard error toasts for inappropriate content, the narrator redirects in-character ("That part of the library is forbidden! Let's explore this path instead...")
-- **Interactive Flipbook** — Always-spread layout with realistic page-turn animation, keyboard navigation (arrow keys), and dot-based page navigation
-- **Firebase Auth** — Google Sign-In + email/password sign-up with email verification
-- **Story Persistence** — Cloud Firestore saves stories, scenes, and generations with AI-generated titles and cover images
-- **Art Style Memory** — Selected art style is persisted per story and restored when reopening from Library
-- **Library** — Personal bookshelf with 3D CSS book cards, favorites (heart toggle), status filters (All/Favorites/Saved/Completed), search, and sort (Recent/Title)
-  - **Cover Generation State** — Books awaiting AI covers show a blurred, desaturated placeholder with animated "Painting cover..." overlay that auto-refreshes when complete
-  - **Delete with Active Story Cleanup** — Deleting the currently active story properly clears WebSocket state and URL
-- **Explore** — Browse publicly published stories with likes, liked filter, search, and sort (Recent/Title/Author)
-- **Social Features** — Likes (optimistic toggle), star ratings (with average display), and comments on published stories. Story authors can moderate comments on their own stories
-- **Save and Complete Flow** — Save stories to Library, mark as Complete (locks editing), publish to Explore for others to read
-- **Completed Book Protection** — Completed books are read-only regardless of entry point (Library or Explore)
-- **URL Routing** — Deep-linkable story URLs (`/story/:id?page=N`) with auto-resume on page reload
-- **Image Loading States** — "Painting scene" shimmer placeholder while Imagen generates; graceful fallbacks with specific user messages for quota, safety filter, timeout errors
-- **Cover Art Style Matching** — AI-generated book covers use the same art style suffix as scene illustrations
-- **Glassmorphism UI** — Frosted glass panels with dark/light theme support
-- **Toast Notifications** — Global notification system (success/error/warning/info) with auto-dismiss, progress bars, and glassmorphism styling
-- **Multi-Language Stories** — Generate stories in 8 languages (English, Spanish, French, German, Japanese, Hindi, Portuguese, Chinese) with Gemini native audio narration
-- **Multilingual Template Cards** — Template names, descriptions, and taglines translate to the user's selected language (Hindi, Spanish, French, Japanese, German, Portuguese, Chinese) via a built-in i18n map
-- **Language Indicator** — Globe pill in the ControlBar shows the active story language when non-English
-- **Generation Stage Messages** — ControlBar shows fun contextual messages during generation ("Summoning the narrator...", "Painting the scene...", "Gathering the portraits...")
-- **Share Link** — Copy a public URL for published stories; unauthenticated users can view shared stories with a "Sign in to create" CTA
-- **PDF Export** — Download any saved story as a polished PDF storybook with cover page, scene illustrations, decorative typography, and page numbering
-- **Reading Mode** — Full-screen immersive experience with karaoke-style word-by-word narration highlighting, auto-advance between scenes, bookmarking, and keyboard controls
-- **Author Attribution** — Story author name and photo automatically captured from Firebase Auth and stored on story creation
-- **Portal-Based Tooltips** — Custom glassmorphism tooltips using React `createPortal` that escape overflow:hidden containers
-- **Smart Regen UX** — Scene regeneration keeps old image visible during generation; failed regen preserves previous image instead of showing error
-- **Writing Skeleton Animation** — Animated skeleton lines with typing cursor glow and shimmer sweep during scene generation and rewriting
-- **Subscription Tiers** — Free, Standard, and Pro tiers with per-tier usage limits (generations, scene regens, PDF exports); usage tracking via backend `/api/usage` endpoint
-- **Admin Dashboard** — Admin-only panel for managing user tiers (promote/demote between free/standard/pro)
-- **Pro User Visual Indicators** — Tier-based avatar styling: Pro users get a golden glowing ring + amber "PRO" pill; Standard gets violet ring + pill; Free shows default glass border
-- **Theme-Aware Book Shadows** — Light mode uses softer book depth shadows and page gutter shadows via CSS variables
-- **Settings Dialog** — Centralized settings for theme (light/dark) and Director voice selection
-- **Server-Side VAD** — Gemini's built-in speech activity detection (startSensitivity: HIGH, endSensitivity: LOW) replaces client-side VAD. AudioWorklet streams raw PCM continuously; Gemini decides when the user stopped speaking
-- **Hero Mode** — Upload a selfie to become the protagonist; Gemini Vision extracts Visual DNA, injected into character sheets for personalized illustrations in trend art styles
-- **Token Expiry Recovery** — Automatic WebSocket reconnection and REST token refresh on auth failure
-- **404 Page** — Themed not-found page with navigation to create or explore stories
-- **Marble Avatar Fallbacks** — Users without profile photos get unique deterministic marble gradient avatars (via `boring-avatars`)
-- **Voice-Reactive Orb** — Canvas-based organic blob animation (`VoiceOrb.jsx`) with 8-point Catmull-Rom spline interpolation and pseudo-noise via overlapping sine waves. Real-time audio amplitude from mic (recording) or streaming audio (Director speaking) drives blob deformation with asymmetric smoothing (fast attack, slow decay). 6 visual modes: idle (violet), recording (red), speaking (amber), loading, watching, waiting. 3-layer composition: outer glow, main gradient, inner specular highlight
-- **Streaming Director Audio** — Low-latency PCM audio streaming for Director voice. Backend streams PCM chunks incrementally via WebSocket (`director_chat_audio_chunk` messages) instead of waiting for the full response. Frontend `useStreamingAudio` hook uses Web Audio API to schedule gapless playback — Director's voice starts playing as soon as the first chunk arrives. Legacy `Audio(dataUrl)` path still used for greetings and tool call acknowledgments
-- **Mute Director Audio** — Tap the voice orb during Director speech to immediately stop playback. Recording resumes automatically so the user can speak next
-- **Echo Prevention** — Recording automatically stops when Director speaks (prevents mic pickup); fresh recording starts 500ms after Director finishes. Server-side VAD + `echoCancellation: true` handle residual echo
-- **Director Security (5 Layers)** — Regex input pre-screening (instruction override, role switching, DAN jailbreaks, multi-language injection, structured format injection, encoding tricks), output post-screening (character breaks, prompt leaks, off-topic detection), system prompt identity anchoring, re-anchoring every 5 messages, and flagged streaming audio kill (stops playback immediately when post-screening flags a response)
-- **CI/CD Pipeline** — GitHub Actions with 4 jobs: backend tests, frontend tests, backend deploy (Cloud Run), frontend deploy (Firebase Hosting). Auto-deploys on merge to `main`
+- **Story Templates** -9 curated templates (Storybook, Comic Book, Webtoon, Hero Quest, Manga, Novel, Diary, Poetry, Photo Journal) with unique cover designs, art styles, and formatting. Template selection via a 3D coverflow carousel before story creation
+- **30+ Art Styles** -Cinematic, Watercolor, Comic, Anime, Pixar 3D, Studio Ghibli, Marvel, Cyberpunk, Oil Painting, Pencil Sketch, Classic Comic, Noir Comic, Superhero, Indie Comic, Romantic Webtoon, Action Webtoon, Slice of Life, Fantasy Webtoon, Epic Fantasy, Shonen Manga, Shojo Manga, Seinen Manga, Chibi, Journal Sketch, Ink Wash, Impressionist, Ethereal, Minimalist, Photorealistic, Documentary, Retro Film. Each template gets its own curated subset
+- **Multimodal Storytelling** -Text, images, and audio stream together in real-time as an interactive flipbook in spread mode
+- **Visual Narrative Templates** -Comic Book, Manga, and Webtoon templates with character-focused composition (60%+ frame), text-free panel art, overlay text placement via Gemini Vision, and sequential image-to-audio pipeline
+- **Text-Free Images** -Triple-layer defense for visual narratives: scene composer instruction, positive prefix, art style suffix, and negative constraints ensure clean panel art without text artifacts
+- **Voice Input** -Voice capture using Web Audio API for hands-free story steering
+- **Audio Narration** -Gemini native audio (via Live API) narrates each scene with expressive, mood-adaptive voiceover
+- **Per-Scene Streaming** -Images and audio generate per-scene as text completes, not after all scenes. Scene 1's image paints in while Scene 2 is still being written
+- **Cinematic Book Opening** -When the first prompt is sent, the cover page appears with a faux spine, entrance animation with brightness bloom, then a synchronized flip and slide to the first scene
+- **Portraits and Visual DNA** -Anchor portraits generated before scene images using Imagen. Gemini Vision analyzes each portrait to extract visual DNA (100-150 word natural-language description), which is used for consistent character rendering across all scenes
+- **Hybrid Character Consistency** -Three-stage image pipeline: character sheet extraction, scene composition (Gemini), verbatim character descriptions prepended to prompt. Split DNA separates physical traits from style traits, with outfit descriptions automatically stripped when scene text describes clothing changes
+- **Director Chat** -Voice-based brainstorming with the Director using Gemini Live API (`gemini-live-2.5-flash-native-audio`). Continuous PCM streaming via AudioWorklet with Gemini's server-side VAD (no client-side speech detection). Features native tool calling (model decides when to generate), native transcription, `send_realtime_input()` for zero-latency audio delivery, text input fallback, 8 configurable voices, streaming audio for low-latency voice, mute (tap to stop Director audio), and silent re-engagement nudge. After generation, a single combined wrap-up message replaces overlapping audio
+- **Director Panel** -A focused sidebar with 4 sections: **Scene Insight Pair** (spread-aware left/right cards with mood, tension bars, and expandable craft notes), **Story Health** (5-dimension quality bars for Pacing, Characters, World, Dialogue, Coherence), **Story Details** (Next Direction, Characters, Visual Style, Themes, Emotional Arc), and **Live Notes** (collapsible director commentary with audio playback). Accumulated scenes persist across batches so analysis always covers the full story
+- **Live Director Commentary** -Real-time per-scene creative notes (mood, tension, craft observations) stream to the Director Panel during generation
+- **Mid-Generation Steering** -Type direction changes while the story generates. Steering is injected between scenes via the narrator's conversation history
+- **Separated Generation Modes** -ControlBar generates stories with narrator + images + audio only (fast, no Director overhead). Director Chat triggers full Director pipeline with live commentary, proactive scene reactions, and creative suggestions
+- **Playful Safety Redirect** -Instead of hard error toasts for inappropriate content, the narrator redirects in-character ("That part of the library is forbidden! Let's explore this path instead...")
+- **Interactive Flipbook** -Always-spread layout with realistic page-turn animation, keyboard navigation (arrow keys), and dot-based page navigation
+- **Firebase Auth** -Google Sign-In + email/password sign-up with email verification
+- **Story Persistence** -Cloud Firestore saves stories, scenes, and generations with AI-generated titles and cover images
+- **Art Style Memory** -Selected art style is persisted per story and restored when reopening from Library
+- **Library** -Personal bookshelf with 3D CSS book cards, favorites (heart toggle), status filters (All/Favorites/Saved/Completed), search, and sort (Recent/Title)
+  - **Cover Generation State** -Books awaiting AI covers show a blurred, desaturated placeholder with animated "Painting cover..." overlay that auto-refreshes when complete
+  - **Delete with Active Story Cleanup** -Deleting the currently active story properly clears WebSocket state and URL
+- **Explore** -Browse publicly published stories with likes, liked filter, search, and sort (Recent/Title/Author)
+- **Social Features** -Likes (optimistic toggle), star ratings (with average display), and comments on published stories. Story authors can moderate comments on their own stories
+- **Save and Complete Flow** -Save stories to Library, mark as Complete (locks editing), publish to Explore for others to read
+- **Completed Book Protection** -Completed books are read-only regardless of entry point (Library or Explore)
+- **URL Routing** -Deep-linkable story URLs (`/story/:id?page=N`) with auto-resume on page reload
+- **Image Loading States** -"Painting scene" shimmer placeholder while Imagen generates; graceful fallbacks with specific user messages for quota, safety filter, timeout errors
+- **Cover Art Style Matching** -AI-generated book covers use the same art style suffix as scene illustrations
+- **Glassmorphism UI** -Frosted glass panels with dark/light theme support
+- **Toast Notifications** -Global notification system (success/error/warning/info) with auto-dismiss, progress bars, and glassmorphism styling
+- **Multi-Language Stories** -Generate stories in 8 languages (English, Spanish, French, German, Japanese, Hindi, Portuguese, Chinese) with Gemini native audio narration
+- **Multilingual Template Cards** -Template names, descriptions, and taglines translate to the user's selected language (Hindi, Spanish, French, Japanese, German, Portuguese, Chinese) via a built-in i18n map
+- **Language Indicator** -Globe pill in the ControlBar shows the active story language when non-English
+- **Generation Stage Messages** -ControlBar shows fun contextual messages during generation ("Summoning the narrator...", "Painting the scene...", "Gathering the portraits...")
+- **Share Link** -Copy a public URL for published stories; unauthenticated users can view shared stories with a "Sign in to create" CTA
+- **PDF Export** -Download any saved story as a polished PDF storybook with cover page, scene illustrations, decorative typography, and page numbering
+- **Reading Mode** -Full-screen immersive experience with karaoke-style word-by-word narration highlighting, auto-advance between scenes, bookmarking, and keyboard controls
+- **Author Attribution** -Story author name and photo automatically captured from Firebase Auth and stored on story creation
+- **Portal-Based Tooltips** -Custom glassmorphism tooltips using React `createPortal` that escape overflow:hidden containers
+- **Smart Regen UX** -Scene regeneration keeps old image visible during generation; failed regen preserves previous image instead of showing error
+- **Writing Skeleton Animation** -Animated skeleton lines with typing cursor glow and shimmer sweep during scene generation and rewriting
+- **Subscription Tiers** -Free, Standard, and Pro tiers with per-tier usage limits (generations, scene regens, PDF exports); usage tracking via backend `/api/usage` endpoint
+- **Admin Dashboard** -Admin-only panel for managing user tiers (promote/demote between free/standard/pro)
+- **Pro User Visual Indicators** -Tier-based avatar styling: Pro users get a golden glowing ring + amber "PRO" pill; Standard gets violet ring + pill; Free shows default glass border
+- **Theme-Aware Book Shadows** -Light mode uses softer book depth shadows and page gutter shadows via CSS variables
+- **Settings Dialog** -Centralized settings for theme (light/dark) and Director voice selection
+- **Server-Side VAD** -Gemini's built-in speech activity detection (startSensitivity: HIGH, endSensitivity: LOW) replaces client-side VAD. AudioWorklet streams raw PCM continuously; Gemini decides when the user stopped speaking
+- **Hero Mode** -Upload a selfie to become the protagonist; Gemini Vision extracts Visual DNA, injected into character sheets for personalized illustrations in trend art styles
+- **Token Expiry Recovery** -Automatic WebSocket reconnection and REST token refresh on auth failure
+- **404 Page** -Themed not-found page with navigation to create or explore stories
+- **Marble Avatar Fallbacks** -Users without profile photos get unique deterministic marble gradient avatars (via `boring-avatars`)
+- **Voice-Reactive Orb** -Canvas-based organic blob animation (`VoiceOrb.jsx`) with 8-point Catmull-Rom spline interpolation and pseudo-noise via overlapping sine waves. Real-time audio amplitude from mic (recording) or streaming audio (Director speaking) drives blob deformation with asymmetric smoothing (fast attack, slow decay). 6 visual modes: idle (violet), recording (red), speaking (amber), loading, watching, waiting. 3-layer composition: outer glow, main gradient, inner specular highlight
+- **Streaming Director Audio** -Low-latency PCM audio streaming for Director voice. Backend streams PCM chunks incrementally via WebSocket (`director_chat_audio_chunk` messages) instead of waiting for the full response. Frontend `useStreamingAudio` hook uses Web Audio API to schedule gapless playback -Director's voice starts playing as soon as the first chunk arrives. Legacy `Audio(dataUrl)` path still used for greetings and tool call acknowledgments
+- **Mute Director Audio** -Tap the voice orb during Director speech to immediately stop playback. Recording resumes automatically so the user can speak next
+- **Echo Prevention** -Recording automatically stops when Director speaks (prevents mic pickup); fresh recording starts 500ms after Director finishes. Server-side VAD + `echoCancellation: true` handle residual echo
+- **Director Security (5 Layers)** -Regex input pre-screening (instruction override, role switching, DAN jailbreaks, multi-language injection, structured format injection, encoding tricks), output post-screening (character breaks, prompt leaks, off-topic detection), system prompt identity anchoring, re-anchoring every 5 messages, and flagged streaming audio kill (stops playback immediately when post-screening flags a response)
+- **CI/CD Pipeline** -GitHub Actions with 4 jobs: backend tests, frontend tests, backend deploy (Cloud Run), frontend deploy (Firebase Hosting). Auto-deploys on merge to `main`
 
 ---
 
@@ -128,7 +128,7 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 ```mermaid
 flowchart TB
-    subgraph Frontend["Frontend — React + Vite"]
+    subgraph Frontend["Frontend -React + Vite"]
         direction TB
         Auth["Firebase Auth<br/>(Google Sign-In + Email)"]
         subgraph Views["Application Views"]
@@ -154,7 +154,7 @@ flowchart TB
         FSClient["Firestore Client SDK<br/>(Library / Explore queries)"]
     end
 
-    subgraph Backend["Backend — Python FastAPI (Cloud Run)"]
+    subgraph Backend["Backend -Python FastAPI (Cloud Run)"]
         WS["WebSocket Handler<br/>Session Management"]
         AuthMW["Auth Middleware<br/>(Firebase Admin SDK)"]
         REST["REST API<br/>Social, Usage, Admin,<br/>Stories, PDF Export"]
@@ -178,7 +178,7 @@ flowchart TB
             PerScene -->|"all scenes done"| PostBatch
         end
 
-        subgraph DirectorChat["Director Chat — Gemini Live API"]
+        subgraph DirectorChat["Director Chat -Gemini Live API"]
             LiveSession["Gemini Live Session<br/>Bidirectional native audio<br/>+ native tool calling<br/>+ native transcription<br/>+ context compression<br/>+ server-side VAD"]
             Security["5-Layer Security<br/>Input screening<br/>Output monitoring<br/>Identity anchoring<br/>Re-anchoring (every 5 msgs)<br/>Flagged audio kill"]
         end
@@ -287,7 +287,7 @@ flowchart TB
 
 ## CI/CD Pipeline & Automated Deployment
 
-Reveria uses a fully automated CI/CD pipeline via **GitHub Actions** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Every push triggers smoke tests; merges to `main` automatically deploy both the backend and frontend — no manual intervention required.
+Reveria uses a fully automated CI/CD pipeline via **GitHub Actions** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Every push triggers smoke tests; merges to `main` automatically deploy both the backend and frontend -no manual intervention required.
 
 ```mermaid
 flowchart LR
@@ -325,7 +325,7 @@ flowchart LR
 | **1. Code pushed**     | GitHub Actions workflow triggers on PR or push to `main`                                         | GitHub Actions                   |
 | **2. Backend tests**   | Install deps, `pytest -v` (8 smoke tests with mocked Firebase/Firestore)                         | Ubuntu runner, Python 3.12       |
 | **3. Frontend tests**  | `npm ci`, ESLint, `vite build` (dummy env), Playwright smoke tests (3 tests)                     | Ubuntu runner, Node 20, Chromium |
-| **4. Deploy backend**  | `gcloud run deploy --source backend` — builds Docker image via Cloud Build, deploys to Cloud Run | GCP Cloud Build, Cloud Run       |
+| **4. Deploy backend**  | `gcloud run deploy --source backend` -builds Docker image via Cloud Build, deploys to Cloud Run | GCP Cloud Build, Cloud Run       |
 | **5. Deploy frontend** | `npm run build` (production env from GitHub Secrets), `firebase deploy` to Hosting               | Firebase Hosting CDN             |
 
 Deploy jobs **only run on `main`** and **only after both test jobs pass**. PRs run tests only.
@@ -336,7 +336,7 @@ All deployment infrastructure is defined in version-controlled files:
 
 | File                                                             | Purpose                                               |
 | ---------------------------------------------------------------- | ----------------------------------------------------- |
-| [`.github/workflows/ci.yml`](.github/workflows/ci.yml)           | Complete CI/CD pipeline — test, build, and deploy     |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml)           | Complete CI/CD pipeline -test, build, and deploy     |
 | [`backend/Dockerfile`](backend/Dockerfile)                       | Backend container definition (Python 3.12 + FastAPI)  |
 | [`frontend/firebase.json`](frontend/firebase.json)               | Firebase Hosting config (SPA rewrites, cache headers) |
 | [`frontend/.firebaserc`](frontend/.firebaserc)                   | Firebase project binding                              |
@@ -347,9 +347,9 @@ All deployment infrastructure is defined in version-controlled files:
 
 Deployment credentials are stored as **GitHub Actions Secrets** (never in code):
 
-- `GCP_SA_KEY` — Service account for Cloud Run deploys (least-privilege: `run.developer`, `artifactregistry.writer`, `storage.admin`)
-- `FIREBASE_SERVICE_ACCOUNT` — Service account for Firebase Hosting deploys
-- `VITE_FIREBASE_*` / `VITE_WS_URL` — Build-time environment variables injected during production builds
+- `GCP_SA_KEY` -Service account for Cloud Run deploys (least-privilege: `run.developer`, `artifactregistry.writer`, `storage.admin`)
+- `FIREBASE_SERVICE_ACCOUNT` -Service account for Firebase Hosting deploys
+- `VITE_FIREBASE_*` / `VITE_WS_URL` -Build-time environment variables injected during production builds
 
 ---
 
@@ -420,7 +420,7 @@ Scene count is hardcoded to 1 per generation cycle for focused, high-quality out
 
 ### Shared State Pattern
 
-ADK session state returns copies (not references), so agents can't communicate through it. Instead, we use a **`SharedPipelineState`** — a mutable Python object passed by reference to every agent:
+ADK session state returns copies (not references), so agents can't communicate through it. Instead, we use a **`SharedPipelineState`** -a mutable Python object passed by reference to every agent:
 
 ```python
 class SharedPipelineState:
@@ -456,7 +456,7 @@ The Narrator is the story engine. It takes user prompts and generates structured
 **How it works:**
 
 1. The system prompt instructs Gemini to write in present tense, third person, with `[SCENE]` markers between scenes
-2. Text is **streamed** chunk-by-chunk — the ADK agent buffers chunks and splits on `[SCENE]` markers as they arrive
+2. Text is **streamed** chunk-by-chunk -the ADK agent buffers chunks and splits on `[SCENE]` markers as they arrive
 3. Each completed scene is immediately sent to the frontend via WebSocket (the user sees text appear in real-time)
 4. Conversation history is maintained across prompts, enabling **story steering**
 5. If a Director suggestion exists, it is injected at the start of the batch as `[Director's creative direction: ...]`
@@ -497,7 +497,7 @@ Step 4: Image Generation (Imagen 3)
 
 #### 3. Director Agent
 
-The Director provides **meta-commentary** on the creative process — the "why" behind story decisions. Beyond analysis, the Director actively shapes the story: each per-scene analysis includes a `suggestion` field — a bold creative direction for what should happen next. This suggestion is automatically injected into the Narrator's context for the following batch.
+The Director provides **meta-commentary** on the creative process -the "why" behind story decisions. Beyond analysis, the Director actively shapes the story: each per-scene analysis includes a `suggestion` field -a bold creative direction for what should happen next. This suggestion is automatically injected into the Narrator's context for the following batch.
 
 | Aspect         | Detail                                                                 |
 | -------------- | ---------------------------------------------------------------------- |
@@ -536,7 +536,7 @@ The Director provides **meta-commentary** on the creative process — the "why" 
 }
 ```
 
-The frontend renders this in the Director Panel as 4 focused sections: **SceneInsightPair** (spread-aware left/right cards matching the book's open pages, with emoji, mood, tension bar, and expandable craft notes — uses `spreadLeftPage()` for spread mapping with multi-source fallbacks from liveNotes to directorData), **StoryHealthCard** (collapsible card with 5 dimension bars and average score), **StoryDetails** (compact cards for Next Direction, Characters, Visual Style, Themes, Emotional Arc), and **Live Notes** (collapsible commentary with audio playback).
+The frontend renders this in the Director Panel as 4 focused sections: **SceneInsightPair** (spread-aware left/right cards matching the book's open pages, with emoji, mood, tension bar, and expandable craft notes -uses `spreadLeftPage()` for spread mapping with multi-source fallbacks from liveNotes to directorData), **StoryHealthCard** (collapsible card with 5 dimension bars and average score), **StoryDetails** (compact cards for Next Direction, Characters, Visual Style, Themes, Emotional Arc), and **Live Notes** (collapsible commentary with audio playback).
 
 #### 4. TTS Agent
 
@@ -558,7 +558,7 @@ The agents are backed by service modules:
 
 - **Per-user circuit breaker** (Imagen): After consecutive 429 errors, the circuit breaker trips per-uid. During cooldown, all image generation calls return immediately with `quota_exhausted` instead of making API calls
 - **Graceful image fallback**: When image generation fails (quota, safety filter, timeout), the frontend shows the scene text immediately instead of waiting. Error-specific messages tell users what happened
-- **Connection-aware abort**: The WebSocket handler tracks `connection_alive` — if the client disconnects mid-generation, the pipeline aborts early to save API budget
+- **Connection-aware abort**: The WebSocket handler tracks `connection_alive` -if the client disconnects mid-generation, the pipeline aborts early to save API budget
 - **Character sheet preservation**: On extraction failure or NONE result, the existing character sheet is preserved (not cleared)
 - **Atomic usage tracking**: Firestore transactions for increment/decrement operations
 - **Batched Firestore deletions**: 450-doc batches for story deletion
@@ -722,13 +722,13 @@ flowchart LR
     style Response fill:#0f172a,stroke:#10b981,color:#e2e8f0
 ```
 
-**During generation**, the Director Chat session stays active. After generation completes, `generation_wrapup()` sends a single combined wrap-up message through the chat, avoiding overlapping audio. Director voice responses stream as incremental PCM chunks via `director_chat_audio_chunk` WebSocket messages for low-latency playback — the user hears the Director's voice as soon as the first chunk arrives. Audio input uses continuous PCM streaming via `send_realtime_input()` with Gemini's server-side VAD detecting speech boundaries — no client-side voice activity detection. Mute is supported: tapping the voice orb during Director speech immediately stops all audio playback.
+**During generation**, the Director Chat session stays active. After generation completes, `generation_wrapup()` sends a single combined wrap-up message through the chat, avoiding overlapping audio. Director voice responses stream as incremental PCM chunks via `director_chat_audio_chunk` WebSocket messages for low-latency playback -the user hears the Director's voice as soon as the first chunk arrives. Audio input uses continuous PCM streaming via `send_realtime_input()` with Gemini's server-side VAD detecting speech boundaries -no client-side voice activity detection. Mute is supported: tapping the voice orb during Director speech immediately stops all audio playback.
 
 ---
 
 ## Interleaved Output Strategy
 
-Reveria uses **Gemini Native Interleaved Output** (`response_modalities: ["TEXT", "IMAGE"]`) as its **primary generation path** — the mandatory technology for this hackathon challenge. A single Gemini API call produces both story text and scene illustrations woven together. Imagen 3 runs as a parallel quality upgrade for character consistency (Visual DNA pipeline), with the Gemini native image as tier-0 fallback when Imagen fails.
+Reveria uses **Gemini Native Interleaved Output** (`response_modalities: ["TEXT", "IMAGE"]`) as its **primary generation path** -the mandatory technology for this hackathon challenge. A single Gemini API call produces both story text and scene illustrations woven together. Imagen 3 runs as a parallel quality upgrade for character consistency (Visual DNA pipeline), with the Gemini native image as tier-0 fallback when Imagen fails.
 
 ```mermaid
 flowchart TB
@@ -1073,16 +1073,16 @@ VITE_WS_URL=ws://localhost:8000/ws
 - **Visual narrative templates** (Comic/Manga/Webtoon) with text-free panel art and Gemini Vision overlay placement
 - **Portraits and Visual DNA** for character consistency across scenes
 - **Cinematic book opening** with cover pulse, entrance animation, and synchronized page flip
-- **Director Chat** with Gemini Live API — native audio, tool calling, transcription, single combined wrap-up after generation
-- **Social features** — likes, ratings, and comments on published stories
-- **Automated CI/CD** — GitHub Actions runs tests on every PR and auto-deploys to Cloud Run + Firebase Hosting on merge to `main`
-- **Backend smoke tests** — 8 pytest tests with mocked Firebase/Firestore
-- **Frontend smoke tests** — 3 Playwright browser tests
-- **Per-scene streaming** — image + audio generation fires per-scene (not batch), reducing perceived latency
-- **Director Panel redesign** — 4 focused sections (Scene Insight Pair, Story Health, Story Details, Live Notes) replacing the previous 9-card layout. Accumulated scenes persist across batches for complete analysis
-- **Mid-generation steering** — users can steer the story while it generates (injected between scenes)
-- **Playful safety redirect** — narrator redirects inappropriate requests in-character instead of hard error
-- **Gemini Native Interleaved Output** — Primary generation uses `response_modalities: ["TEXT", "IMAGE"]` for text+image in a single call. Imagen 3 is always primary for character-consistent images; Gemini native image serves as tier-0 fallback
+- **Director Chat** with Gemini Live API -native audio, tool calling, transcription, single combined wrap-up after generation
+- **Social features** -likes, ratings, and comments on published stories
+- **Automated CI/CD** -GitHub Actions runs tests on every PR and auto-deploys to Cloud Run + Firebase Hosting on merge to `main`
+- **Backend smoke tests** -8 pytest tests with mocked Firebase/Firestore
+- **Frontend smoke tests** -3 Playwright browser tests
+- **Per-scene streaming** -image + audio generation fires per-scene (not batch), reducing perceived latency
+- **Director Panel redesign** -4 focused sections (Scene Insight Pair, Story Health, Story Details, Live Notes) replacing the previous 9-card layout. Accumulated scenes persist across batches for complete analysis
+- **Mid-generation steering** -users can steer the story while it generates (injected between scenes)
+- **Playful safety redirect** -narrator redirects inappropriate requests in-character instead of hard error
+- **Gemini Native Interleaved Output** -Primary generation uses `response_modalities: ["TEXT", "IMAGE"]` for text+image in a single call. Imagen 3 is always primary for character-consistent images; Gemini native image serves as tier-0 fallback
 
 ---
 

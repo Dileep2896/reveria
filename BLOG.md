@@ -211,31 +211,31 @@ When the Director triggers story generation, its voice orb switches to a "watchi
 
 The original Director Chat had a noticeable delay between when you stopped speaking and when the Director started responding. The full audio response had to be collected, encoded as a WAV, and sent as a data URL before playback could begin.
 
-The fix: stream PCM audio chunks incrementally. The backend's `collect_response_streaming()` calls an `on_audio_chunk` callback for each audio chunk as it arrives from the Gemini Live API. Each chunk is base64-encoded and sent as a `director_chat_audio_chunk` WebSocket message. On the frontend, `useStreamingAudio` feeds each chunk into a Web Audio API `AudioBufferSource`, scheduled for gapless playback via a `nextPlayTime` tracker. The Director's voice starts playing as soon as the first chunk arrives — typically within 200-400ms of the request.
+The fix: stream PCM audio chunks incrementally. The backend's `collect_response_streaming()` calls an `on_audio_chunk` callback for each audio chunk as it arrives from the Gemini Live API. Each chunk is base64-encoded and sent as a `director_chat_audio_chunk` WebSocket message. On the frontend, `useStreamingAudio` feeds each chunk into a Web Audio API `AudioBufferSource`, scheduled for gapless playback via a `nextPlayTime` tracker. The Director's voice starts playing as soon as the first chunk arrives  - typically within 200-400ms of the request.
 
 The two audio paths coexist cleanly. Streaming handles normal conversational responses. The legacy `Audio(dataUrl)` path handles greetings (session start) and tool call acknowledgments, which still use the non-streaming endpoint.
 
 ### Mute: Stopping Director Audio
 
-Tapping the voice orb while the Director is speaking immediately stops all audio playback — both streaming PCM and legacy Audio elements. Recording resumes automatically so the user can speak next. Simple, reliable, no false triggers from background noise.
+Tapping the voice orb while the Director is speaking immediately stops all audio playback  - both streaming PCM and legacy Audio elements. Recording resumes automatically so the user can speak next. Simple, reliable, no false triggers from background noise.
 
 ### Silent User Re-Engagement
 
 A subtle UX problem: the Director greets you, the mic goes hot, and... you don't speak. Maybe you're thinking. Maybe you're confused about what to do next. The VAD auto-stop only triggers after speech→silence, so no speech means the recording runs forever, the orb sits in "recording" state, and nothing happens. Dead end.
 
-The solution uses a 10-second idle timeout in `useVoiceCapture.js`. If the VAD never detects speech (RMS never crosses the threshold), the recording silently aborts and fires an `onIdleTimeout` callback. In `DirectorChat.jsx`, this sends a silent system message to the Director — invisible in the chat transcript — asking it to re-engage the user with a creative question or story suggestion. A dedup guard ensures only one nudge per silence period, resetting when the user actually speaks.
+The solution uses a 10-second idle timeout in `useVoiceCapture.js`. If the VAD never detects speech (RMS never crosses the threshold), the recording silently aborts and fires an `onIdleTimeout` callback. In `DirectorChat.jsx`, this sends a silent system message to the Director  - invisible in the chat transcript  - asking it to re-engage the user with a creative question or story suggestion. A dedup guard ensures only one nudge per silence period, resetting when the user actually speaks.
 
-The Director doesn't know you're silent — it just gets a gentle prompt to be more engaging. From the user's perspective, the Director seems to sense the pause and offers help.
+The Director doesn't know you're silent  - it just gets a gentle prompt to be more engaging. From the user's perspective, the Director seems to sense the pause and offers help.
 
 ### Voice-Reactive Orb
 
 The voice orb went from a CSS-animated circle to a living, breathing canvas blob that reacts to actual audio amplitude.
 
-`VoiceOrb.jsx` renders 8 control points arranged in a circle, displaced by pseudo-noise (overlapping sine waves at irrational frequency ratios — no external library needed), and connected via Catmull-Rom spline interpolation for smooth curves. Real-time amplitude from the mic's `AnalyserNode` (when recording) or the streaming audio's `AnalyserNode` (when the Director speaks) drives the deformation magnitude and noise traversal speed.
+`VoiceOrb.jsx` renders 8 control points arranged in a circle, displaced by pseudo-noise (overlapping sine waves at irrational frequency ratios  - no external library needed), and connected via Catmull-Rom spline interpolation for smooth curves. Real-time amplitude from the mic's `AnalyserNode` (when recording) or the streaming audio's `AnalyserNode` (when the Director speaks) drives the deformation magnitude and noise traversal speed.
 
 The key to making it feel alive: **asymmetric smoothing**. Fast attack (0.25-0.35) makes it responsive to voice onset. Slow decay (0.05-0.1) creates a natural tail-off between words, so the blob doesn't jitter between syllables. Six visual modes blend smoothly via per-frame lerping: idle (gentle violet breathing), recording (red, erratic, high amplitude response), speaking (amber, confident, smooth motion), loading (subtle violet drift), watching (calm pulse during generation), and waiting (amber shimmer during hero photo analysis).
 
-Three layers create depth at minimal GPU cost: an outer glow blob (CSS blur), the main radial-gradient blob (canvas), and an inner specular highlight (canvas). The icon overlay fades out during the `speaking` state — the blob itself becomes the visualization. At 72px with DPR capped at 2, it's 144x144 pixels of canvas fill per frame. Negligible.
+Three layers create depth at minimal GPU cost: an outer glow blob (CSS blur), the main radial-gradient blob (canvas), and an inner specular highlight (canvas). The icon overlay fades out during the `speaking` state  - the blob itself becomes the visualization. At 72px with DPR capped at 2, it's 144x144 pixels of canvas fill per frame. Negligible.
 
 
 
@@ -480,9 +480,9 @@ The Director Chat also speaks the story's language. For non-English stories, lan
 
 ### Gemini Native Interleaved Output
 
-The hackathon requires using Gemini's interleaved/mixed output capabilities. Our primary generation path now uses `response_modalities: ["TEXT", "IMAGE"]` in `GenerateContentConfig`, making Gemini generate text and images together in a single call. The response contains mixed `Part` objects — text parts and image parts with inline data.
+The hackathon requires using Gemini's interleaved/mixed output capabilities. Our primary generation path now uses `response_modalities: ["TEXT", "IMAGE"]` in `GenerateContentConfig`, making Gemini generate text and images together in a single call. The response contains mixed `Part` objects  - text parts and image parts with inline data.
 
-But here's the key design decision: **Imagen 3 is always primary for images**. The Gemini native image is only a tier-0 fallback when Imagen fails entirely. Why? Character consistency. Our full pipeline — character sheet extraction, visual DNA from anchor portraits, hybrid prompt construction with verbatim descriptions — only works with Imagen. Gemini's native images bypass all of that. They're fine for a single scene, but characters would look completely different across a multi-scene story.
+But here's the key design decision: **Imagen 3 is always primary for images**. The Gemini native image is only a tier-0 fallback when Imagen fails entirely. Why? Character consistency. Our full pipeline  - character sheet extraction, visual DNA from anchor portraits, hybrid prompt construction with verbatim descriptions  - only works with Imagen. Gemini's native images bypass all of that. They're fine for a single scene, but characters would look completely different across a multi-scene story.
 
 The flow: Narrator generates text+images via interleaved output. Scene text streams to the frontend. Then Imagen runs the full character consistency pipeline. If Imagen succeeds (vast majority of cases), its image replaces the Gemini native one. If Imagen fails (quota, safety filter, timeout), the Gemini native image serves as a reasonable fallback instead of showing nothing.
 
@@ -554,7 +554,7 @@ The difference between "write an image prompt" and our hybrid construction pipel
 
 ### 2. Use Native API Features Before Building Workarounds
 
-Our Director Chat initially used 3-5 separate Gemini calls per interaction because we didn't know the Live API natively supports transcription, function calling, and context compression. Enabling four config options eliminated every workaround we'd built. The same lesson applied again with audio streaming: we built a collect-encode-send pipeline for Director responses when the Live API already sends audio in chunks — streaming them incrementally to a Web Audio playback queue cut perceived latency from seconds to under 400ms. Before writing a separate STT service or intent classifier, check if the API you're already using has the feature built in. The platform team usually thought of it first.
+Our Director Chat initially used 3-5 separate Gemini calls per interaction because we didn't know the Live API natively supports transcription, function calling, and context compression. Enabling four config options eliminated every workaround we'd built. The same lesson applied again with audio streaming: we built a collect-encode-send pipeline for Director responses when the Live API already sends audio in chunks  - streaming them incrementally to a Web Audio playback queue cut perceived latency from seconds to under 400ms. Before writing a separate STT service or intent classifier, check if the API you're already using has the feature built in. The platform team usually thought of it first.
 
 ### 3. Per-Scene is the Right Granularity
 
