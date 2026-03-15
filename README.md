@@ -8,7 +8,29 @@ Reveria is an interactive multimodal story engine. Users choose a story template
 
 Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Storyteller Track).
 
-**Repository:** [https://github.com/Dileep2896/reveria.git](https://github.com/Dileep2896/reveria.git)
+**Live App:** [reveria.web.app](https://reveria.web.app) | **Repository:** [github.com/Dileep2896/reveria](https://github.com/Dileep2896/reveria) | **Demo Video:** [YouTube](https://youtu.be/ZNvkmiWNI8k)
+
+---
+
+## Table of Contents
+
+- [Hackathon Technology](#hackathon-technology)
+- [Screenshots](#screenshots)
+- [How to Test (For Judges)](#how-to-test-for-judges)
+- [Features](#features)
+- [System Architecture](#system-architecture)
+- [Cloud Infrastructure](#cloud-infrastructure)
+- [CI/CD Pipeline & Automated Deployment](#cicd-pipeline--automated-deployment)
+- [Testing](#testing)
+- [Agent Architecture (ADK)](#agent-architecture-adk)
+- [Interleaved Output Strategy](#interleaved-output-strategy)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Quick Start (Local Setup)](#quick-start)
+- [GCP Setup](#gcp-setup)
+- [Environment Variables](#environment-variables)
+- [What's Working](#whats-working)
+- [License](#license)
 
 ---
 
@@ -60,6 +82,63 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 <td width="50%"><img src="Screenshot/04-director-chat.jpg" alt="Director Chat" width="100%"/><br/><b>Director Chat</b> - Voice brainstorming with the AI Director powered by Gemini Live API</td>
 </tr>
 </table>
+
+---
+
+## How to Test (For Judges)
+
+### Option 1: Use the Live App (Recommended)
+
+The fastest way to test Reveria is via the deployed app at **[reveria.web.app](https://reveria.web.app)**.
+
+1. **Sign in** with Google (or create an account with email/password)
+2. **Pick a template** from the 3D carousel (try Storybook, Comic, or Manga)
+3. **Type a prompt** like "A lonely astronaut discovers a garden growing on Mars" and hit Generate
+4. **Watch the magic** - text streams in, illustrations paint, audio narration plays, and a flipbook materializes
+5. **Try Director Chat** - tap the Director orb (top right), speak your story idea, brainstorm with the AI Director, and let it trigger generation via voice
+6. **Explore published stories** - click Explore in the nav to browse stories published by other users
+7. **Try mid-story steering** - during generation, type "make it scarier" or "add a twist" to steer the narrative
+
+### Option 2: Run Locally
+
+See [Quick Start](#quick-start) below for full setup instructions. Requires:
+- Python 3.12+, Node.js 20+
+- A Google Cloud project with Vertex AI and Firestore APIs enabled
+- A `GEMINI_API_KEY` or Application Default Credentials
+
+```bash
+git clone https://github.com/Dileep2896/reveria.git
+cd storyforge
+
+# Backend
+cd backend && python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # Edit with your API keys
+uvicorn main:app --reload --port 8000
+
+# Frontend (new terminal)
+cd frontend && npm install && npm run dev
+```
+
+Open **http://localhost:5173**
+
+### Option 3: Run Tests
+
+```bash
+# Backend smoke tests (8 tests, mocked Firebase)
+cd backend && pip install -r requirements-test.txt && pytest -v
+
+# Frontend smoke tests (3 Playwright tests)
+cd frontend && npm install && npm run build && npx playwright install chromium && npx playwright test
+```
+
+### Google Cloud Deployment Proof
+
+- **Cloud Run**: Backend deployed at `storyforge-backend` service in `us-central1`
+- **Firebase Hosting**: Frontend deployed at `reveria.web.app`
+- **CI/CD**: Automated via [GitHub Actions](.github/workflows/ci.yml) - 4 jobs on every push to main
+- **Deploy script**: [`deploy.sh`](deploy.sh) for manual deployments
+- See the cloud deployment proof video included in the submission
 
 ---
 
