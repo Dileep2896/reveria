@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "storyforge-hackathon-1beac",
+    "site": "reveria",
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }],
