@@ -14,48 +14,48 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 ## Hackathon Technology
 
-> **Challenge Requirement:** *Must use Gemini's interleaved/mixed output capabilities. The agents are hosted on Google Cloud.*
+> **Challenge Requirement:** _Must use Gemini's interleaved/mixed output capabilities. The agents are hosted on Google Cloud._
 
-| Mandatory Requirement | How Reveria Uses It |
-|---|---|
+| Mandatory Requirement         | How Reveria Uses It                                                                                                                                                                                                                                                                                                         |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Gemini Interleaved Output** | Primary generation path: `response_modalities: ["TEXT", "IMAGE"]` generates story text + scene illustrations in a **single Gemini API call**. See `gemini_client.generate_interleaved()` and `narrator.generate_with_images()`. Imagen 3 runs as a parallel quality upgrade; Gemini native image serves as tier-0 fallback. |
-| **Hosted on Google Cloud** | Backend on **Cloud Run** (FastAPI container), frontend on **Firebase Hosting**, data on **Cloud Firestore** + **Cloud Storage**, AI via **Vertex AI** (Gemini + Imagen). Full CI/CD via GitHub Actions. |
+| **Hosted on Google Cloud**    | Backend on **Cloud Run** (FastAPI container), frontend on **Firebase Hosting**, data on **Cloud Firestore** + **Cloud Storage**, AI via **Vertex AI** (Gemini + Imagen). Full CI/CD via GitHub Actions.                                                                                                                     |
 
 ### Google AI Services Used
 
-| Service | Usage | Key API |
-|---|---|---|
-| **Gemini 2.0 Flash — Interleaved Output** | Text + image generation in one call | `response_modalities: ["TEXT", "IMAGE"]` |
-| **Gemini Live API** | Director Chat: bidirectional native audio conversation | `send_realtime_input()`, server-side VAD |
-| **Gemini Native Audio** | Multi-voice scene narration (emotion-aware TTS) | Live API audio output |
-| **Gemini Vision** | Visual DNA extraction from character portraits | `generate_content()` with image input |
-| **Gemini Flash** | Story text streaming, character sheets, scene composition, safety classification | `generate_content_stream()` |
-| **Imagen 3** | High-quality scene illustrations with character consistency | Vertex AI `predict()` |
-| **Google ADK** | Multi-agent orchestration (NarratorADKAgent) | `SequentialAgent`, tool declarations |
+| Service                                   | Usage                                                                            | Key API                                  |
+| ----------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------- |
+| **Gemini 2.0 Flash — Interleaved Output** | Text + image generation in one call                                              | `response_modalities: ["TEXT", "IMAGE"]` |
+| **Gemini Live API**                       | Director Chat: bidirectional native audio conversation                           | `send_realtime_input()`, server-side VAD |
+| **Gemini Native Audio**                   | Multi-voice scene narration (emotion-aware TTS)                                  | Live API audio output                    |
+| **Gemini Vision**                         | Visual DNA extraction from character portraits                                   | `generate_content()` with image input    |
+| **Gemini Flash**                          | Story text streaming, character sheets, scene composition, safety classification | `generate_content_stream()`              |
+| **Imagen 3**                              | High-quality scene illustrations with character consistency                      | Vertex AI `predict()`                    |
+| **Google ADK**                            | Multi-agent orchestration (NarratorADKAgent)                                     | `SequentialAgent`, tool declarations     |
 
 ### Key Methods & Patterns
 
-| Pattern | Implementation |
-|---|---|
-| Native tool calling | Director Chat's `generate_story` tool — Gemini decides when brainstorming is done and triggers generation |
-| Native transcription | `input_audio_transcription` + `output_audio_transcription` in Live API session config |
-| Context compression | `ContextWindowCompressionConfig(sliding_window=SlidingWindow())` for long conversations |
-| Server-side VAD | `AutomaticActivityDetection` with `startOfSpeechSensitivity: HIGH`, `endOfSpeechSensitivity: LOW` |
-| Continuous PCM streaming | AudioWorklet → `send_realtime_input(audio=Blob)` — no client-side speech detection |
-| Tiered image fallback | Tier 2 (Imagen) → Tier 1 (Imagen reduced) → Tier 0 (Gemini native interleaved image) |
-| Per-scene streaming | Image + audio + director tasks spawn per-scene as narrator text completes |
-| Visual DNA pipeline | Anchor portraits (Imagen) → Gemini Vision analysis → 150-word descriptors → scene prompt injection |
+| Pattern                  | Implementation                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Native tool calling      | Director Chat's `generate_story` tool — Gemini decides when brainstorming is done and triggers generation |
+| Native transcription     | `input_audio_transcription` + `output_audio_transcription` in Live API session config                     |
+| Context compression      | `ContextWindowCompressionConfig(sliding_window=SlidingWindow())` for long conversations                   |
+| Server-side VAD          | `AutomaticActivityDetection` with `startOfSpeechSensitivity: HIGH`, `endOfSpeechSensitivity: LOW`         |
+| Continuous PCM streaming | AudioWorklet → `send_realtime_input(audio=Blob)` — no client-side speech detection                        |
+| Tiered image fallback    | Tier 2 (Imagen) → Tier 1 (Imagen reduced) → Tier 0 (Gemini native interleaved image)                      |
+| Per-scene streaming      | Image + audio + director tasks spawn per-scene as narrator text completes                                 |
+| Visual DNA pipeline      | Anchor portraits (Imagen) → Gemini Vision analysis → 150-word descriptors → scene prompt injection        |
 
 ---
 
 ## Screenshots
 
-| | |
-|---|---|
-| ![Template Chooser](Screenshot/01-template-chooser.jpg) | ![Story Generation](Screenshot/02-story-generation.jpg) |
-| **Template Chooser** — Pick from 9 story templates via a 3D coverflow carousel | **Story Generation** — Live text, image, and audio streaming with Director analysis panel |
-| ![Book Details](Screenshot/03-book-details.jpg) | ![Director Chat](Screenshot/04-director-chat.jpg) |
-| **Book Details** — Published story page with characters, genres, ratings, and social features | **Director Chat** — Voice brainstorming with the AI Director powered by Gemini Live API |
+|                                                                                               |                                                                                           |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| ![Template Chooser](Screenshot/01-template-chooser.jpg)                                       | ![Story Generation](Screenshot/02-story-generation.jpg)                                   |
+| **Template Chooser** — Pick from 9 story templates via a 3D coverflow carousel                | **Story Generation** — Live text, image, and audio streaming with Director analysis panel |
+| ![Book Details](Screenshot/03-book-details.png)                                               | ![Director Chat](Screenshot/04-director-chat.jpg)                                         |
+| **Book Details** — Published story page with characters, genres, ratings, and social features | **Director Chat** — Voice brainstorming with the AI Director powered by Gemini Live API   |
 
 ---
 
@@ -320,13 +320,13 @@ flowchart LR
 
 ### How It Works
 
-| Step | What happens | Infrastructure |
-|------|-------------|----------------|
-| **1. Code pushed** | GitHub Actions workflow triggers on PR or push to `main` | GitHub Actions |
-| **2. Backend tests** | Install deps, `pytest -v` (8 smoke tests with mocked Firebase/Firestore) | Ubuntu runner, Python 3.12 |
-| **3. Frontend tests** | `npm ci`, ESLint, `vite build` (dummy env), Playwright smoke tests (3 tests) | Ubuntu runner, Node 20, Chromium |
-| **4. Deploy backend** | `gcloud run deploy --source backend` — builds Docker image via Cloud Build, deploys to Cloud Run | GCP Cloud Build, Cloud Run |
-| **5. Deploy frontend** | `npm run build` (production env from GitHub Secrets), `firebase deploy` to Hosting | Firebase Hosting CDN |
+| Step                   | What happens                                                                                     | Infrastructure                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------- |
+| **1. Code pushed**     | GitHub Actions workflow triggers on PR or push to `main`                                         | GitHub Actions                   |
+| **2. Backend tests**   | Install deps, `pytest -v` (8 smoke tests with mocked Firebase/Firestore)                         | Ubuntu runner, Python 3.12       |
+| **3. Frontend tests**  | `npm ci`, ESLint, `vite build` (dummy env), Playwright smoke tests (3 tests)                     | Ubuntu runner, Node 20, Chromium |
+| **4. Deploy backend**  | `gcloud run deploy --source backend` — builds Docker image via Cloud Build, deploys to Cloud Run | GCP Cloud Build, Cloud Run       |
+| **5. Deploy frontend** | `npm run build` (production env from GitHub Secrets), `firebase deploy` to Hosting               | Firebase Hosting CDN             |
 
 Deploy jobs **only run on `main`** and **only after both test jobs pass**. PRs run tests only.
 
@@ -334,18 +334,19 @@ Deploy jobs **only run on `main`** and **only after both test jobs pass**. PRs r
 
 All deployment infrastructure is defined in version-controlled files:
 
-| File | Purpose |
-|------|---------|
-| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Complete CI/CD pipeline — test, build, and deploy |
-| [`backend/Dockerfile`](backend/Dockerfile) | Backend container definition (Python 3.12 + FastAPI) |
-| [`frontend/firebase.json`](frontend/firebase.json) | Firebase Hosting config (SPA rewrites, cache headers) |
-| [`frontend/.firebaserc`](frontend/.firebaserc) | Firebase project binding |
-| [`backend/pytest.ini`](backend/pytest.ini) | Test runner configuration |
-| [`frontend/playwright.config.js`](frontend/playwright.config.js) | E2E test configuration |
+| File                                                             | Purpose                                               |
+| ---------------------------------------------------------------- | ----------------------------------------------------- |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml)           | Complete CI/CD pipeline — test, build, and deploy     |
+| [`backend/Dockerfile`](backend/Dockerfile)                       | Backend container definition (Python 3.12 + FastAPI)  |
+| [`frontend/firebase.json`](frontend/firebase.json)               | Firebase Hosting config (SPA rewrites, cache headers) |
+| [`frontend/.firebaserc`](frontend/.firebaserc)                   | Firebase project binding                              |
+| [`backend/pytest.ini`](backend/pytest.ini)                       | Test runner configuration                             |
+| [`frontend/playwright.config.js`](frontend/playwright.config.js) | E2E test configuration                                |
 
 ### Secrets Management
 
 Deployment credentials are stored as **GitHub Actions Secrets** (never in code):
+
 - `GCP_SA_KEY` — Service account for Cloud Run deploys (least-privilege: `run.developer`, `artifactregistry.writer`, `storage.admin`)
 - `FIREBASE_SERVICE_ACCOUNT` — Service account for Firebase Hosting deploys
 - `VITE_FIREBASE_*` / `VITE_WS_URL` — Build-time environment variables injected during production builds
@@ -364,16 +365,16 @@ pip install -r requirements-test.txt
 pytest -v
 ```
 
-| Test | What it verifies |
-|------|-----------------|
-| `test_health_returns_ok` | `GET /health` returns 200, `{status: ok, adk: true}` |
-| `test_public_story_not_found` | `GET /api/public/stories/<id>` returns 404 for missing story |
-| `test_social_stats_not_found` | `GET /api/public/stories/<id>/social` returns 404 |
-| `test_list_comments_nonexistent_story` | `GET /api/public/stories/<id>/comments` returns 404 for non-public/missing story |
-| `test_delete_story_no_auth` | `DELETE /api/stories/<id>` without auth returns 422 |
-| `test_get_usage_no_auth` | `GET /api/usage` without auth returns 422 |
-| `test_bookmark_returns_null_for_missing` | Auth'd bookmark request returns `{scene_index: null}` |
-| `test_delete_story_not_found` | Auth'd delete of nonexistent story returns 404 |
+| Test                                     | What it verifies                                                                 |
+| ---------------------------------------- | -------------------------------------------------------------------------------- |
+| `test_health_returns_ok`                 | `GET /health` returns 200, `{status: ok, adk: true}`                             |
+| `test_public_story_not_found`            | `GET /api/public/stories/<id>` returns 404 for missing story                     |
+| `test_social_stats_not_found`            | `GET /api/public/stories/<id>/social` returns 404                                |
+| `test_list_comments_nonexistent_story`   | `GET /api/public/stories/<id>/comments` returns 404 for non-public/missing story |
+| `test_delete_story_no_auth`              | `DELETE /api/stories/<id>` without auth returns 422                              |
+| `test_get_usage_no_auth`                 | `GET /api/usage` without auth returns 422                                        |
+| `test_bookmark_returns_null_for_missing` | Auth'd bookmark request returns `{scene_index: null}`                            |
+| `test_delete_story_not_found`            | Auth'd delete of nonexistent story returns 404                                   |
 
 ### Frontend (Playwright)
 
@@ -387,11 +388,11 @@ npx playwright install chromium
 npx playwright test
 ```
 
-| Test | What it verifies |
-|------|-----------------|
-| `home page loads` | `/` renders with "Reveria" title, no crash |
-| `book page renders` | `/book/nonexistent` loads without JS errors |
-| `terms page shows content` | `/terms` renders with "Terms" text visible |
+| Test                       | What it verifies                            |
+| -------------------------- | ------------------------------------------- |
+| `home page loads`          | `/` renders with "Reveria" title, no crash  |
+| `book page renders`        | `/book/nonexistent` loads without JS errors |
+| `terms page shows content` | `/terms` renders with "Terms" text visible  |
 
 ---
 
@@ -444,15 +445,16 @@ The caller sets input fields before each pipeline run. Agents write their output
 
 The Narrator is the story engine. It takes user prompts and generates structured narrative text with `[SCENE]` markers.
 
-| Aspect | Detail |
-|--------|--------|
-| **Model** | Gemini 2.0 Flash (temperature 0.9 for creative variety) |
-| **Input** | User prompt + conversation history + Director suggestion (if any) |
-| **Output** | Streamed text with `[SCENE]` delimiters |
-| **Scene length** | 80-100 words per scene (enforced via system prompt) |
-| **Memory** | Sliding window of last 10 conversation turns (~8K tokens) |
+| Aspect           | Detail                                                            |
+| ---------------- | ----------------------------------------------------------------- |
+| **Model**        | Gemini 2.0 Flash (temperature 0.9 for creative variety)           |
+| **Input**        | User prompt + conversation history + Director suggestion (if any) |
+| **Output**       | Streamed text with `[SCENE]` delimiters                           |
+| **Scene length** | 80-100 words per scene (enforced via system prompt)               |
+| **Memory**       | Sliding window of last 10 conversation turns (~8K tokens)         |
 
 **How it works:**
+
 1. The system prompt instructs Gemini to write in present tense, third person, with `[SCENE]` markers between scenes
 2. Text is **streamed** chunk-by-chunk — the ADK agent buffers chunks and splits on `[SCENE]` markers as they arrive
 3. Each completed scene is immediately sent to the frontend via WebSocket (the user sees text appear in real-time)
@@ -483,6 +485,7 @@ Step 4: Image Generation (Imagen 3)
 ```
 
 **Character consistency** is the key challenge. The Illustrator maintains:
+
 - A persistent character sheet that accumulates across story continuations
 - Visual DNA from anchor portraits (vision-anchored descriptions)
 - Split DNA: physical traits separated from style traits, with outfit stripping when scene text describes clothing changes
@@ -496,11 +499,11 @@ Step 4: Image Generation (Imagen 3)
 
 The Director provides **meta-commentary** on the creative process — the "why" behind story decisions. Beyond analysis, the Director actively shapes the story: each per-scene analysis includes a `suggestion` field — a bold creative direction for what should happen next. This suggestion is automatically injected into the Narrator's context for the following batch.
 
-| Aspect | Detail |
-|--------|--------|
-| **Model** | Gemini 2.0 Flash (temperature 0.4, JSON response mode) |
-| **Input** | Full story text + user prompt + art style |
-| **Output** | Structured JSON with 4 analysis categories |
+| Aspect         | Detail                                                                 |
+| -------------- | ---------------------------------------------------------------------- |
+| **Model**      | Gemini 2.0 Flash (temperature 0.4, JSON response mode)                 |
+| **Input**      | Full story text + user prompt + art style                              |
+| **Output**     | Structured JSON with 4 analysis categories                             |
 | **Live Notes** | Per-scene: thought, mood, tension_level, craft_note, emoji, suggestion |
 
 **Output structure:**
@@ -515,7 +518,7 @@ The Director provides **meta-commentary** on the creative process — the "why" 
   },
   "characters": {
     "summary": "Two protagonists with opposing motivations",
-    "list": [{"name": "Elena", "role": "detective", "trait": "determined"}],
+    "list": [{ "name": "Elena", "role": "detective", "trait": "determined" }],
     "detail": "Elena's stubbornness creates natural conflict..."
   },
   "tension": {
@@ -543,13 +546,13 @@ The TTS Agent generates narration audio for each scene using **Gemini Native Aud
 
 The agents are backed by service modules:
 
-| Service | Role | Key Details |
-|---------|------|-------------|
-| `gemini_client.py` | Gemini API wrapper | Singleton client, streaming generation, retry utility with transient error detection |
-| `imagen_client.py` | Imagen 3 wrapper | Per-user circuit breaker, module-level `asyncio.Semaphore(1)` serializing all calls, jitter on retry delays |
-| `tts_client.py` | Gemini Native Audio wrapper | WAV output via Live API, mood-adaptive narration, proportional silence insertion on segment failure |
-| `storage_client.py` | GCS wrapper | Retry + signed URL fallback if `make_public()` fails |
-| `director_chat.py` | Director Chat session | Gemini Live API with native tool calling, transcription, context compression |
+| Service             | Role                        | Key Details                                                                                                 |
+| ------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `gemini_client.py`  | Gemini API wrapper          | Singleton client, streaming generation, retry utility with transient error detection                        |
+| `imagen_client.py`  | Imagen 3 wrapper            | Per-user circuit breaker, module-level `asyncio.Semaphore(1)` serializing all calls, jitter on retry delays |
+| `tts_client.py`     | Gemini Native Audio wrapper | WAV output via Live API, mood-adaptive narration, proportional silence insertion on segment failure         |
+| `storage_client.py` | GCS wrapper                 | Retry + signed URL fallback if `make_public()` fails                                                        |
+| `director_chat.py`  | Director Chat session       | Gemini Live API with native tool calling, transcription, context compression                                |
 
 ### Resilience Patterns
 
@@ -789,7 +792,7 @@ flowchart TB
     style Output fill:#1a1a2e,stroke:#10b981,color:#e2e8f0
 ```
 
-The output *weaves* modalities together per scene, not sequentially:
+The output _weaves_ modalities together per scene, not sequentially:
 
 ```
 [TEXT]      "The detective pushed open the creaking door..."
@@ -807,31 +810,31 @@ The output *weaves* modalities together per scene, not sequentially:
 
 ## Tech Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Frontend | React + Vite | Story canvas, template carousel, director mode, library, explore |
-| Styling | CSS (glassmorphism) | Frosted glass panels, dark/light theme, Dream Violet / Story Amber branding |
-| Auth | Firebase Authentication | Google Sign-In + email/password for user accounts |
-| Voice Input | Web Audio API + AudioWorklet | Continuous PCM streaming for Director Chat; server-side VAD |
-| Real-time Comms | WebSocket (native) | Stream interleaved output to client |
-| Backend | Python 3.12 + FastAPI + Uvicorn | WebSocket handler, orchestration, REST API |
-| Agent Framework | Google ADK (Agent Development Kit) | Multi-agent orchestration |
-| LLM | Gemini 2.0 Flash (Vertex AI) | Story generation, character sheets, scene composition, prompt validation |
-| Interleaved Output | Gemini Native (`response_modalities: ["TEXT", "IMAGE"]`) | Text+image generation in a single call (tier-0 fallback for Imagen) |
-| Image Gen | Imagen 3 (Vertex AI) | Scene illustrations, book covers, character portraits |
-| Director Chat | Gemini Live API (`gemini-live-2.5-flash-native-audio`) | Real-time voice brainstorming with native tool calling and transcription |
-| Voice Output | Gemini Native Audio (Live API) | Expressive, mood-adaptive story narration |
-| Audio Streaming | Web Audio API (AudioContext) | Low-latency gapless PCM playback for Director voice streaming |
-| Vision | Gemini Vision | Visual DNA extraction from portraits, text overlay placement |
-| Database | Cloud Firestore | Story persistence, user libraries, likes, ratings, comments |
-| Object Storage | Google Cloud Storage | Scene images, cover images, portrait images |
-| Hosting | Google Cloud Run | Containerized backend deployment |
-| Static Hosting | Firebase Hosting | Frontend SPA |
-| Container | Docker | Reproducible builds |
-| CI/CD | GitHub Actions (4 jobs) | Automated test + deploy pipeline |
-| Backend Tests | pytest + httpx | Smoke tests with mocked Firebase/Firestore |
-| Frontend Tests | Playwright | Browser smoke tests (Chromium) |
-| PDF Generation | fpdf2 | Storybook PDF export with images |
+| Layer              | Technology                                               | Purpose                                                                     |
+| ------------------ | -------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Frontend           | React + Vite                                             | Story canvas, template carousel, director mode, library, explore            |
+| Styling            | CSS (glassmorphism)                                      | Frosted glass panels, dark/light theme, Dream Violet / Story Amber branding |
+| Auth               | Firebase Authentication                                  | Google Sign-In + email/password for user accounts                           |
+| Voice Input        | Web Audio API + AudioWorklet                             | Continuous PCM streaming for Director Chat; server-side VAD                 |
+| Real-time Comms    | WebSocket (native)                                       | Stream interleaved output to client                                         |
+| Backend            | Python 3.12 + FastAPI + Uvicorn                          | WebSocket handler, orchestration, REST API                                  |
+| Agent Framework    | Google ADK (Agent Development Kit)                       | Multi-agent orchestration                                                   |
+| LLM                | Gemini 2.0 Flash (Vertex AI)                             | Story generation, character sheets, scene composition, prompt validation    |
+| Interleaved Output | Gemini Native (`response_modalities: ["TEXT", "IMAGE"]`) | Text+image generation in a single call (tier-0 fallback for Imagen)         |
+| Image Gen          | Imagen 3 (Vertex AI)                                     | Scene illustrations, book covers, character portraits                       |
+| Director Chat      | Gemini Live API (`gemini-live-2.5-flash-native-audio`)   | Real-time voice brainstorming with native tool calling and transcription    |
+| Voice Output       | Gemini Native Audio (Live API)                           | Expressive, mood-adaptive story narration                                   |
+| Audio Streaming    | Web Audio API (AudioContext)                             | Low-latency gapless PCM playback for Director voice streaming               |
+| Vision             | Gemini Vision                                            | Visual DNA extraction from portraits, text overlay placement                |
+| Database           | Cloud Firestore                                          | Story persistence, user libraries, likes, ratings, comments                 |
+| Object Storage     | Google Cloud Storage                                     | Scene images, cover images, portrait images                                 |
+| Hosting            | Google Cloud Run                                         | Containerized backend deployment                                            |
+| Static Hosting     | Firebase Hosting                                         | Frontend SPA                                                                |
+| Container          | Docker                                                   | Reproducible builds                                                         |
+| CI/CD              | GitHub Actions (4 jobs)                                  | Automated test + deploy pipeline                                            |
+| Backend Tests      | pytest + httpx                                           | Smoke tests with mocked Firebase/Firestore                                  |
+| Frontend Tests     | Playwright                                               | Browser smoke tests (Chromium)                                              |
+| PDF Generation     | fpdf2                                                    | Storybook PDF export with images                                            |
 
 ---
 
