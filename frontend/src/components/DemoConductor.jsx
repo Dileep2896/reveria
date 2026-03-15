@@ -16,7 +16,7 @@ const DEMO_STEPS = [
 
 export default function DemoConductor({ generating, onSlideRequest, onClose }) {
   const [stepIdx, setStepIdx] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
+  const [_Elapsed, setElapsed] = useState(0);
   const startTime = useRef(Date.now());
   const prevGenerating = useRef(generating);
 
