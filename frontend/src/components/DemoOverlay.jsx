@@ -6,7 +6,7 @@ import './demo-overlay.css';
  * Context-aware architecture overlay for demo recording.
  * Toggle with backtick (`) key. Auto-selects relevant diagram.
  */
-export default function DemoOverlay({ generating, chatActive, chatLoading }) {
+export default function DemoOverlay({ generating, chatActive, chatLoading, requestedSlide, onSlideRequestHandled }) {
   const [open, setOpen] = useState(false);
   const [manualSlide, setManualSlide] = useState(null);
   const manualSlideRef = useRef(null);
@@ -14,6 +14,19 @@ export default function DemoOverlay({ generating, chatActive, chatLoading }) {
 
   // Keep ref in sync for use inside event handlers
   manualSlideRef.current = manualSlide;
+
+  // Programmatic slide control from DemoConductor
+  useEffect(() => {
+    if (requestedSlide) {
+      setManualSlide(requestedSlide);
+      setOpen(true);
+      onSlideRequestHandled?.();
+    } else if (requestedSlide === null) {
+      setOpen(false);
+      setManualSlide(null);
+      onSlideRequestHandled?.();
+    }
+  }, [requestedSlide, onSlideRequestHandled]);
 
   // Default to pipeline, auto-switch when Director chat opens
   const autoSlide = chatActive ? 'director' : 'pipeline';

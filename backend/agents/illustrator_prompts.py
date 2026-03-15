@@ -280,7 +280,7 @@ ART_STYLES = {
     ),
     "chibi": (
         "chibi manga, super-deformed cute proportions, oversized expressive heads, "
-        "simplified bodies, playful pastel colors, comedic poses, text-free panel art"
+        "simplified bodies, playful pastel colors, comedic poses, characters front and center, text-free panel art"
     ),
     "journal_sketch": (
         "loose pencil journal sketch, rough gestural lines, coffee-stained paper texture, "

@@ -88,8 +88,8 @@ function StoryCanvas({ scenes, generating, onPageChange, storyId, displayPrompt,
 
     const isFirstGen = scenesAtGenStart.current === 0;
 
-    // ── First generation: cover → first scene flip ──
-    if (generating && isFirstGen && !firstGenFlipDone.current && scenes.length > 0) {
+    // ── First generation: cover → first scene flip (flip immediately to show shimmer) ──
+    if (generating && isFirstGen && !firstGenFlipDone.current) {
       firstGenFlipDone.current = true;
       const target = 1;
       lastFlipTarget.current = target;

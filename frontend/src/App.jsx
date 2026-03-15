@@ -18,6 +18,8 @@ import Logo from './components/Logo';
 import StoryCanvas from './components/StoryCanvas';
 import AppHeader from './components/AppHeader';
 import CompleteBookDialog from './components/dialogs/CompleteBookDialog';
+import StylePickerDialog from './components/dialogs/StylePickerDialog';
+import HeroUploadDialog from './components/dialogs/HeroUploadDialog';
 import SettingsDialog from './components/SettingsDialog';
 import DirectorPanel from './components/DirectorPanel';
 import BookDetailsPage from './components/BookDetailsPage';
@@ -27,6 +29,7 @@ import ExplorePage from './components/ExplorePage';
 import ReadingMode from './components/ReadingMode';
 import SplashScreen from './components/SplashScreen';
 import DemoOverlay from './components/DemoOverlay';
+import DemoConductor from './components/DemoConductor';
 import AuthScreen, { VerifyEmailScreen } from './components/AuthScreen';
 import SubscriptionPage from './components/SubscriptionPage';
 import AdminDashboard from './components/AdminDashboard';
@@ -46,7 +49,7 @@ export default function App() {
   const isNewRoute = location.pathname.replace(/\/+$/, '') === '/new';
   const { initialState, storyLoading, clearState } = useActiveStory(user, urlStoryId, { skip: isNewRoute });
   const { addToast } = useToast();
-  const { connected, scenes, generating, generationStage, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, usage, heroMode, send, sendSteer: _sendSteer, sendAudio, sendHeroPhoto, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, setNavigateHandler, setAudioChunkHandler, setAudioDoneHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorAudioChunk, sendDirectorAudioStreamStart, sendDirectorAudioStreamEnd, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat } = useWebSocket(idToken, initialState, addToast);
+  const { connected, scenes, generating, generationStage, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, usage, heroMode, send, sendSteer: _sendSteer, sendAudio, sendHeroPhoto, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, setNavigateHandler, setAudioChunkHandler, setAudioDoneHandler, setArtStyleHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorAudioChunk, sendDirectorAudioStreamStart, sendDirectorAudioStreamEnd, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat } = useWebSocket(idToken, initialState, addToast);
   // Stable canvas key: freeze during generation so backend assigning story_id
   // doesn't cause a full StoryCanvas remount mid-generation.
   // Once a storyId is assigned, never revert to 'new' — prevents remount
@@ -67,15 +70,37 @@ export default function App() {
   const [template, setTemplate] = useState('storybook');
   useEffect(() => { document.documentElement.dataset.template = template; }, [template]);
   const [templateChosen, setTemplateChosen] = useState(false);
+  const [controlBarVisible, setControlBarVisible] = useState(false);
+  const [showStylePicker, setShowStylePicker] = useState(false);
+  const [showHeroUpload, setShowHeroUpload] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
+  const demoModeRef = useRef(false);
+  demoModeRef.current = demoMode;
+  const [demoSlideRequest, setDemoSlideRequest] = useState(undefined);
   const handleTemplateSelect = useCallback((key) => {
     setTemplate(key);
     setArtStyle(getTemplate(key).defaultArtStyle);
     setTemplateChosen(true);
+    setControlBarVisible(false);
   }, []);
   const [languageRaw, setLanguageRaw] = useState('English');
   const setLanguage = useCallback((lang) => { setLanguageRaw(lang); setControlBarInput(''); }, []);
   const language = languageRaw;
   useEffect(() => { setLanguageDetectedHandler(setLanguage); }, [setLanguageDetectedHandler, setLanguage]);
+  useEffect(() => { setArtStyleHandler((style) => { setArtStyle(style); setShowStylePicker(false); }); }, [setArtStyleHandler]);
+
+  // Ctrl+Shift+D toggles demo conductor mode
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        setDemoMode(v => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   // Director navigate_app tool: end chat session, then route to destination
   useEffect(() => {
     setNavigateHandler((dest) => {
@@ -120,6 +145,47 @@ export default function App() {
     }
   }, [isStoryRoute, directorChatActive, endDirectorChat]);
 
+  // Auto-start Director Chat when template is first selected (voice-first UX)
+  const templateJustChosen = useRef(false);
+  useEffect(() => {
+    if (templateChosen && !templateJustChosen.current && scenes.length === 0 && !directorChatActive && connected) {
+      templateJustChosen.current = true;
+      // Small delay so panel renders first
+      const t = setTimeout(() => {
+        startDirectorChat('', { language, voiceName: directorVoice, template, demoMode: demoModeRef.current });
+      }, 300);
+      return () => clearTimeout(t);
+    }
+    if (!templateChosen) templateJustChosen.current = false;
+  }, [templateChosen, scenes.length, directorChatActive, connected, startDirectorChat, language, directorVoice, template]);
+
+  // Show style picker (or hero upload) after Director greeting arrives
+  const greetingShownRef = useRef(false);
+  useEffect(() => {
+    if (!templateChosen || scenes.length > 0 || greetingShownRef.current) return;
+    // In demo mode, skip dialogs — Director handles everything verbally
+    if (demoModeRef.current) return;
+    // Wait for first Director message (greeting transcript)
+    const hasGreeting = directorChatMessages.some(m => m.role === 'director');
+    if (hasGreeting && directorChatActive) {
+      greetingShownRef.current = true;
+      // Small delay so greeting audio plays first
+      const t = setTimeout(() => {
+        if (template === 'hero') {
+          setShowHeroUpload(true);
+        } else {
+          setShowStylePicker(true);
+        }
+      }, 1500);
+      return () => clearTimeout(t);
+    }
+  }, [directorChatMessages, directorChatActive, templateChosen, scenes.length, template]);
+
+  // Reset greeting shown ref when going back to templates
+  useEffect(() => {
+    if (!templateChosen) greetingShownRef.current = false;
+  }, [templateChosen]);
+
   // Per-scene action callbacks
   const handleRegenImage = useCallback((sceneNumber, sceneText) => {
     if (!storyId || generating) return;
@@ -153,6 +219,7 @@ export default function App() {
     if (scenes.length > 0) {
       setHasBeenPopulated(true);
       setTemplateChosen(true);
+      // ControlBar stays hidden — user can toggle via floating button
     }
   }, [scenes.length]);
   useEffect(() => {
@@ -434,12 +501,68 @@ export default function App() {
               <SceneActionsContext.Provider value={sceneActionsValue}>
                 <div className="flex flex-1 overflow-hidden relative z-10">
                   <div className="flex-1 relative flex flex-col min-w-0">
-                    <StoryCanvas key={canvasKey} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={viewingReadOnly ? null : displayPrompt} spreadPrompts={viewingReadOnly ? null : spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} onLanguageChange={scenes.length === 0 && !templateChosen ? setLanguage : undefined} singlePage={singlePage} template={template} onTemplateSelect={!templateChosen ? handleTemplateSelect : undefined} onTemplateBack={templateChosen && scenes.length === 0 ? () => setTemplateChosen(false) : undefined} />
-                    {!viewingReadOnly && storyStatus !== 'completed' && (templateChosen || scenes.length > 0) && (
-                      <ControlBar onSend={(text, opts) => send(text, opts)} onSendAudio={(b64, mime) => sendAudio(b64, mime)} connected={connected} generating={generating} generationStage={generationStage} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} usage={usage} onHeroPhoto={sendHeroPhoto} heroMode={heroMode} template={template} />
+                    <StoryCanvas key={canvasKey} scenes={scenes} generating={generating} userPrompt={userPrompt} error={error} onPageChange={setCurrentSceneNumber} storyId={storyId} displayPrompt={viewingReadOnly ? null : displayPrompt} spreadPrompts={viewingReadOnly ? null : spreadPrompts} bookmarkPage={bookmarkedSceneIndex !== null ? bookmarkedSceneIndex + 1 : null} language={language} onLanguageChange={scenes.length === 0 && !templateChosen ? setLanguage : undefined} singlePage={singlePage} template={template} onTemplateSelect={!templateChosen ? handleTemplateSelect : undefined} onTemplateBack={templateChosen && scenes.length === 0 ? () => { endDirectorChat(); setTemplateChosen(false); setShowStylePicker(false); } : undefined} />
+                    {!viewingReadOnly && !demoMode && storyStatus !== 'completed' && (templateChosen || scenes.length > 0) && (
+                      <>
+                        {controlBarVisible && (
+                          <ControlBar onSend={(text, opts) => send(text, opts)} onSendAudio={(b64, mime) => sendAudio(b64, mime)} connected={connected} generating={generating} generationStage={generationStage} quotaCooldown={quotaCooldown} inputValue={controlBarInput} setInputValue={setControlBarInput} artStyle={artStyle} setArtStyle={setArtStyle} language={language} usage={usage} onHeroPhoto={sendHeroPhoto} heroMode={heroMode} template={template} />
+                        )}
+                        {generating ? (
+                          <div className="control-bar-toggle control-bar-toggle--stage">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="control-stage-spin">
+                              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                            </svg>
+                            <span>{
+                              generationStage === 'writing' ? 'Writing story...' :
+                              generationStage === 'illustrating' ? 'Painting scene...' :
+                              generationStage === 'narrating' ? 'Adding narration...' :
+                              generationStage === 'saving' ? 'Saving story...' :
+                              generationStage === 'finishing' ? 'Final touches...' :
+                              'Generating...'
+                            }</span>
+                          </div>
+                        ) : (
+                          <button
+                            className="control-bar-toggle"
+                            onClick={() => setControlBarVisible(v => !v)}
+                            aria-label={controlBarVisible ? 'Hide text input' : 'Show text input'}
+                          >
+                            {controlBarVisible ? (
+                              <>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                                <span>Hide</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                                  <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
+                                  <line x1="6" y1="12" x2="18" y2="12" />
+                                  <line x1="6" y1="16" x2="14" y2="16" />
+                                </svg>
+                                <span>Type a prompt</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {showStylePicker && (
+                      <StylePickerDialog
+                        template={template}
+                        currentStyle={artStyle}
+                        onSelect={(key) => { setArtStyle(key); }}
+                        onClose={() => setShowStylePicker(false)}
+                        nudgeTimeout={15000}
+                        onNudge={() => {
+                          sendDirectorChatText('[SYSTEM: The user hasn\'t picked an art style yet. Gently remind them to choose one from the style picker on screen.]');
+                        }}
+                      />
                     )}
                   </div>
-                  {directorOpen && !viewingReadOnly && (templateChosen || scenes.length > 0) && <DirectorPanel singlePage={singlePage} heroMode={heroMode} template={template} data={activeDirectorData} generating={generating} scenes={scenes} currentSceneNumber={currentSceneNumber} language={language} liveNotes={directorLiveNotes} chatActive={directorChatActive} chatMessages={directorChatMessages} chatLoading={directorChatLoading} chatPrompt={directorChatPrompt} autoGenerate={directorAutoGenerate} onCancelAutoGenerate={cancelDirectorAutoGenerate} onStartChat={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; startDirectorChat(ctx, { language, voiceName: directorVoice, template }); }} onEndChat={endDirectorChat} onChatAudio={sendDirectorChatAudio} onChatAudioChunk={sendDirectorAudioChunk} onChatAudioStreamStart={sendDirectorAudioStreamStart} onChatAudioStreamEnd={sendDirectorAudioStreamEnd} onChatNudge={sendDirectorChatText} onChatSuggest={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; suggestDirectorPrompt(ctx); }} onUsePrompt={(prompt) => { setControlBarInput(prompt); }} setAudioChunkHandler={setAudioChunkHandler} setAudioDoneHandler={setAudioDoneHandler} />}
+                  {directorOpen && !viewingReadOnly && (templateChosen || scenes.length > 0) && <DirectorPanel singlePage={singlePage} heroMode={heroMode} template={template} artStyle={artStyle} data={activeDirectorData} generating={generating} scenes={scenes} currentSceneNumber={currentSceneNumber} language={language} liveNotes={directorLiveNotes} chatActive={directorChatActive} chatMessages={directorChatMessages} chatLoading={directorChatLoading} chatPrompt={directorChatPrompt} autoGenerate={directorAutoGenerate} onCancelAutoGenerate={cancelDirectorAutoGenerate} onStartChat={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; startDirectorChat(ctx, { language, voiceName: directorVoice, template, demoMode: demoModeRef.current }); }} onEndChat={endDirectorChat} onChatAudio={sendDirectorChatAudio} onChatAudioChunk={sendDirectorAudioChunk} onChatAudioStreamStart={sendDirectorAudioStreamStart} onChatAudioStreamEnd={sendDirectorAudioStreamEnd} onChatNudge={sendDirectorChatText} onChatSuggest={() => { const ctx = scenes.map(s => `Scene ${s.scene_number}: ${s.text}`).join('\n\n') || ''; suggestDirectorPrompt(ctx); }} onUsePrompt={(prompt) => { setControlBarInput(prompt); }} setAudioChunkHandler={setAudioChunkHandler} setAudioDoneHandler={setAudioDoneHandler} />}
                 </div>
               </SceneActionsContext.Provider>
             }
@@ -463,10 +586,35 @@ export default function App() {
       {splashExiting && <SplashScreen message={lastSplashMsgRef.current} exiting />}
 
 
+      {showHeroUpload && (
+        <HeroUploadDialog
+          onUpload={(base64, mimeType, name) => {
+            sendHeroPhoto(base64, mimeType, name);
+            // After hero upload, show style picker
+            setTimeout(() => setShowStylePicker(true), 500);
+          }}
+          onClose={() => setShowHeroUpload(false)}
+          nudgeTimeout={20000}
+          onNudge={() => {
+            sendDirectorChatText('[SYSTEM: The user hasn\'t uploaded their hero photo yet. Remind them warmly to upload a photo so they can star in their own adventure.]');
+          }}
+        />
+      )}
+
+      {demoMode && (
+        <DemoConductor
+          generating={generating}
+          onSlideRequest={setDemoSlideRequest}
+          onClose={() => setDemoMode(false)}
+        />
+      )}
+
       <DemoOverlay
         generating={generating}
         chatActive={directorChatActive}
         chatLoading={directorChatLoading}
+        requestedSlide={demoSlideRequest}
+        onSlideRequestHandled={() => setDemoSlideRequest(undefined)}
       />
     </div>
   );

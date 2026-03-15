@@ -738,6 +738,13 @@
   font-weight: 600;
   text-transform: none;
 }
+.director-badge-style {
+  color: var(--accent-secondary);
+  background: rgba(255, 168, 108, 0.1);
+  border: 1px solid rgba(255, 168, 108, 0.2);
+  font-weight: 600;
+  text-transform: none;
+}
 .director-help-btn {
   width: 22px;
   height: 22px;

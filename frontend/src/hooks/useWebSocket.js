@@ -46,6 +46,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const navigateRef = useRef(null);
   const audioChunkRef = useRef(null);
   const audioDoneRef = useRef(null);
+  const artStyleRef = useRef(null);
 
   const idTokenRef = useRef(idToken);
   const prevTokenRef = useRef(idToken);
@@ -85,6 +86,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
       onNavigate: (dest) => navigateRef.current?.(dest),
       onAudioChunk: (data) => audioChunkRef.current?.(data),
       onAudioDone: (data) => audioDoneRef.current?.(data),
+      onArtStyleChange: (style) => artStyleRef.current?.(style),
     });
   }
 
@@ -279,8 +281,8 @@ export default function useWebSocket(idToken, initialState, addToast) {
     }
   }, []);
 
-  const startDirectorChat = useCallback((storyContext, { language, voiceName, template } = {}) => {
-    console.log('%c[WS-Send]', 'color: #a29bfe; font-weight: bold', `🎬 Starting Director Chat (lang=${language}, voice=${voiceName}, template=${template})`);
+  const startDirectorChat = useCallback((storyContext, { language, voiceName, template, demoMode } = {}) => {
+    console.log('%c[WS-Send]', 'color: #a29bfe; font-weight: bold', `🎬 Starting Director Chat (lang=${language}, voice=${voiceName}, template=${template}, demo=${!!demoMode})`);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       setDirectorChatActive(true);
       setDirectorChatLoading(true);
@@ -290,6 +292,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
       if (language) msg.language = language;
       if (voiceName) msg.voice_name = voiceName;
       if (template) msg.template = template;
+      if (demoMode) msg.demo_mode = true;
       wsRef.current.send(JSON.stringify(msg));
     } else {
       console.warn('%c[WS-Send]', 'color: #fd79a8; font-weight: bold', `🚫 Can't start chat — WS state=${wsRef.current?.readyState}`);
@@ -434,6 +437,7 @@ export default function useWebSocket(idToken, initialState, addToast) {
   const setNavigateHandler = useCallback((handler) => { navigateRef.current = handler; }, []);
   const setAudioChunkHandler = useCallback((handler) => { audioChunkRef.current = handler; }, []);
   const setAudioDoneHandler = useCallback((handler) => { audioDoneRef.current = handler; }, []);
+  const setArtStyleHandler = useCallback((handler) => { artStyleRef.current = handler; }, []);
 
-  return { connected, scenes, generating, generationStage, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendHeroName, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, setNavigateHandler, setAudioChunkHandler, setAudioDoneHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorAudioChunk, sendDirectorAudioStreamStart, sendDirectorAudioStreamEnd, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat };
+  return { connected, scenes, generating, generationStage, userPrompt, error, directorData, directorLiveNotes, generations, storyId, quotaCooldown, sceneBusy, bookMeta, portraits, portraitsLoading, usage, heroMode, send, sendSteer, sendAudio, sendHeroPhoto, sendHeroName, sendSceneAction, reset, load, setStoryDeletedHandler, setControlBarInputHandler, setLanguageDetectedHandler, setNavigateHandler, setAudioChunkHandler, setAudioDoneHandler, setArtStyleHandler, directorChatActive, directorChatMessages, directorChatLoading, directorChatPrompt, directorAutoGenerate, setDirectorAutoGenerate, cancelDirectorAutoGenerate, startDirectorChat, sendDirectorChatAudio, sendDirectorAudioChunk, sendDirectorAudioStreamStart, sendDirectorAudioStreamEnd, sendDirectorChatText, suggestDirectorPrompt, endDirectorChat };
 }

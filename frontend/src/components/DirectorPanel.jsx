@@ -12,9 +12,10 @@ import SceneInsightPair from './director/SceneInsightPair';
 import StoryHealthCard from './director/StoryHealthCard';
 import StoryDetails from './director/StoryDetails';
 import useDirectorAudioPlayback from '../hooks/useDirectorAudioPlayback';
+import { ART_STYLES } from '../data/artStyles';
 
 export default function DirectorPanel({
-  singlePage = false, heroMode, template,
+  singlePage = false, heroMode, template, artStyle,
   data, generating, scenes = [], currentSceneNumber, language, liveNotes = [],
   chatActive, chatMessages = [], chatLoading, chatPrompt,
   autoGenerate, onCancelAutoGenerate, castAnalyzing = false, demoSpeaking = false, demoListening = false,
@@ -58,6 +59,7 @@ export default function DirectorPanel({
         <h2 className="director-panel-title">Director</h2>
         {heroMode?.active && <span className="director-badge director-badge-hero">Hero</span>}
         {language && <span className="director-badge director-badge-lang">{language}</span>}
+        {artStyle && <span className="director-badge director-badge-style">{ART_STYLES.find(s => s.key === artStyle)?.label || artStyle}</span>}
         <Tooltip label="Director guide">
           <button
             onClick={() => setHelpOpen(true)}

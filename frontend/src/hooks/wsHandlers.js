@@ -40,7 +40,7 @@ export function createWsHandlers({
   generationsRef, currentBatchIndexRef, initialStateRef, hydratedRef,
   addToastRef, quotaImageToastFired, cooldownTimer,
   storyDeletedRef, setControlBarInput,
-  setUsage,
+  setUsage, onArtStyleChange,
   setDirectorLiveNotes,
   setDirectorChatActive, setDirectorChatMessages, setDirectorChatLoading, setDirectorChatPrompt,
   setDirectorAutoGenerate,
@@ -406,6 +406,7 @@ export function createWsHandlers({
 
       case 'director_chat_generate':
         wsLog('⚡ Auto-generate:', data.prompt?.slice(0, 80));
+        if (setDirectorChatPrompt) setDirectorChatPrompt(null); // Clear stale suggestion
         if (setDirectorAutoGenerate) {
           setDirectorAutoGenerate({
             prompt: data.prompt,
@@ -415,6 +416,11 @@ export function createWsHandlers({
             template: data.template,
           });
         }
+        return true;
+
+      case 'director_chat_art_style':
+        wsLog('🎨 Art style set by Director:', data.art_style);
+        if (onArtStyleChange) onArtStyleChange(data.art_style);
         return true;
 
       case 'director_chat_audio_chunk':

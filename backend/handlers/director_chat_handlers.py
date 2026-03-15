@@ -98,6 +98,27 @@ async def _handle_tool_call(
         })
         return True
 
+    # --- set_art_style ---
+    if tool_name == "set_art_style":
+        style = args.get("style", "").strip().lower()
+        on_chunk = _make_chunk_sender(websocket)
+        logger.info("Director set_art_style: %s", style)
+
+        # Accept the tool call and update state
+        followup = await state.director_chat.respond_to_tool_call(
+            tc, success=True, on_audio_chunk=on_chunk,
+        )
+        await _safe_send(websocket, {
+            "type": "director_chat_audio_done",
+            "output_transcript": followup.get("output_transcript", ""),
+        })
+        # Notify frontend to update art style
+        await _safe_send(websocket, {
+            "type": "director_chat_art_style",
+            "art_style": style,
+        })
+        return True
+
     # --- Unknown tool: reject to keep session consistent ---
     logger.warning("Unknown Director tool call: %s", tool_name)
     try:
@@ -138,7 +159,12 @@ async def handle_director_chat_start(
     message: dict[str, Any],
     state: Any,  # WsConnectionState
 ) -> None:
-    """Handle director_chat_start message."""
+    """Handle director_chat_start message.
+
+    Two-phase startup for low latency:
+    1. Connect — open Live session, immediately send 'director_chat_started' to frontend
+    2. Greet — stream greeting audio chunks to frontend (same path as regular responses)
+    """
     try:
         # Close any orphaned session before starting a new one
         if state.director_chat:
@@ -158,33 +184,106 @@ async def handle_director_chat_start(
         chat_language = message.get("language", state.language_current)
         chat_voice = message.get("voice_name", "Charon")
         chat_template = message.get("template", state.template_current)
+        demo_mode = message.get("demo_mode", False)
         state.director_chat = DirectorChatSession()
 
-        # Pass hero info to greeting if available (sanitize to prevent prompt breakage)
+        # Phase 1: Connect (fast — typically <2s)
+        try:
+            await asyncio.wait_for(
+                state.director_chat.connect(chat_language, chat_voice, chat_template, demo=demo_mode),
+                timeout=15.0,
+            )
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.error("Director chat connect failed: %s", e)
+            await state.director_chat.close()
+            state.director_chat = None
+            await _safe_send(websocket, {"type": "director_chat_error", "content": "Failed to start Director chat"})
+            return
+
+        # Send started immediately — frontend shows orb before greeting arrives
+        await _safe_send(websocket, {
+            "type": "director_chat_started",
+            "audio_url": None,
+            "transcript": "",
+        })
+
+        # Phase 2: Stream greeting audio (non-blocking feel)
         hero_info = ""
         if state.hero_description:
             hero_name = (state.hero_name or "the user")[:100].replace("\n", " ").strip()
             hero_desc = state.hero_description[:500].replace("\n", " ").strip()
             hero_info = (
-                f"\n\n[HERO MODE ACTIVE: {hero_name} has uploaded their photo and wants to BE the protagonist. "
-                f"Physical appearance: {hero_desc}. "
-                f"When brainstorming, naturally make {hero_name} the main character of the story. "
-                f"You can reference their appearance when discussing scenes.]"
+                f"\n\n[HERO MODE ACTIVE: {hero_name} — protagonist. "
+                f"Appearance: {hero_desc}. Make them the hero.]"
             )
 
-        result = await state.director_chat.start(
-            story_ctx + hero_info,
-            language=chat_language,
-            voice_name=chat_voice,
-            template=chat_template,
-        )
+        on_chunk = _make_chunk_sender(websocket)
+
+        # Retry with full reconnect up to 3 attempts — Gemini Live API
+        # sometimes returns zero audio chunks on the first session.
+        MAX_GREETING_ATTEMPTS = 3
+        result = None
+        for attempt in range(1, MAX_GREETING_ATTEMPTS + 1):
+            try:
+                result = await asyncio.wait_for(
+                    state.director_chat.send_greeting(story_ctx + hero_info, on_audio_chunk=on_chunk),
+                    timeout=20.0,
+                )
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.error("Director greeting attempt %d failed: %s", attempt, e)
+                result = {"chunk_count": 0, "output_transcript": ""}
+
+            # Check if we got audio — chunk_count > 0 or transcript present
+            got_audio = result.get("chunk_count", 0) > 0
+            got_transcript = bool(result.get("output_transcript", "").strip())
+            if got_audio or got_transcript:
+                logger.info("Director greeting succeeded on attempt %d (chunks=%s, transcript=%s)",
+                            attempt, result.get("chunk_count"), bool(got_transcript))
+                break
+
+            if attempt < MAX_GREETING_ATTEMPTS:
+                logger.warning("Director greeting returned no audio (attempt %d/%d) — reconnecting session",
+                               attempt, MAX_GREETING_ATTEMPTS)
+                # Full reconnect: close dead session and create fresh one
+                try:
+                    await state.director_chat.close()
+                except Exception:
+                    pass
+                state.director_chat = DirectorChatSession()
+                try:
+                    await asyncio.wait_for(
+                        state.director_chat.connect(chat_language, chat_voice, chat_template, demo=demo_mode),
+                        timeout=15.0,
+                    )
+                except Exception as reconn_err:
+                    logger.error("Director reconnect failed on attempt %d: %s", attempt, reconn_err)
+                    state.director_chat = None
+                    await _safe_send(websocket, {"type": "director_chat_error", "content": "Director session failed to reconnect.", "fatal": True})
+                    return
+            else:
+                logger.error("Director greeting failed after %d attempts — no audio produced", MAX_GREETING_ATTEMPTS)
+
+        # If session died during greeting
+        if not state.director_chat or not state.director_chat._session:
+            logger.warning("Director session died during greeting")
+            state.director_chat = None
+            await _safe_send(websocket, {"type": "director_chat_error", "content": "Director session expired. Please restart.", "fatal": True})
+            return
+
+        # Signal greeting audio complete
         await _safe_send(websocket, {
-            "type": "director_chat_started",
-            "audio_url": result["audio_url"],
-            "transcript": result.get("output_transcript", ""),
+            "type": "director_chat_audio_done",
+            "output_transcript": result.get("output_transcript", "") if result else "",
         })
+
     except Exception as e:
         logger.error("Director chat start failed: %s", e)
+        if state.director_chat:
+            try:
+                await state.director_chat.close()
+            except Exception:
+                pass
+        state.director_chat = None
         await _safe_send(websocket, {"type": "director_chat_error", "content": "Failed to start Director chat"})
 
 

@@ -661,23 +661,13 @@ class Illustrator:
         # Step 2: Generate scene composition
         is_visual_narrative = get_template(self._template).visual_narrative
 
-        # For visual narratives: if character ID returned empty but we have a sheet
-        # AND the scene text likely has characters (dialog or character name present),
-        # fall back to including ALL characters (short scenes may confuse the identifier)
+        # For visual narratives: if character ID returned empty but we have a sheet,
+        # ALWAYS include the full character sheet — visual narrative formats (manga, comic,
+        # webtoon) must have characters visible in every scene. The identifier often fails
+        # on short or dialogue-heavy scenes.
         if not char_block and is_visual_narrative and self._character_sheet:
-            scene_lower = scene_text.lower()
-            has_dialog = '"' in scene_text or '\u201c' in scene_text
-            # Check if any character name from the sheet appears in the scene
-            sheet_names = [
-                line.split(":", 1)[0].strip().lower()
-                for line in self._character_sheet.strip().splitlines()
-                if ":" in line and line.split(":", 1)[0].strip()
-            ]
-            has_char_hint = any(name in scene_lower for name in sheet_names)
-            if has_dialog or has_char_hint:
-                logger.info("Visual narrative fallback: including full character sheet (dialog=%s, char_hint=%s)",
-                            has_dialog, has_char_hint)
-                char_block = self._character_sheet
+            logger.info("Visual narrative fallback: including full character sheet (char_block was empty)")
+            char_block = self._character_sheet
 
         if char_block:
             # Strip hex codes — Imagen uses natural language colors, not hex
@@ -693,8 +683,12 @@ class Illustrator:
             )
         elif is_visual_narrative:
             # No character sheet at all — still use the visual narrative instruction
-            # which will try to infer character appearances from the scene text
-            user_input = f"SCENE TO ILLUSTRATE:\n{scene_text}"
+            # and explicitly remind to include characters from the scene text
+            user_input = (
+                "IMPORTANT: Characters MUST be visible and prominent in the illustration. "
+                "Infer character appearances from the scene text.\n\n"
+                f"SCENE TO ILLUSTRATE:\n{scene_text}"
+            )
             instruction = VISUAL_NARRATIVE_SCENE_COMPOSER_INSTRUCTION
         else:
             user_input = f"SCENE TO ILLUSTRATE:\n{scene_text}"
@@ -731,11 +725,16 @@ class Illustrator:
         if get_template(self._template).visual_narrative:
             # Visual narrative: text-free instruction UP FRONT (Imagen weights beginning most),
             # then scene, art style, and negative constraints at end
-            text_free = "Clean illustration without any text, speech bubbles, captions, or written words."
+            text_free = (
+                "CRITICAL: This is a TEXT-FREE illustration only. "
+                "Absolutely no text, no speech bubbles, no dialog bubbles, no captions, "
+                "no narration boxes, no sound effects, no onomatopoeia, no written words of any kind. "
+                "The image must contain ZERO letters or symbols."
+            )
             negative = (
                 "[NO text, NO speech bubbles, NO dialog bubbles, NO captions, NO letters, "
-                "NO words, NO writing, NO sound effects, NO watermarks, "
-                "NO extra limbs, NO distorted faces, NO blurred features]"
+                "NO words, NO writing, NO sound effects, NO onomatopoeia, NO narration boxes, "
+                "NO watermarks, NO extra limbs, NO distorted faces, NO blurred features]"
             )
             return f"{text_free}\n\n{scene_composition}\n\n{self.art_style_suffix}\n\n{negative}"
         else:

@@ -82,6 +82,7 @@ class DirectorChatSession:
         self._cm = None
         self.conversation_log: list[dict] = []
         self.language: str = "English"
+        self.template: str = "storybook"
         self._msg_count: int = 0  # tracks user messages for re-anchoring
         self._session_lock = asyncio.Lock()  # serializes Live session access
         self._closing = False  # prevents double-close race
@@ -94,26 +95,23 @@ class DirectorChatSession:
         self._connect_config: types.LiveConnectConfig | None = None  # saved for reconnect
         self._reconnect_attempts: int = 0
         self._MAX_RECONNECT_ATTEMPTS = 3
+        self.demo_mode: bool = False
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
 
-    async def start(
+    async def connect(
         self,
-        story_context: str,
         language: str = "English",
         voice_name: str = "Charon",
         template: str = "storybook",
-    ) -> dict:
-        """Open a Live session and get the Director's greeting.
-
-        Returns a _collect_response() result dict.
-        """
+        demo: bool = False,
+    ) -> None:
+        """Open the Live session (no greeting yet). Fast — typically <2s."""
         self.language = language
-        # Truncate very long story contexts to prevent exceeding API limits
-        if len(story_context) > 10_000:
-            story_context = story_context[:10_000] + "\n[...truncated]"
+        self.template = template
+        self.demo_mode = demo
         client = get_client()
-        system_prompt = _build_system_prompt(language, template=template)
+        system_prompt = _build_system_prompt(language, template=template, demo=demo)
 
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
@@ -131,9 +129,6 @@ class DirectorChatSession:
             context_window_compression=types.ContextWindowCompressionConfig(
                 sliding_window=types.SlidingWindow(),
             ),
-            # Server-side VAD: HIGH sensitivity to catch short utterances ("yes", "no")
-            # and avoid missing quiet speech. Our client-side VAD pre-filters noise,
-            # so server-side can be permissive.
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
                     start_of_speech_sensitivity="START_SENSITIVITY_HIGH",
@@ -142,57 +137,154 @@ class DirectorChatSession:
                     silence_duration_ms=300,
                 ),
             ),
-            # Enable session resumption — server sends periodic tokens we can use
-            # to reconnect seamlessly when the connection resets (~10 min lifetime)
             session_resumption=types.SessionResumptionConfig(),
         )
-        # Save config for auto-reconnect
         self._connect_config = config
 
-        try:
-            async def _connect_and_greet():
-                self._cm = client.aio.live.connect(
-                    model=DIRECTOR_LIVE_MODEL, config=config
-                )
-                self._session = await self._cm.__aenter__()
+        self._cm = client.aio.live.connect(
+            model=DIRECTOR_LIVE_MODEL, config=config
+        )
+        self._session = await self._cm.__aenter__()
+        logger.info("Director Live session connected")
 
-                # Send story context + greeting prompt
-                lang_instruction = ""
-                if language and language.lower() != "english":
-                    lang_instruction = f" Greet them in {language} since the story is in {language}."
-                greeting_prompt = (
-                    f"Here's the story so far:\n{story_context}\n\n"
-                    "Greet the writer warmly and briefly (1-2 sentences). "
-                    "Mention something specific about their story to show you've read it. "
-                    f"If there's no story yet, welcome them to start brainstorming.{lang_instruction}"
-                )
-                content = types.Content(
-                    role="user",
-                    parts=[types.Part(text=greeting_prompt)],
-                )
-                await self._session.send_client_content(
-                    turns=content, turn_complete=True
-                )
-                return await _collect_response(self._session, timeout=30.0, session_holder=self)
+    async def send_greeting(
+        self,
+        story_context: str,
+        on_audio_chunk=None,
+    ) -> dict:
+        """Send greeting prompt and stream audio back. Call after connect().
 
-            # Overall timeout covers connection + greeting (Gemini Live can be slow)
-            result = await asyncio.wait_for(_connect_and_greet(), timeout=45.0)
+        Returns a streaming result dict (with chunk_count instead of audio_url).
+        """
+        # Truncate very long story contexts
+        if len(story_context) > 10_000:
+            story_context = story_context[:10_000] + "\n[...truncated]"
+
+        non_english = self.language and self.language.lower() != "english"
+        lang_prefix = f"Greet in {self.language} (the story language). " if non_english else ""
+
+        # Template-aware greeting
+        template_names = {
+            "storybook": "illustrated Storybook",
+            "comic": "Comic Book",
+            "webtoon": "Webtoon",
+            "hero": "Hero Quest",
+            "manga": "Manga",
+            "novel": "Novel",
+            "diary": "Diary",
+            "poetry": "Poetry collection",
+            "photojournal": "Photo Journal",
+        }
+        tpl_name = template_names.get(self.template, self.template)
+
+        # Demo mode: special greeting for judges
+        if self.demo_mode:
+            greeting_prompt = (
+                "You're presenting Reveria LIVE to hackathon judges right now. "
+                "Give your Phase 1 intro — greet the judges warmly, introduce yourself as the Director, "
+                "and emphasize this is a live AI conversation, not pre-recorded. 2-3 sentences, energetic."
+            )
+            content = types.Content(
+                role="user",
+                parts=[types.Part(text=greeting_prompt)],
+            )
+            await self._session.send_client_content(
+                turns=content, turn_complete=True
+            )
+
+            if on_audio_chunk:
+                result = await _collect_response_streaming(
+                    self._session, on_audio_chunk, timeout=15.0, session_holder=self
+                )
+            else:
+                result = await _collect_response(self._session, timeout=15.0, session_holder=self)
 
             self.conversation_log.append({
                 "role": "system",
-                "text": f"[Story context provided]\n{story_context}",
+                "text": "[Demo mode — greeting judges]",
             })
-            if result["output_transcript"]:
+            if result.get("output_transcript"):
                 self.conversation_log.append({
                     "role": "director",
                     "text": result["output_transcript"],
                 })
-
-            logger.info("Director chat session started")
             return result
 
+        has_story = story_context and "No story yet" not in story_context
+        if has_story:
+            greeting_prompt = (
+                f"{lang_prefix}Story so far:\n{story_context}\n\n"
+                "Greet the writer warmly (1-2 sentences). "
+                "Mention something about their story."
+            )
+        else:
+            if self.template == "hero":
+                greeting_prompt = (
+                    f"{lang_prefix}The writer just picked Hero Quest — they'll BE the protagonist! "
+                    f"Greet them excitedly (1-2 sentences). Tell them to upload their photo "
+                    f"using the camera button in the text bar below so you can make them the hero. "
+                    f"Then you'll brainstorm their epic adventure together."
+                )
+            else:
+                greeting_prompt = (
+                    f"{lang_prefix}The writer just picked the {tpl_name} format. "
+                    f"Greet them with excitement about this format choice (1-2 sentences). "
+                    f"Reference what makes {tpl_name} special. "
+                    f"Then mention the art style picker on screen — tell them they can pick an art style "
+                    f"from the panel or just tell you which look they prefer. "
+                    f"End by asking what story they want to create."
+                )
+
+        content = types.Content(
+            role="user",
+            parts=[types.Part(text=greeting_prompt)],
+        )
+        await self._session.send_client_content(
+            turns=content, turn_complete=True
+        )
+
+        if on_audio_chunk:
+            result = await _collect_response_streaming(
+                self._session, on_audio_chunk, timeout=15.0, session_holder=self
+            )
+        else:
+            result = await _collect_response(self._session, timeout=15.0, session_holder=self)
+
+        self.conversation_log.append({
+            "role": "system",
+            "text": f"[Story context provided]\n{story_context}",
+        })
+        if result.get("output_transcript"):
+            self.conversation_log.append({
+                "role": "director",
+                "text": result["output_transcript"],
+            })
+        return result
+
+    async def start(
+        self,
+        story_context: str,
+        language: str = "English",
+        voice_name: str = "Charon",
+        template: str = "storybook",
+    ) -> dict:
+        """Legacy: connect + greet in one call (non-streaming).
+
+        Returns a _collect_response() result dict.
+        """
+        try:
+            await asyncio.wait_for(
+                self.connect(language, voice_name, template),
+                timeout=15.0,
+            )
+            result = await asyncio.wait_for(
+                self.send_greeting(story_context),
+                timeout=20.0,
+            )
+            logger.info("Director chat session started")
+            return result
         except asyncio.TimeoutError:
-            logger.error("Director chat session start timed out (45s)")
+            logger.error("Director chat session start timed out")
             await self.close()
             return {"audio_url": None, "input_transcript": "", "output_transcript": "", "tool_calls": []}
         except Exception as e:
@@ -211,6 +303,8 @@ class DirectorChatSession:
         Uses _msg_count (incremented on every send_audio/send_text) rather
         than conversation_log which depends on transcription succeeding.
         """
+        if self.demo_mode:
+            return True  # bypass gate in demo mode
         return self._msg_count >= self._MIN_USER_TURNS_BEFORE_GENERATE
 
     # ── Re-anchoring ─────────────────────────────────────────────────────

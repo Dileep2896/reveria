@@ -98,8 +98,8 @@ export default function DirectorChat({
 
   // Countdown timer for auto-generate
   useEffect(() => {
-    if (!autoGenerate) { setCountdown(5); setPromptExpanded(false); return; }
-    const start = autoGenerate.countdownStart || 5;
+    if (!autoGenerate) { setCountdown(2); setPromptExpanded(false); return; }
+    const start = autoGenerate.countdownStart || 2;
     setCountdown(start);
     const iv = setInterval(() => {
       setCountdown(prev => {
@@ -248,6 +248,7 @@ export default function DirectorChat({
       wasSpeakingRef.current = true;
       mutedRef.current = false; // Director started speaking naturally — clear manual mute
       consecutiveEmptyRef.current = 0; // Director spoke — reset empty counter
+      greetingReceivedRef.current = true; // Director spoke — greeting is valid
       // Clear any pending post-speak timer (Director started speaking again)
       if (postSpeakTimerRef.current) { clearTimeout(postSpeakTimerRef.current); postSpeakTimerRef.current = null; }
     } else if (wasSpeakingRef.current && !generating && !castAnalyzing && !recording) {
@@ -284,11 +285,14 @@ export default function DirectorChat({
   // Uses a short delay to avoid racing with greeting audio autoplay.
   // Limits consecutive empty responses to prevent infinite loop (noise → empty → resume → noise).
   // Skips auto-resume when loading was from a suggestion request (not user audio).
+  // Skips auto-resume on the very first response (greeting) — if greeting has no audio,
+  // the session may be dead; let the user tap the orb instead.
   const wasLoadingRef = useRef(false);
   const emptyResponseTimerRef = useRef(null);
   const consecutiveEmptyRef = useRef(0);
   const MAX_CONSECUTIVE_EMPTY = 2;
   const suggestionLoadingRef = useRef(false);
+  const greetingReceivedRef = useRef(false);
   useEffect(() => {
     if (chatLoading) {
       wasLoadingRef.current = true;
@@ -298,6 +302,12 @@ export default function DirectorChat({
       if (suggestionLoadingRef.current) {
         suggestionLoadingRef.current = false;
         dcLog('🔄 Suggestion response — skipping auto-resume');
+        return;
+      }
+      // Skip auto-resume on first response (greeting) — let user tap orb
+      if (!greetingReceivedRef.current) {
+        greetingReceivedRef.current = true;
+        dcLog('🔄 Greeting response — waiting for user to tap orb');
         return;
       }
       const wasNoise = lastNoiseRejectedRef.current;
