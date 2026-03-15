@@ -50,12 +50,16 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 
 ## Screenshots
 
-|                                                                                               |                                                                                           |
-| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| ![Template Chooser](Screenshot/01-template-chooser.jpg)                                       | ![Story Generation](Screenshot/02-story-generation.jpg)                                   |
-| **Template Chooser** -Pick from 9 story templates via a 3D coverflow carousel                | **Story Generation** -Live text, image, and audio streaming with Director analysis panel |
-| ![Book Details](Screenshot/03-book-details.png)                                               | ![Director Chat](Screenshot/04-director-chat.jpg)                                         |
-| **Book Details** -Published story page with characters, genres, ratings, and social features | **Director Chat** -Voice brainstorming with the AI Director powered by Gemini Live API   |
+<table>
+<tr>
+<td width="50%"><img src="Screenshot/01-template-chooser.jpg" alt="Template Chooser" width="100%"/><br/><b>Template Chooser</b> - Pick from 9 story templates via a 3D coverflow carousel</td>
+<td width="50%"><img src="Screenshot/02-story-generation.jpg" alt="Story Generation" width="100%"/><br/><b>Story Generation</b> - Live text, image, and audio streaming with Director analysis panel</td>
+</tr>
+<tr>
+<td width="50%"><img src="Screenshot/03-book-details.png" alt="Book Details" width="100%"/><br/><b>Book Details</b> - Published story page with characters, genres, ratings, and social features</td>
+<td width="50%"><img src="Screenshot/04-director-chat.jpg" alt="Director Chat" width="100%"/><br/><b>Director Chat</b> - Voice brainstorming with the AI Director powered by Gemini Live API</td>
+</tr>
+</table>
 
 ---
 
