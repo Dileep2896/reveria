@@ -368,8 +368,6 @@ export default function AuthScreen({ onSignInWithGoogle, onSignInWithEmail, onSi
                 style={{ background: 'rgba(180, 140, 255, 0.12)', border: '1px solid rgba(180, 140, 255, 0.3)' }}
                 disabled={loading}
                 onClick={async () => {
-                  setEmail('judge@reveria.app');
-                  setPassword('ReveriaJudge2026');
                   setTab('signin');
                   setLoading(true);
                   try { await onSignInWithEmail('judge@reveria.app', 'ReveriaJudge2026'); }
