@@ -145,7 +145,7 @@ cd frontend && npm install && npm run build && npx playwright install chromium &
 - **Firebase Hosting**: Frontend deployed at `reveria.web.app`
 - **CI/CD**: Automated via [GitHub Actions](.github/workflows/ci.yml) - 4 jobs on every push to main
 - **Deploy script**: [`deploy.sh`](deploy.sh) for manual deployments
-- See the cloud deployment proof video included in the submission
+- **Cloud Deployment Proof Video**: [Watch on Google Drive](https://drive.google.com/file/d/1uUsXXOsOXrx5ZG6tiTX46CfrpBdna_38/view?usp=sharing)
 
 ---
 
