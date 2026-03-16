@@ -78,8 +78,15 @@ Built for the [Gemini Live Agent Challenge](https://devpost.com/) (Creative Stor
 <td width="50%"><img src="Screenshot/02-story-generation.jpg" alt="Story Generation" width="100%"/><br/><b>Story Generation</b> - Live text, image, and audio streaming with Director analysis panel</td>
 </tr>
 <tr>
-<td width="50%"><img src="Screenshot/03-book-details.png" alt="Book Details" width="100%"/><br/><b>Book Details</b> - Published story page with characters, genres, ratings, and social features</td>
+<td width="50%"><img src="Screenshot/03-book-details.jpg" alt="Book Details" width="100%"/><br/><b>Book Details</b> - Published story with characters, genres, ratings, and social features</td>
 <td width="50%"><img src="Screenshot/04-director-chat.jpg" alt="Director Chat" width="100%"/><br/><b>Director Chat</b> - Voice brainstorming with the AI Director powered by Gemini Live API</td>
+</tr>
+<tr>
+<td width="50%"><img src="Screenshot/06-explore-page.jpg" alt="Explore Page" width="100%"/><br/><b>Explore</b> - Discover published stories from the community</td>
+<td width="50%"><img src="Screenshot/05-subscription-usage.jpg" alt="Subscription & Usage" width="100%"/><br/><b>Subscription & Usage</b> - Free, Standard, and Pro tiers with usage tracking</td>
+</tr>
+<tr>
+<td width="50%" colspan="2" align="center"><img src="Screenshot/07-settings-dialog.jpg" alt="Settings" width="50%"/><br/><b>Settings</b> - Theme toggle and Director voice selection</td>
 </tr>
 </table>
 
