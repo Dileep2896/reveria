@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 import time
 
@@ -25,20 +26,29 @@ logger = logging.getLogger("seed")
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
-FIREBASE_API_KEY = "AIzaSyDTiGiI3WaHiVNC-FXRzNyqfkd7Jn4sGmo"
+FIREBASE_API_KEY = os.environ.get("FIREBASE_API_KEY", "")
 BACKEND_URL = "https://storyforge-backend-3eapv5svzq-uc.a.run.app"
 WS_URL = BACKEND_URL.replace("https://", "wss://") + "/ws"
 PUBLISH_URL = BACKEND_URL + "/api/stories"
 
-# 6 demo accounts
-ACCOUNTS = [
-    {"email": "aria.moonweaver@reveria.app",  "password": "Rev3ria!Aria2026",  "name": "Aria Moonweaver"},
-    {"email": "kai.stormlight@reveria.app",   "password": "Rev3ria!Kai2026",   "name": "Kai Stormlight"},
-    {"email": "luna.inkwell@reveria.app",     "password": "Rev3ria!Luna2026",  "name": "Luna Inkwell"},
-    {"email": "felix.pagecraft@reveria.app",  "password": "Rev3ria!Felix2026", "name": "Felix Pagecraft"},
-    {"email": "mira.fablerose@reveria.app",   "password": "Rev3ria!Mira2026",  "name": "Mira Fablerose"},
-    {"email": "sage.mythkeeper@reveria.app",  "password": "Rev3ria!Sage2026",  "name": "Sage Mythkeeper"},
-]
+# 6 demo accounts - load credentials from demo_accounts.env or environment
+# Format: DEMO_USER_N_EMAIL, DEMO_USER_N_PASSWORD, DEMO_USER_N_NAME
+def _load_accounts():
+    """Load demo accounts from environment or demo_accounts.env file."""
+    from dotenv import load_dotenv
+    env_path = os.path.join(os.path.dirname(__file__), "demo_accounts.env")
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+    accounts = []
+    for i in range(1, 7):
+        email = os.environ.get(f"DEMO_USER_{i}_EMAIL", "")
+        password = os.environ.get(f"DEMO_USER_{i}_PASSWORD", "")
+        name = os.environ.get(f"DEMO_USER_{i}_NAME", f"Demo User {i}")
+        if email and password:
+            accounts.append({"email": email, "password": password, "name": name})
+    return accounts
+
+ACCOUNTS = _load_accounts()
 
 # 9 books — one per template, round-robin across 6 accounts
 BOOKS = [

@@ -8,3 +8,4 @@ credentials.json
 dist/
 build/
 .DS_Store
+demo_accounts.env
