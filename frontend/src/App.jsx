@@ -15,6 +15,7 @@ import { getTemplate } from './data/templates';
 import usePublicStory from './hooks/usePublicStory';
 
 import Logo from './components/Logo';
+import MobileGate from './components/MobileGate';
 import StoryCanvas from './components/StoryCanvas';
 import AppHeader from './components/AppHeader';
 import CompleteBookDialog from './components/dialogs/CompleteBookDialog';
@@ -286,6 +287,16 @@ export default function App() {
     }
     prevShowSplashRef.current = showSplash;
   }, [showSplash]);
+
+  // Block mobile/tablet - desktop only
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobileDevice(window.innerWidth < 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  if (isMobileDevice) return <MobileGate />;
 
   if (showSplash) {
     return <SplashScreen message={splashMessage} />;
