@@ -287,7 +287,8 @@ export default function AppHeader({
         {/* Director toggle - glass pill (hidden on non-story pages and read-only views) */}
         {!isNonStoryPage && !viewingReadOnly && (
           <button
-            onClick={() => setDirectorOpen(!directorOpen)}
+            onClick={() => connected && setDirectorOpen(!directorOpen)}
+            disabled={!connected}
             className="rounded-full font-semibold transition-all uppercase tracking-wider header-btn"
             style={{
               background: directorOpen ? 'var(--accent-secondary-soft)' : 'var(--glass-bg)',
@@ -295,6 +296,8 @@ export default function AppHeader({
               border: `1px solid ${directorOpen ? 'var(--glass-border-secondary)' : 'var(--glass-border)'}`,
               backdropFilter: 'var(--glass-blur)',
               boxShadow: directorOpen ? 'var(--shadow-glow-secondary)' : 'none',
+              opacity: connected ? 1 : 0.4,
+              cursor: connected ? 'pointer' : 'not-allowed',
             }}
           >
             Director
