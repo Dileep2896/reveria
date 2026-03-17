@@ -248,8 +248,70 @@ Five changes in one session, all driven by hackathon requirements and demo readi
 | Day 6 | Feb 23 | 50-53 | Subscription tiers, feature cleanup, author attribution |
 | Day 7 | Feb 24 | 54-58 | Per-scene streaming, Director Chat, native API rewrite |
 | Day 8+ | Feb 25+ | 59-62 | Interaction audit, visual narratives, cinematic opening, panel redesign |
-| Day 9 | Mar 10 | 63-65 | Streaming audio, mute, navigation tools, voice-reactive orb, interleaved output, i18n templates |
+| Day 9 | Mar 10 | 63-65 | Streaming audio, mute, voice-reactive orb, interleaved output, i18n templates |
+| Day 10 | Mar 14-15 | 66-68 | Director art style tool, generation UX polish, demo tour app, cinematic finale |
+| Day 11 | Mar 15-16 | 69-71 | Demo video recording, Devpost submission, blog post, seed published stories |
+| Day 12 | Mar 16-17 | 72-73 | Judge quick access, mobile gate, connection state UX, Cloud Run min-instances |
 
 ---
 
-*Built for the [Gemini Live Agent Challenge](https://devpost.com/) hackathon. The codebase lives at [github.com/Dileep2896/reveria](https://github.com/Dileep2896/reveria).*
+## The Final Push (Sessions 66-73)
+
+### Demo Polish (Sessions 66-68)
+
+The last stretch before the demo recording was all about UX refinements that make the difference during a live presentation:
+
+- **`set_art_style` tool**: The Director can now pick art styles via voice. Says "Let's go cinematic" and the style changes automatically. Shown as a badge in the Director Panel.
+- **Generation stage indicator**: The "Type a prompt" pill transforms into "Writing story..." / "Painting the scene..." / "Gathering portraits..." during generation so users know what's happening.
+- **Book auto-flip**: The flipbook immediately flips to a shimmer loading page when generation starts, instead of waiting for content.
+- **Director wrapup before persist**: Eliminated a 5-10 second idle gap after generation by moving the Director's wrap-up commentary before story persistence.
+- **Auto-generate countdown**: Reduced from 5s to 2s for snappier Director-triggered generation.
+- **Demo tour app**: A separate scripted automated demo with two AI voices (Charon as Tour Director, Kore as Story Director) for the hackathon video recording. Not deployed, local only.
+
+### Submission Sprint (Sessions 69-71)
+
+The final 48 hours were about packaging everything for judges:
+
+- **Demo video**: Recorded with QuickTime, uploaded to YouTube
+- **Blog post**: Published on dev.to with 9 embedded images and architecture diagrams
+- **Devpost story**: 250-line writeup covering all judging criteria (Innovation 40%, Technical 30%, Demo 30%)
+- **Architecture PDFs**: Project Overview, Architecture Deep Dive, Prompt Engineering Journey
+- **Published stories**: Seeded the Explore page with stories from 6 demo accounts across all 9 templates
+- **Screenshots**: 7 new screenshots captured, compressed from 65MB to 800KB total
+
+### Final Hardening (Sessions 72-73)
+
+Last-minute improvements for judge experience:
+
+- **Judge Quick Access**: One-click login button on the auth page for judges (Pro tier, pre-verified email)
+- **Mobile gate**: Desktop-only message with Reveria branding for mobile/tablet visitors
+- **Connection state UX**: "Connecting to server..." placeholder and disabled Director button when WebSocket isn't connected
+- **Cloud Run min-instances**: Set to 1 to prevent cold starts during judging period
+- **Removed em dashes**: Cleaned all markdown files to avoid AI-generated appearance
+
+---
+
+## The Numbers
+
+| Metric | Count |
+|--------|-------|
+| Coding sessions | 73 |
+| Lines of code (approx.) | ~65,000 |
+| Story templates | 9 |
+| Art styles | 30+ |
+| Supported languages | 8 |
+| Prompt systems | 14 |
+| Temperature tiers | 6 |
+| CI/CD pipeline jobs | 4 |
+| Major architecture rewrites | 3 |
+| Features completely removed | 3 (ambient music, live voice v1, cast characters) |
+| Bugs found in interaction-flow audit | 9 |
+| Director Chat rewrites | 3 |
+| Google Cloud services used | 9 |
+| Hackathon deadline | Made it |
+
+---
+
+*Built for the [Gemini Live Agent Challenge](https://devpost.com/) hackathon (Creative Storyteller Track). The codebase lives at [github.com/Dileep2896/reveria](https://github.com/Dileep2896/reveria).*
+
+*#GeminiLiveAgentChallenge*
