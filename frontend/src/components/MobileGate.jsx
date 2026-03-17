@@ -24,7 +24,7 @@ export default function MobileGate() {
         background: 'radial-gradient(circle at 70% 80%, rgba(255,168,108,0.1) 0%, transparent 50%)',
       }} />
 
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Logo */}
         <div style={{ marginBottom: 16 }}>
           <Logo size={48} />
