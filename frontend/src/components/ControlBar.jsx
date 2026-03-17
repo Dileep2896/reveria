@@ -455,7 +455,7 @@ export default function ControlBar({ onSend, onSendAudio, connected, generating,
                   handleSubmit(e);
                 }
               }}
-              placeholder={heroBlocked ? 'Upload your photo to begin Hero Quest...' : recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : !generating ? (getTemplate(template).placeholder || PLACEHOLDERS[language] || PLACEHOLDERS.English) : ''}
+              placeholder={!connected ? 'Connecting to server...' : heroBlocked ? 'Upload your photo to begin Hero Quest...' : recording ? 'Listening... click mic to stop' : quotaCooldown > 0 ? `Image quota exhausted - retry in ${quotaCooldown}s` : !generating ? (getTemplate(template).placeholder || PLACEHOLDERS[language] || PLACEHOLDERS.English) : ''}
               disabled={isDisabled || generating}
               className="bg-transparent outline-none control-input"
               style={{ width: '100%', color: 'var(--text-primary)', resize: 'none', overflowY: 'auto' }}
